@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import android.media.MediaPlayer
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
@@ -27,12 +29,34 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     private var mediaPlayer: MediaPlayer? = null
+    private var progressJob: Job? = null
 
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+
+    private val _currentPosition = MutableStateFlow(0L)
+    val currentPosition: StateFlow<Long> = _currentPosition.asStateFlow()
+
+    private fun startProgressUpdate() {
+        progressJob?.cancel()
+        progressJob = viewModelScope.launch {
+            while (_isPlaying.value) {
+                mediaPlayer?.let {
+                    if (it.isPlaying) {
+                        _currentPosition.value = it.currentPosition.toLong()
+                    }
+                }
+                delay(500L)
+            }
+        }
+    }
+
+    private fun stopProgressUpdate() {
+        progressJob?.cancel()
+    }
 
     fun playSong(song: Song) {
         if (_currentSong.value?.id == song.id) {
@@ -47,10 +71,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             start()
             setOnCompletionListener {
                 _isPlaying.value = false
+                stopProgressUpdate()
+                _currentPosition.value = 0L
             }
         }
         _currentSong.value = song
         _isPlaying.value = true
+        startProgressUpdate()
     }
 
     fun togglePlayback() {
@@ -58,9 +85,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             if (it.isPlaying) {
                 it.pause()
                 _isPlaying.value = false
+                stopProgressUpdate()
             } else {
                 it.start()
                 _isPlaying.value = true
+                startProgressUpdate()
             }
         }
     }

@@ -16,6 +16,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.filled.Pause
 import com.jagr.fridamusic.domain.model.Song
 import androidx.compose.ui.draw.clip
@@ -31,13 +37,30 @@ import com.jagr.fridamusic.presentation.theme.*
 fun NowPlayingScreen(
     currentSong: Song?,
     isPlaying: Boolean,
+    currentPosition: Long,
     onPlayPause: () -> Unit,
     onCollapse: () -> Unit
 ) {
+    var offsetY by remember { mutableFloatStateOf(0f) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0E0E0E))
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        if (offsetY > 150f) {
+                            onCollapse()
+                        }
+                        offsetY = 0f
+                    },
+                    onVerticalDrag = { change, dragAmount ->
+                        change.consume()
+                        offsetY += dragAmount
+                    }
+                )
+            }
     ) {
         AmbientBackgroundGlow()
 
@@ -66,7 +89,7 @@ fun NowPlayingScreen(
                     modifier = Modifier.padding(top = 24.dp)
                 ) {
                     TrackInfoSection(currentSong = currentSong)
-                    SeekBarSection()
+                    SeekBarSection(currentSong = currentSong, currentPosition = currentPosition)
                     PlayerControlsSection(isPlaying = isPlaying, onPlayPause = onPlayPause)
                 }
             }
@@ -195,7 +218,17 @@ fun TrackInfoSection(currentSong: Song?) {
 }
 
 @Composable
-fun SeekBarSection() {
+fun SeekBarSection(currentSong: Song?, currentPosition: Long) {
+    val totalDuration = currentSong?.duration ?: 0L
+    val progress = if (totalDuration > 0) currentPosition.toFloat() / totalDuration.toFloat() else 0f
+
+    fun formatTime(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%d:%02d", minutes, seconds)
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -206,7 +239,7 @@ fun SeekBarSection() {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.33f)
+                    .fillMaxWidth(progress.coerceIn(0f, 1f))
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(50))
                     .background(
@@ -221,8 +254,16 @@ fun SeekBarSection() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("0:00", style = LiquidTypography.labelSmall, color = LiquidOnSurfaceVariant.copy(alpha = 0.6f))
-            Text("0:00", style = LiquidTypography.labelSmall, color = LiquidOnSurfaceVariant.copy(alpha = 0.6f))
+            Text(
+                text = formatTime(currentPosition),
+                style = LiquidTypography.labelSmall,
+                color = LiquidOnSurfaceVariant.copy(alpha = 0.6f)
+            )
+            Text(
+                text = "-${formatTime(maxOf(0L, totalDuration - currentPosition))}",
+                style = LiquidTypography.labelSmall,
+                color = LiquidOnSurfaceVariant.copy(alpha = 0.6f)
+            )
         }
     }
 }
