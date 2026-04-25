@@ -27,7 +27,7 @@ import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
 @Composable
-fun BottomNavigation(
+fun VitreaBottomNavigation(
     modifier: Modifier = Modifier,
     isCollapsed: Boolean,
     currentRoute: String,

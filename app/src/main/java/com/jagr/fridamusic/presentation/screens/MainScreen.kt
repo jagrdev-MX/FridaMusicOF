@@ -21,7 +21,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.jagr.fridamusic.presentation.components.BottomNavigation
+import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
 import com.jagr.fridamusic.presentation.theme.LiquidBackground
 import com.jagr.fridamusic.presentation.theme.LiquidSurfaceContainer
 
