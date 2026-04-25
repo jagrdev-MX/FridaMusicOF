@@ -1,7 +1,9 @@
 package com.jagr.fridamusic.presentation.screens
 
 import android.Manifest
+import android.app.Activity
 import android.os.Build
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -36,10 +39,13 @@ import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 
 @Composable
 fun MainScreen() {
+    val context = LocalContext.current
     val libraryViewModel: LibraryViewModels = viewModel()
+
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
     val currentPosition by libraryViewModel.currentPosition.collectAsState()
+    val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -56,6 +62,15 @@ fun MainScreen() {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
         permissionLauncher.launch(permission)
+    }
+
+    LaunchedEffect(keepScreenOn) {
+        val activity = context as? Activity
+        if (keepScreenOn) {
+            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
@@ -135,7 +150,6 @@ fun MainScreen() {
             ) {
                 composable("home") {
                     val songs by libraryViewModel.songs.collectAsState()
-
                     HomeScreen(
                         paddingValues = paddingValues,
                         listState = homeListState,
@@ -156,7 +170,11 @@ fun MainScreen() {
                     )
                 }
                 composable("settings") {
-                    SettingsScreen(paddingValues = paddingValues, listState = settingsListState)
+                    SettingsScreen(
+                        paddingValues = paddingValues,
+                        listState = settingsListState,
+                        viewModel = libraryViewModel
+                    )
                 }
             }
         }

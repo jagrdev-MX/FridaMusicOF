@@ -7,7 +7,7 @@ import android.provider.MediaStore
 import com.jagr.fridamusic.domain.model.Song
 
 class AudioRepository(private val context: Context) {
-    fun getAudioFiles(): List<Song> {
+    fun getAudioFiles(filterVoiceNotes: Boolean): List<Song> {
         val songs = mutableListOf<Song>()
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
@@ -18,7 +18,11 @@ class AudioRepository(private val context: Context) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.ALBUM_ID
         )
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DATA} NOT LIKE '%WhatsApp%'"
+        val selection = if (filterVoiceNotes) {
+            "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DATA} NOT LIKE '%WhatsApp%'"
+        } else {
+            "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        }
         context.contentResolver.query(
             collection,
             projection,
