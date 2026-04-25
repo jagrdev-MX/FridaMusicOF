@@ -17,6 +17,6 @@ val LiquidSecondary = Color(0xFFA7C8FF)
 val LiquidTertiary = Color(0xFFD7CFFF)
 val LiquidError = Color(0xFFFFB4AB)
 
-val GlassBackgroundTint = Color(0xFFFFFFFF).copy(alpha = 0.1f) // Tinte semitransparente
-val GlassBorderLight = Color(0xFFFFFFFF).copy(alpha = 0.3f) // Reflejo superior izquierdo
-val GlassBorderDark = Color(0xFFFFFFFF).copy(alpha = 0.05f) // Sombra inferior derecha
+val GlassBackgroundTint = Color(0xFFFFFFFF).copy(alpha = 0.1f)
+val GlassBorderLight = Color(0xFFFFFFFF).copy(alpha = 0.3f)
+val GlassBorderDark = Color(0xFFFFFFFF).copy(alpha = 0.05f)

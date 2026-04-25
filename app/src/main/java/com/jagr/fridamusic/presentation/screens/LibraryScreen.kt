@@ -22,9 +22,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.theme.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 
 @Composable
-fun LibraryScreen(paddingValues: PaddingValues, listState: LazyListState) {
+fun LibraryScreen(paddingValues: PaddingValues, listState: LazyListState, viewModel: LibraryViewModels) {
+
+    val songs by viewModel.songs.collectAsState()
+
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -41,7 +48,7 @@ fun LibraryScreen(paddingValues: PaddingValues, listState: LazyListState) {
         item { LibraryHeaderSection() }
         item { SegmentedControlSection() }
         item { AlbumsGridSection() }
-        item { RecentSongsListSection() }
+        item { RecentSongsListSection(songs = songs) }
     }
 }
 
@@ -151,7 +158,7 @@ fun AlbumCard(title: String, artist: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun RecentSongsListSection() {
+fun RecentSongsListSection(songs: List<Song>) {
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -162,9 +169,12 @@ fun RecentSongsListSection() {
             modifier = Modifier.padding(bottom = 8.dp)
 
         )
-        SongListItem(title = "Midnight Drive", artist = "Synthwave Collective")
-        SongListItem(title = "Starlight Fade", artist = "Luna Echo")
-        SongListItem(title = "Dusty Roads", artist = "The Rustics")
+        songs.take(10).forEach { song ->
+            SongListItem(
+                title = song.title,
+                artist = song.artist ?: "Unknown Artist"
+            )
+        }
     }
 }
 
