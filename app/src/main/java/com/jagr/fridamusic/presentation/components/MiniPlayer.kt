@@ -20,12 +20,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Pause
+import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
 @Composable
 fun MiniPlayer(
     modifier: Modifier = Modifier,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit,
     onExpand: () -> Unit
 ) {
     Row(
@@ -53,14 +58,14 @@ fun MiniPlayer(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Midnight Synthwave",
+                text = currentSong?.title ?: "Not Playing",
                 style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium),
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "Various Artists",
+                text = currentSong?.artist ?: "Unknown Artist",
                 fontSize = 12.sp,
                 color = LiquidPrimary,
                 maxLines = 1,
@@ -68,10 +73,10 @@ fun MiniPlayer(
             )
         }
 
-        IconButton(onClick = {  }) {
+        IconButton(onClick = onPlayPause) {
             Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = "Play",
+                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = "Play/Pause",
                 tint = Color.White,
                 modifier = Modifier.size(28.dp)
             )

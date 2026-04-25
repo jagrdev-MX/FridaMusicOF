@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.media.MediaPlayer
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
@@ -23,5 +24,49 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             val audioFiles = repository.getAudioFiles()
             _songs.value = audioFiles
         }
+    }
+
+    private var mediaPlayer: MediaPlayer? = null
+
+    private val _currentSong = MutableStateFlow<Song?>(null)
+    val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
+
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+
+    fun playSong(song: Song) {
+        if (_currentSong.value?.id == song.id) {
+            togglePlayback()
+            return
+        }
+
+        mediaPlayer?.release()
+        mediaPlayer = MediaPlayer().apply {
+            setDataSource(getApplication(), song.uri)
+            prepare()
+            start()
+            setOnCompletionListener {
+                _isPlaying.value = false
+            }
+        }
+        _currentSong.value = song
+        _isPlaying.value = true
+    }
+
+    fun togglePlayback() {
+        mediaPlayer?.let {
+            if (it.isPlaying) {
+                it.pause()
+                _isPlaying.value = false
+            } else {
+                it.start()
+                _isPlaying.value = true
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        mediaPlayer?.release()
     }
 }

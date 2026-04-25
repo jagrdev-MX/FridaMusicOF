@@ -48,7 +48,10 @@ fun LibraryScreen(paddingValues: PaddingValues, listState: LazyListState, viewMo
         item { LibraryHeaderSection() }
         item { SegmentedControlSection() }
         item { AlbumsGridSection() }
-        item { RecentSongsListSection(songs = songs) }
+        item { RecentSongsListSection(
+            songs = songs,
+            onSongClick = { viewModel.playSong(it) }
+        ) }
     }
 }
 
@@ -158,7 +161,7 @@ fun AlbumCard(title: String, artist: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun RecentSongsListSection(songs: List<Song>) {
+fun RecentSongsListSection(songs: List<Song>, onSongClick: (Song) -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -166,26 +169,25 @@ fun RecentSongsListSection(songs: List<Song>) {
             text = "Recent Songs",
             style = LiquidTypography.headlineMedium,
             color = LiquidOnSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-
+            modifier = Modifier.padding(bottom = 4.dp)
         )
         songs.take(10).forEach { song ->
             SongListItem(
                 title = song.title,
-                artist = song.artist ?: "Unknown Artist"
+                artist = song.artist ?: "Unknown Artist",
+                onClick = { onSongClick(song) }
             )
         }
     }
 }
 
 @Composable
-fun SongListItem(title: String, artist: String) {
+fun SongListItem(title: String, artist: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
             .liquidGlassEffect(cornerRadius = 12.dp)
-            .clickable {  }
+            .clickable(onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

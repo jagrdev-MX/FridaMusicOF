@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidOnSurfaceVariant
 import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
@@ -31,6 +32,9 @@ fun VitreaBottomNavigation(
     modifier: Modifier = Modifier,
     isCollapsed: Boolean,
     currentRoute: String,
+    currentSong: Song?,
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit,
     onNavigate: (String) -> Unit,
     onExpandPlayer: () -> Unit
 ) {
@@ -65,7 +69,7 @@ fun VitreaBottomNavigation(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(64.dp)
                             .clip(CircleShape)
                             .background(Color.Black.copy(alpha = 0.6f))
                             .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
@@ -82,6 +86,9 @@ fun VitreaBottomNavigation(
 
                     MiniPlayer(
                         modifier = Modifier.weight(1f),
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        onPlayPause = onPlayPause,
                         onExpand = onExpandPlayer
                     )
                 }
@@ -89,14 +96,19 @@ fun VitreaBottomNavigation(
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    MiniPlayer(onExpand = onExpandPlayer)
+                    MiniPlayer(
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        onPlayPause = onPlayPause,
+                        onExpand = onExpandPlayer
+                    )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(60.dp)
+                            .height(64.dp)
                             .clip(RoundedCornerShape(24.dp))
                             .background(Color.Black.copy(alpha = 0.6f))
                             .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp)),

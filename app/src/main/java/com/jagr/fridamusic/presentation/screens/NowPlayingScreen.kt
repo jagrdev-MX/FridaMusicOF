@@ -16,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.material.icons.filled.Pause
+import com.jagr.fridamusic.domain.model.Song
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -26,7 +28,12 @@ import androidx.compose.ui.unit.sp
 import com.jagr.fridamusic.presentation.theme.*
 
 @Composable
-fun NowPlayingScreen(onCollapse: () -> Unit) {
+fun NowPlayingScreen(
+    currentSong: Song?,
+    isPlaying: Boolean,
+    onPlayPause: () -> Unit,
+    onCollapse: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -58,9 +65,9 @@ fun NowPlayingScreen(onCollapse: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(32.dp),
                     modifier = Modifier.padding(top = 24.dp)
                 ) {
-                    TrackInfoSection()
+                    TrackInfoSection(currentSong = currentSong)
                     SeekBarSection()
-                    PlayerControlsSection()
+                    PlayerControlsSection(isPlaying = isPlaying, onPlayPause = onPlayPause)
                 }
             }
         }
@@ -159,7 +166,7 @@ fun AlbumArtSection(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun TrackInfoSection() {
+fun TrackInfoSection(currentSong: Song?) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -167,14 +174,14 @@ fun TrackInfoSection() {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Ethereal Drift",
+                text = currentSong?.title ?: "Not Playing",
                 style = LiquidTypography.displayLarge.copy(fontSize = 32.sp),
                 color = LiquidOnSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "Luna Shadows",
+                text = currentSong?.artist ?: "Unknown Artist",
                 style = LiquidTypography.bodyLarge,
                 color = LiquidOnSurfaceVariant.copy(alpha = 0.8f),
                 maxLines = 1,
@@ -214,14 +221,14 @@ fun SeekBarSection() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("1:24", style = LiquidTypography.labelSmall, color = LiquidOnSurfaceVariant.copy(alpha = 0.6f))
-            Text("-2:21", style = LiquidTypography.labelSmall, color = LiquidOnSurfaceVariant.copy(alpha = 0.6f))
+            Text("0:00", style = LiquidTypography.labelSmall, color = LiquidOnSurfaceVariant.copy(alpha = 0.6f))
+            Text("0:00", style = LiquidTypography.labelSmall, color = LiquidOnSurfaceVariant.copy(alpha = 0.6f))
         }
     }
 }
 
 @Composable
-fun PlayerControlsSection() {
+fun PlayerControlsSection(isPlaying: Boolean, onPlayPause: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
@@ -245,10 +252,15 @@ fun PlayerControlsSection() {
                     ),
                     shape = CircleShape
                 )
-                .clickable {  },
+                .clickable(onClick = onPlayPause),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(48.dp))
+            Icon(
+                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = "Play/Pause",
+                tint = Color.White,
+                modifier = Modifier.size(48.dp)
+            )
         }
         Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = LiquidOnSurface, modifier = Modifier.size(40.dp).clickable {  })
         Icon(Icons.Default.Refresh, contentDescription = "Repeat", tint = LiquidOnSurfaceVariant.copy(alpha = 0.7f), modifier = Modifier.size(28.dp).clickable {  })
@@ -270,10 +282,10 @@ fun NowPlayingBottomBar(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = {  }) {
-            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Queue", tint = Color(0xFFFF99CC))
+            Icon(Icons.Default.List, contentDescription = "Queue", tint = Color(0xFFFF99CC))
         }
         IconButton(onClick = {  }) {
-            Icon(Icons.AutoMirrored.Filled.Subject, contentDescription = "Lyrics", tint = Color.White.copy(alpha = 0.4f))
+            Icon(Icons.Default.Subject, contentDescription = "Lyrics", tint = Color.White.copy(alpha = 0.4f))
         }
         IconButton(onClick = {  }) {
             Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.4f))

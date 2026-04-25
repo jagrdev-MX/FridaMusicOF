@@ -23,6 +23,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import androidx.navigation.compose.NavHost
@@ -36,15 +37,15 @@ import kotlin.contracts.contract
 
 @Composable
 fun MainScreen() {
-
-    val libraryViewModels: LibraryViewModels = viewModel()
+    val libraryViewModel: LibraryViewModels = viewModel()
+    val currentSong by libraryViewModel.currentSong.collectAsState()
+    val isPlaying by libraryViewModel.isPlaying.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) {
-        isGranted ->
+    ) { isGranted ->
         if (isGranted) {
-            libraryViewModels.loadSongs()
+            libraryViewModel.loadSongs()
         }
     }
 
@@ -101,6 +102,9 @@ fun MainScreen() {
                 VitreaBottomNavigation(
                     isCollapsed = isNavCollapsed,
                     currentRoute = currentRoute,
+                    currentSong = currentSong,
+                    isPlaying = isPlaying,
+                    onPlayPause = { libraryViewModel.togglePlayback() },
                     onNavigate = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -130,7 +134,8 @@ fun MainScreen() {
                     LibraryScreen(
                         paddingValues = paddingValues,
                         listState = libraryListState,
-                        viewModel = libraryViewModels)
+                        viewModel = libraryViewModel
+                    )
                 }
             }
         }
@@ -144,7 +149,12 @@ fun MainScreen() {
                 targetOffsetY = { fullHeight -> fullHeight }
             )
         ) {
-            NowPlayingScreen(onCollapse = { isPlayerExpanded = false })
+            NowPlayingScreen(
+                currentSong = currentSong,
+                isPlaying = isPlaying,
+                onPlayPause = { libraryViewModel.togglePlayback() },
+                onCollapse = { isPlayerExpanded = false }
+            )
         }
     }
 }
