@@ -1,4 +1,4 @@
 package com.jagr.fridamusic.di
 
-class AooModules {
+class AppModules {
 }
