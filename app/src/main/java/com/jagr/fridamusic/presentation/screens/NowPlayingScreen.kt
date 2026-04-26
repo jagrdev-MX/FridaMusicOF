@@ -1,6 +1,5 @@
 package com.jagr.fridamusic.presentation.screens
 
-import android.graphics.Color.alpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,21 +7,22 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.Subject
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.runtime.mutableStateOf
 import com.jagr.fridamusic.domain.model.Song
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -38,7 +38,9 @@ fun NowPlayingScreen(
     currentSong: Song?,
     isPlaying: Boolean,
     currentPosition: Long,
+    albumArtUrl: String?,
     onPlayPause: () -> Unit,
+    onSeek: (Long) -> Unit,
     onCollapse: () -> Unit
 ) {
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -82,14 +84,17 @@ fun NowPlayingScreen(
                 verticalArrangement = Arrangement.SpaceEvenly,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                AlbumArtSection(modifier = Modifier.weight(1f, fill = false))
+                AlbumArtSection(albumArtUrl = albumArtUrl, modifier = Modifier.weight(1f, fill = false))
 
                 Column(
                     verticalArrangement = Arrangement.spacedBy(32.dp),
                     modifier = Modifier.padding(top = 24.dp)
                 ) {
                     TrackInfoSection(currentSong = currentSong)
-                    SeekBarSection(currentSong = currentSong, currentPosition = currentPosition)
+                    SeekBarSection(
+                        currentSong = currentSong,
+                        currentPosition = currentPosition,
+                        onSeek = onSeek)
                     PlayerControlsSection(isPlaying = isPlaying, onPlayPause = onPlayPause)
                 }
             }
@@ -157,7 +162,7 @@ fun NowPlayingTopBar(onCollapse: () -> Unit) {
 }
 
 @Composable
-fun AlbumArtSection(modifier: Modifier = Modifier) {
+fun AlbumArtSection(albumArtUrl: String?, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -183,7 +188,16 @@ fun AlbumArtSection(modifier: Modifier = Modifier) {
                     shape = RoundedCornerShape(32.dp)
                 )
         ) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray))
+            if (albumArtUrl != null) {
+                AsyncImage(
+                    model = albumArtUrl,
+                    contentDescription = "Album Art",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray))
+            }
         }
     }
 }
@@ -218,9 +232,13 @@ fun TrackInfoSection(currentSong: Song?) {
 }
 
 @Composable
-fun SeekBarSection(currentSong: Song?, currentPosition: Long) {
+fun SeekBarSection(currentSong: Song?, currentPosition: Long, onSeek: (Long) -> Unit) {
     val totalDuration = currentSong?.duration ?: 0L
-    val progress = if (totalDuration > 0) currentPosition.toFloat() / totalDuration.toFloat() else 0f
+
+    var sliderPosition by remember { mutableStateOf<Float?>(null) }
+
+    val currentProgress = if (totalDuration > 0) currentPosition.toFloat() / totalDuration.toFloat() else 0f
+    val displayProgress = sliderPosition ?: currentProgress
 
     fun formatTime(ms: Long): String {
         val totalSeconds = ms / 1000
@@ -233,34 +251,60 @@ fun SeekBarSection(currentSong: Song?, currentPosition: Long) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(50))
-                .background(LiquidSurfaceHigh)
+                .height(24.dp),
+            contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progress.coerceIn(0f, 1f))
-                    .fillMaxHeight()
+                    .fillMaxWidth()
+                    .height(4.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(Color(0xFFFF99CC), Color(0xFFBBB0FD))
+                    .background(LiquidSurfaceHigh)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(displayProgress.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(Color(0xFFFF99CC), Color(0xFFBBB0FD))
+                            )
                         )
-                    )
+                )
+            }
+
+            Slider(
+                value = displayProgress,
+                onValueChange = { sliderPosition = it },
+                onValueChangeFinished = {
+                    sliderPosition?.let {
+                        onSeek((it * totalDuration).toLong())
+                    }
+                    sliderPosition = null
+                },
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Color.Transparent,
+                    inactiveTrackColor = Color.Transparent
+                ),
+                modifier = Modifier.fillMaxWidth()
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+
+        Spacer(modifier = Modifier.height(4.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            val displayTime = (displayProgress * totalDuration).toLong()
             Text(
-                text = formatTime(currentPosition),
+                text = formatTime(displayTime),
                 style = LiquidTypography.labelSmall,
                 color = LiquidOnSurfaceVariant.copy(alpha = 0.6f)
             )
             Text(
-                text = "-${formatTime(maxOf(0L, totalDuration - currentPosition))}",
+                text = "-${formatTime(maxOf(0L, totalDuration - displayTime))}",
                 style = LiquidTypography.labelSmall,
                 color = LiquidOnSurfaceVariant.copy(alpha = 0.6f)
             )

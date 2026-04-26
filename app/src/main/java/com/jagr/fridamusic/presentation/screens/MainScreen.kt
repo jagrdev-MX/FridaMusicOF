@@ -46,22 +46,24 @@ fun MainScreen() {
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
     val currentPosition by libraryViewModel.currentPosition.collectAsState()
     val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
+    val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val audioGranted = permissions[Manifest.permission.READ_MEDIA_AUDIO] ?: permissions[Manifest.permission.READ_EXTERNAL_STORAGE] ?: false
+        if (audioGranted) {
             libraryViewModel.loadSongs()
         }
     }
 
     LaunchedEffect(Unit) {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_AUDIO
+        val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
-        permissionLauncher.launch(permission)
+        permissionLauncher.launch(permissions)
     }
 
     LaunchedEffect(keepScreenOn) {
@@ -192,7 +194,9 @@ fun MainScreen() {
                 currentSong = currentSong,
                 isPlaying = isPlaying,
                 currentPosition = currentPosition,
+                albumArtUrl = currentAlbumArt,
                 onPlayPause = { libraryViewModel.togglePlayback() },
+                onSeek = { position -> libraryViewModel.seekTo(position) },
                 onCollapse = { isPlayerExpanded = false }
             )
         }
