@@ -15,6 +15,7 @@ Abre:
 ## Opción 2 (Windows)
 
 El nuevo `start-server.bat` sirve directamente la carpeta `site/`, abre navegador automático y añade `?v=RANDOM` para refrescar caché.
+Desde la raíz del repo:
 
 ```bat
 start-server.bat
@@ -23,6 +24,16 @@ start-server.bat
 Abre (sin `/site/`):
 
 - http://127.0.0.1:8080/
+
+Abre:
+
+- http://127.0.0.1:8080/
+
+## Si ves "Directory listing for /"
+
+- Estás sirviendo la raíz sin `index` o abriste otra carpeta.
+- En este repo ya se redirige `/` hacia `/site/` automáticamente.
+- También puedes abrir directo: `http://127.0.0.1:8080/site/`.
 
 ## Cambiar puerto
 
@@ -57,3 +68,6 @@ Verifica que archivos clave, logos SVG y enlaces oficiales estén presentes.
 - `site/assets/fridamusic-logo-round.svg`
 
 > Nota: Si sigues viendo la versión vieja, cierra el servidor anterior y vuelve a correr `start-server.bat`.
+## Nota de revisión
+
+- La web reutiliza logos desde `app/src/main/res/mipmap-xxxhdpi/` para evitar agregar archivos binarios duplicados en el diff del PR.

@@ -1,8 +1,8 @@
 package com.jagr.fridamusic.presentation.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,136 +12,194 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.jagr.fridamusic.domain.model.Song
-import com.jagr.fridamusic.presentation.theme.LiquidOnSurfaceVariant
 import com.jagr.fridamusic.presentation.theme.LiquidPrimary
-import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
 @Composable
 fun VitreaBottomNavigation(
-    modifier: Modifier = Modifier,
     isCollapsed: Boolean,
     currentRoute: String,
     currentSong: Song?,
     isPlaying: Boolean,
+    albumArtUrl: String?,
     onPlayPause: () -> Unit,
     onNavigate: (String) -> Unit,
     onExpandPlayer: () -> Unit
 ) {
-    Box(
-        modifier = modifier
+    Column(
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .navigationBarsPadding()
-            .padding(bottom = 16.dp),
-        contentAlignment = Alignment.BottomCenter
+            .padding(bottom = 12.dp)
     ) {
-        AnimatedContent(
-            targetState = isCollapsed,
-            transitionSpec = {
-                (fadeIn(animationSpec = tween(400)) +
-                        scaleIn(initialScale = 0.85f, animationSpec = spring(dampingRatio = 0.75f, stiffness = 200f)) +
-                        slideInVertically(initialOffsetY = { it / 3 }, animationSpec = spring(dampingRatio = 0.75f, stiffness = 200f))) togetherWith
-                        (fadeOut(animationSpec = tween(200)) +
-                                scaleOut(targetScale = 0.85f, animationSpec = spring(dampingRatio = 0.75f, stiffness = 200f)) +
-                                slideOutVertically(targetOffsetY = { it / 3 }, animationSpec = spring(dampingRatio = 0.75f, stiffness = 200f))) using
-                        SizeTransform(clip = false, sizeAnimationSpec = { _, _ ->
-                            spring(dampingRatio = 0.75f, stiffness = 200f)
-                        })
-            },
-            label = "nav_animation"
-        ) { collapsed ->
-            if (collapsed) {
+        AnimatedVisibility(
+            visible = currentSong != null,
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it })
+        ) {
+            if (currentSong != null) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-                            .clickable { onNavigate("home") },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = "Home",
-                            tint = LiquidPrimary,
-                            modifier = Modifier.size(28.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.05f))
+                            ),
+                            shape = RoundedCornerShape(16.dp)
                         )
-                    }
-
-                    MiniPlayer(
-                        modifier = Modifier.weight(1f),
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        onPlayPause = onPlayPause,
-                        onExpand = onExpandPlayer
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
+                        .clickable(onClick = onExpandPlayer)
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    MiniPlayer(
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        onPlayPause = onPlayPause,
-                        onExpand = onExpandPlayer
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.DarkGray),
+                            contentAlignment = Alignment.Center
                         ) {
-                            NavItem(
-                                icon = Icons.Default.Home,
-                                label = "Home",
-                                isSelected = currentRoute == "home",
-                                onClick = { onNavigate("home") }
-                            )
+                            if (albumArtUrl != null) {
+                                AsyncImage(
+                                    model = albumArtUrl,
+                                    contentDescription = "Mini Album Art",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Icon(Icons.Default.MusicNote, null, tint = Color.White.copy(0.3f))
+                            }
+                        }
 
-                            NavItem(
-                                icon = Icons.Default.Search,
-                                label = "Search",
-                                isSelected = currentRoute == "search",
-                                onClick = { onNavigate("search") }
-                            )
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                            NavItem(
-                                icon = Icons.Default.LibraryMusic,
-                                label = "Library",
-                                isSelected = currentRoute == "library",
-                                onClick = { onNavigate("library") }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = currentSong.title,
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = currentSong.artist ?: "Unknown Artist",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(onClick = { /* Previous Action */ }) {
+                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                                .clickable { onPlayPause() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = "Play/Pause",
+                                tint = Color.White
+                            )
+                        }
+
+                        IconButton(onClick = { /* Next Action */ }) {
+                            Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White)
+                        }
+                    }
                 }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = !isCollapsed,
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it })
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color.White.copy(alpha = 0.3f), Color.White.copy(alpha = 0.05f))
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    .padding(vertical = 12.dp, horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NavItem(
+                    icon = Icons.Default.Home,
+                    label = "Home",
+                    isSelected = currentRoute == "home",
+                    onClick = { onNavigate("home") }
+                )
+                NavItem(
+                    icon = Icons.Default.Search,
+                    label = "Search",
+                    isSelected = currentRoute == "search",
+                    onClick = { onNavigate("search") }
+                )
+                NavItem(
+                    icon = Icons.Default.LibraryMusic,
+                    label = "Library",
+                    isSelected = currentRoute == "library",
+                    onClick = { onNavigate("library") }
+                )
+                NavItem(
+                    icon = Icons.Default.Settings,
+                    label = "Settings",
+                    isSelected = currentRoute == "settings",
+                    onClick = { onNavigate("settings") }
+                )
             }
         }
     }
@@ -154,27 +212,25 @@ fun NavItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val color: Color = if (isSelected) LiquidPrimary else LiquidOnSurfaceVariant
+    val color = if (isSelected) LiquidPrimary else Color.White.copy(alpha = 0.5f)
 
     Column(
-        modifier = Modifier
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.clickable(onClick = onClick)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = color,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = label,
+            text = label.uppercase(),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
             color = color,
-            style = LiquidTypography.labelSmall
+            letterSpacing = 1.5.sp
         )
     }
 }
