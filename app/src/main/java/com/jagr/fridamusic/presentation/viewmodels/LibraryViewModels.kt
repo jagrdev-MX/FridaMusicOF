@@ -51,6 +51,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(false)
+    val repeatMode = MutableStateFlow(RepeatMode.OFF)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
 
     private val _currentPosition = MutableStateFlow(0L)
@@ -90,6 +91,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun toggleRepeatMode() {
+        repeatMode.value = when (repeatMode.value) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
+        }
+        mediaPlayer?.isLooping = (repeatMode.value == RepeatMode.ONE)
+    }
+
     fun playSong(song: Song) {
         if (_currentSong.value?.id == song.id) {
             togglePlayback()
@@ -100,6 +110,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         mediaPlayer = MediaPlayer().apply {
             setDataSource(getApplication(), song.uri)
             prepare()
+            isLooping = (repeatMode.value == RepeatMode.ONE)
             start()
             setOnCompletionListener {
                 _isPlaying.value = false
@@ -295,3 +306,5 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         getApplication<Application>().startService(intent)
     }
 }
+
+enum class RepeatMode { OFF, ALL, ONE}
