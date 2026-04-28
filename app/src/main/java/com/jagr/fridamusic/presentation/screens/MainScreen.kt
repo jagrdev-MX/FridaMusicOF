@@ -42,6 +42,7 @@ fun MainScreen() {
     val context = LocalContext.current
     val libraryViewModel: LibraryViewModels = viewModel()
 
+    val repeatMode by libraryViewModel.repeatMode.collectAsState()
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
     val currentPosition by libraryViewModel.currentPosition.collectAsState()
@@ -130,6 +131,7 @@ fun MainScreen() {
                     currentRoute = currentRoute,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
+                    albumArtUrl = currentAlbumArt,
                     onPlayPause = { libraryViewModel.togglePlayback() },
                     onNavigate = { route ->
                         navController.navigate(route) {
@@ -157,6 +159,7 @@ fun MainScreen() {
                         listState = homeListState,
                         songs = songs,
                         currentSong = currentSong,
+                        viewModel = libraryViewModel,
                         onSongClick = { libraryViewModel.playSong(it) },
                         onNavigateToSettings = { navController.navigate("settings") }
                     )
@@ -195,8 +198,10 @@ fun MainScreen() {
                 isPlaying = isPlaying,
                 currentPosition = currentPosition,
                 albumArtUrl = currentAlbumArt,
+                repeatMode = repeatMode,
                 onPlayPause = { libraryViewModel.togglePlayback() },
                 onSeek = { position -> libraryViewModel.seekTo(position) },
+                onToggleRepeat = { libraryViewModel.toggleRepeatMode()},
                 onCollapse = { isPlayerExpanded = false }
             )
         }

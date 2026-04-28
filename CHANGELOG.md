@@ -157,3 +157,13 @@ All notable changes in this repository are documented here, based strictly on co
 ### 🧠 Dev Notes
 - ES: Versión anclada al primer commit histórico del repositorio.
 - EN: Version anchored to the repository’s first historical commit.
+
+## Tag References
+
+- `v0.0.1` → `ec8670c`
+- `v0.0.2` → `968cbfc`
+- `v0.0.3` → `22c7c5e`
+- `v0.0.4` → `ef9a2e9`
+- `v0.0.5` → `3be3a98`
+- `v0.0.6` → `9227953`
+

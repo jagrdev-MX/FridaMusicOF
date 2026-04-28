@@ -14,8 +14,6 @@ Abre:
 
 ## Opción 2 (Windows)
 
-`start-server.bat` ahora fija la carpeta `site/`, abre el navegador automático y fuerza `127.0.0.1`.
-
 Desde la raíz del repo:
 
 ```bat

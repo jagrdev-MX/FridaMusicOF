@@ -11,24 +11,30 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidOnSurfaceVariant
 import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
+import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.util.Calendar
 
 @Composable
@@ -37,6 +43,7 @@ fun HomeScreen(
     listState: LazyListState,
     songs: List<Song>,
     currentSong: Song?,
+    viewModel: LibraryViewModels,
     onSongClick: (Song) -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
@@ -62,12 +69,13 @@ fun HomeScreen(
                 RecentlyPlayedSection(
                     songs = songs,
                     currentSong = currentSong,
+                    viewModel = viewModel,
                     onSongClick = onSongClick
                 )
             }
 
             item {
-                TopArtistsSection(songs = songs)
+                TopArtistsSection(songs = songs, viewModel = viewModel)
             }
         }
     }
@@ -113,27 +121,29 @@ fun WelcomeSection(onProfileClick: () -> Unit) {
                 .clickable(onClick = onProfileClick),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = "Profile and Settings",
-                tint = Color.White
-            )
+            Icon(Icons.Default.Person, contentDescription = "Profile and Settings", tint = Color.White)
         }
     }
 }
 
 @Composable
-fun RecentlyPlayedSection(songs: List<Song>, currentSong: Song?, onSongClick: (Song) -> Unit) {
-    // Tomamos la canción actual si hay una, sino la primera de la lista
+fun RecentlyPlayedSection(
+    songs: List<Song>,
+    currentSong: Song?,
+    viewModel: LibraryViewModels,
+    onSongClick: (Song) -> Unit
+) {
     val mainSong = currentSong ?: songs.firstOrNull()
     val smallSong1 = songs.getOrNull(1)
     val smallSong2 = songs.getOrNull(2)
 
+    val mainSongImageUrl by produceState<String?>(initialValue = null, key1 = mainSong) {
+        value = mainSong?.let { viewModel.getSongImageUrl(it) }
+    }
+
     Column {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -150,6 +160,15 @@ fun RecentlyPlayedSection(songs: List<Song>, currentSong: Song?, onSongClick: (S
                     .background(Color.DarkGray)
                     .clickable { onSongClick(mainSong) }
             ) {
+                if (mainSongImageUrl != null) {
+                    AsyncImage(
+                        model = mainSongImageUrl,
+                        contentDescription = "Main Album Art",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -174,16 +193,12 @@ fun RecentlyPlayedSection(songs: List<Song>, currentSong: Song?, onSongClick: (S
                         Text(
                             text = mainSong.title,
                             style = LiquidTypography.headlineMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = mainSong.artist ?: "Unknown Artist",
                             style = LiquidTypography.bodySmall,
-                            color = Color.White.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = Color.White.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -203,30 +218,23 @@ fun RecentlyPlayedSection(songs: List<Song>, currentSong: Song?, onSongClick: (S
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             if (smallSong1 != null) {
-                SmallTile(
-                    song = smallSong1,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onSongClick(smallSong1) }
-                )
+                SmallTile(song = smallSong1, viewModel = viewModel, modifier = Modifier.weight(1f), onClick = { onSongClick(smallSong1) })
             }
             if (smallSong2 != null) {
-                SmallTile(
-                    song = smallSong2,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onSongClick(smallSong2) }
-                )
+                SmallTile(song = smallSong2, viewModel = viewModel, modifier = Modifier.weight(1f), onClick = { onSongClick(smallSong2) })
             }
         }
     }
 }
 
 @Composable
-fun SmallTile(song: Song, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = song) {
+        value = viewModel.getSongImageUrl(song)
+    }
+
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -239,31 +247,30 @@ fun SmallTile(song: Song, modifier: Modifier = Modifier, onClick: () -> Unit) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color.DarkGray)
-        )
+                .background(Color.DarkGray),
+            contentAlignment = Alignment.Center
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.4f))
+            }
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.title,
-                style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = song.artist ?: "Unknown",
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.5f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Text(text = song.title, style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = song.artist ?: "Unknown", fontSize = 12.sp, color = Color.White.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
-fun TopArtistsSection(songs: List<Song>) {
-    // Filtramos la lista de canciones para obtener artistas únicos reales
+fun TopArtistsSection(songs: List<Song>, viewModel: LibraryViewModels) {
     val artists = songs.mapNotNull { it.artist }
         .filter { it.isNotBlank() && !it.contains("unknown", ignoreCase = true) }
         .distinct()
@@ -286,7 +293,8 @@ fun TopArtistsSection(songs: List<Song>) {
             itemsIndexed(artists) { index, artistName ->
                 ArtistItem(
                     name = artistName,
-                    isActive = index == 0 // El primero tiene el borde activo tal como en tu diseño
+                    isActive = index == 0,
+                    viewModel = viewModel
                 )
             }
         }
@@ -294,7 +302,11 @@ fun TopArtistsSection(songs: List<Song>) {
 }
 
 @Composable
-fun ArtistItem(name: String, isActive: Boolean) {
+fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewModels) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = name) {
+        value = viewModel.getArtistImageUrl(name)
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(90.dp)
@@ -314,8 +326,20 @@ fun ArtistItem(name: String, isActive: Boolean) {
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape)
-                    .background(Color.DarkGray)
-            )
+                    .background(Color.DarkGray),
+                contentAlignment = Alignment.Center
+            ) {
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(32.dp))
+                }
+            }
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(

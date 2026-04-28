@@ -22,9 +22,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
@@ -49,6 +51,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(false)
+    val repeatMode = MutableStateFlow(RepeatMode.OFF)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
 
     private val _currentPosition = MutableStateFlow(0L)
@@ -57,12 +60,12 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _currentAlbumArt = MutableStateFlow<String?>(null)
     val currentAlbumArt: StateFlow<String?> = _currentAlbumArt.asStateFlow()
 
+    private val imageUrlCache = ConcurrentHashMap<String, String>()
+
     private val notificationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 "ACTION_PLAY_PAUSE" -> togglePlayback()
-                // "ACTION_PREV" -> playPrevious()
-                // "ACTION_NEXT" -> playNext()
             }
         }
     }
@@ -77,7 +80,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             getApplication(),
             notificationReceiver,
             filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
+            ContextCompat.RECEIVER_EXPORTED
         )
     }
 
@@ -86,6 +89,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             val audioFiles = repository.getAudioFiles(filterVoiceNotes.value)
             _songs.value = audioFiles
         }
+    }
+
+    fun toggleRepeatMode() {
+        repeatMode.value = when (repeatMode.value) {
+            RepeatMode.OFF -> RepeatMode.ALL
+            RepeatMode.ALL -> RepeatMode.ONE
+            RepeatMode.ONE -> RepeatMode.OFF
+        }
+        mediaPlayer?.isLooping = (repeatMode.value == RepeatMode.ONE)
     }
 
     fun playSong(song: Song) {
@@ -98,6 +110,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         mediaPlayer = MediaPlayer().apply {
             setDataSource(getApplication(), song.uri)
             prepare()
+            isLooping = (repeatMode.value == RepeatMode.ONE)
             start()
             setOnCompletionListener {
                 _isPlaying.value = false
@@ -109,11 +122,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         _currentSong.value = song
         _isPlaying.value = true
         startProgressUpdate()
+
         updateNotification(song, true)
 
         _currentAlbumArt.value = null
         viewModelScope.launch(Dispatchers.IO) {
-            _currentAlbumArt.value = fetchAlbumArt(song.title, song.artist)
+            val url = getSongImageUrl(song)
+            _currentAlbumArt.value = url
+            updateNotification(song, true)
         }
     }
 
@@ -137,6 +153,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         mediaPlayer?.let {
             it.seekTo(position.toInt())
             _currentPosition.value = position
+            _currentSong.value?.let { song -> updateNotification(song, _isPlaying.value) }
         }
     }
 
@@ -163,6 +180,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             putExtra("TITLE", song.title)
             putExtra("ARTIST", song.artist)
             putExtra("IS_PLAYING", isPlaying)
+            putExtra("ALBUM_ART_URL", _currentAlbumArt.value)
+            putExtra("CURRENT_POSITION", _currentPosition.value)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getApplication<Application>().startForegroundService(intent)
@@ -170,6 +189,29 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             getApplication<Application>().startService(intent)
         }
     }
+
+    suspend fun getSongImageUrl(song: Song): String? = withContext(Dispatchers.IO) {
+        val cacheKey = "song_${song.id}"
+        if (imageUrlCache.containsKey(cacheKey)) return@withContext imageUrlCache[cacheKey]
+
+        val url = fetchAlbumArt(song.title, song.artist)
+        if (url != null) {
+            imageUrlCache[cacheKey] = url
+        }
+        return@withContext url
+    }
+
+    suspend fun getArtistImageUrl(artistName: String): String? = withContext(Dispatchers.IO) {
+        val cacheKey = "artist_$artistName"
+        if (imageUrlCache.containsKey(cacheKey)) return@withContext imageUrlCache[cacheKey]
+
+        val url = fetchAlbumArt(artistName, "")
+        if (url != null) {
+            imageUrlCache[cacheKey] = url
+        }
+        return@withContext url
+    }
+
     private fun fetchAlbumArt(title: String, artist: String?): String? {
         return try {
             var cleanQuery = title.lowercase()
@@ -258,9 +300,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         mediaPlayer?.release()
         try {
             getApplication<Application>().unregisterReceiver(notificationReceiver)
-        } catch (e: Exception) { }
+        } catch (e: Exception) {}
 
         val intent = Intent(getApplication(), MusicService::class.java).apply { action = "STOP_SERVICE" }
         getApplication<Application>().startService(intent)
     }
 }
+
+enum class RepeatMode { OFF, ALL, ONE}
