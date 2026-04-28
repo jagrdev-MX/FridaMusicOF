@@ -111,20 +111,22 @@ header {
 
 .logo-container {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 160px;
+  height: 160px;
   margin-bottom: 8px;
 }
 
 .logo-main {
   width: 100%;
   height: 100%;
+  object-fit: contain;
   filter: drop-shadow(0 0 20px rgba(178, 111, 255, 0.3));
   transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .logo-container:hover .logo-main {
-  transform: scale(1.05) rotate(5deg);
+  transform: scale(1.08) rotate(3deg);
+  filter: drop-shadow(0 0 30px rgba(178, 111, 255, 0.5));
 }
 
 .badge {
@@ -156,18 +158,6 @@ h1 span {
   position: relative;
 }
 
-h1 span::after {
-  content: '';
-  position: absolute;
-  bottom: 10%;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background: linear-gradient(to right, var(--pink), var(--blue));
-  opacity: 0.3;
-  border-radius: 2px;
-}
-
 .lead {
   font-size: clamp(1.1rem, 3vw, 1.3rem);
   color: var(--muted);
@@ -175,12 +165,22 @@ h1 span::after {
   margin: 0 auto 32px;
 }
 
-/* Links Grid */
-.links-grid {
+/* Links Layout */
+.links-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
   width: 100%;
+}
+
+.links-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.links-row.centered {
+  display: flex;
+  justify-content: center;
 }
 
 .btn {
@@ -211,8 +211,23 @@ h1 span::after {
 }
 
 .btn.primary:hover {
-  background: linear-gradient(135deg, #ff85d1, #be85ff);
-  box-shadow: 0 15px 40px rgba(255, 102, 199, 0.4);
+  box-shadow: 0 15px 40px rgba(255, 102, 199, 0.5);
+}
+
+.icon {
+  width: 22px;
+  height: 22px;
+  transition: all 0.3s ease;
+}
+
+.icon.neon-pink {
+  filter: drop-shadow(0 0 5px var(--pink));
+  color: var(--pink);
+}
+
+.btn:hover .icon.neon-pink {
+  filter: drop-shadow(0 0 10px var(--pink));
+  transform: scale(1.1);
 }
 
 /* Showcase Section */
@@ -228,10 +243,15 @@ h1 span::after {
   margin-bottom: 20px;
 }
 
-.showcase-content p {
-  color: var(--muted);
-  margin-bottom: 24px;
-  font-size: 1.1rem;
+.showcase-logo-container {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.show-logo {
+  width: min(320px, 65vw);
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.5));
 }
 
 .dev-preview {
@@ -294,7 +314,11 @@ h1 span::after {
     font-size: 2.8rem;
   }
   
-  .links-grid {
+  .links-row {
     grid-template-columns: 1fr;
+  }
+  
+  .links-row.centered {
+    display: grid;
   }
 }
