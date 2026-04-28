@@ -40,3 +40,15 @@ Abre:
 1. Usa `127.0.0.1` en lugar de `localhost`.
 2. Desactiva "Use proxy for localhost" en navegador/IDE/sistema.
 3. Asegura `NO_PROXY=localhost,127.0.0.1,::1`.
+
+## Enlaces oficiales configurados en la web
+
+- Repositorio: https://github.com/jagrdev-MX/FridaMusicOF
+- Perfil GitHub (JAGR): https://github.com/jagrdev-MX?tab=overview&from=2026-04-01&to=2026-04-19
+- Instagram Frida Labs: https://www.instagram.com/fridalabs_mx/
+- Instagram JAGR Developer: https://www.instagram.com/jagr.dev/
+- Soporte: mailto:fridalabs.soporte@gmail.com
+
+## Nota de revisión
+
+- La web reutiliza logos desde `app/src/main/res/mipmap-xxxhdpi/` para evitar agregar archivos binarios duplicados en el diff del PR.
