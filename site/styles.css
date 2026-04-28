@@ -67,6 +67,7 @@ body {
 
 .shell {
   width: min(1120px, 92vw);
+  width: min(1100px, 92vw);
   margin: 42px auto;
   display: grid;
   gap: 24px;
@@ -96,6 +97,9 @@ body {
   height: 74px;
   border-radius: 18px;
   box-shadow: 0 10px 28px rgba(124, 110, 255, 0.4);
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
 }
 
 .eyebrow {
@@ -121,6 +125,7 @@ h2 {
 
 .tagline {
   max-width: 680px;
+  max-width: 640px;
   color: var(--muted);
   font-size: 1.12rem;
   margin: 14px 0 24px;
@@ -129,6 +134,7 @@ h2 {
 .cta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
 }
 
@@ -162,6 +168,7 @@ h2 {
   gap: 18px;
   grid-template-columns: 1.3fr 1fr;
   align-items: stretch;
+  text-align: center;
 }
 
 h2 {
@@ -213,6 +220,10 @@ h3 {
   .showcase-grid {
     grid-template-columns: 1fr;
   }
+}
+
+  width: min(320px, 58vw);
+  filter: drop-shadow(0 14px 34px rgba(135, 90, 255, .45));
 }
 
 @media (max-width: 640px) {
