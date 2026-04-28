@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FridaMusic logo">
+  <defs>
+    <linearGradient id="noteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff87d7"/>
+      <stop offset="55%" stop-color="#b26fff"/>
+      <stop offset="100%" stop-color="#6ac5ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="64" fill="#070822"/>
+  <path fill="url(#noteGrad)" d="M186 110c0-17 14-31 31-31h130c17 0 31 14 31 31s-14 31-31 31h-99v74h99c17 0 31 14 31 31s-14 31-31 31h-99v129c0 17-14 31-31 31s-31-14-31-31V205c0-20 16-36 36-36h32v-28h-68c-17 0-31-14-31-31Z"/>
+  <circle cx="150" cy="383" r="78" fill="url(#noteGrad)"/>
+</svg>

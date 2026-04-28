@@ -14,11 +14,16 @@ Abre:
 
 ## Opción 2 (Windows)
 
+El nuevo `start-server.bat` sirve directamente la carpeta `site/`, abre navegador automático y añade `?v=RANDOM` para refrescar caché.
 Desde la raíz del repo:
 
 ```bat
 start-server.bat
 ```
+
+Abre (sin `/site/`):
+
+- http://127.0.0.1:8080/
 
 Abre:
 
@@ -41,6 +46,14 @@ Abre:
 2. Desactiva "Use proxy for localhost" en navegador/IDE/sistema.
 3. Asegura `NO_PROXY=localhost,127.0.0.1,::1`.
 
+## Validación rápida (opcional)
+
+```bash
+./site/validate-site.sh
+```
+
+Verifica que archivos clave, logos SVG y enlaces oficiales estén presentes.
+
 ## Enlaces oficiales configurados en la web
 
 - Repositorio: https://github.com/jagrdev-MX/FridaMusicOF
@@ -49,6 +62,12 @@ Abre:
 - Instagram JAGR Developer: https://www.instagram.com/jagr.dev/
 - Soporte: mailto:fridalabs.soporte@gmail.com
 
+## Assets visuales
+
+- `site/assets/fridamusic-logo.svg`
+- `site/assets/fridamusic-logo-round.svg`
+
+> Nota: Si sigues viendo la versión vieja, cierra el servidor anterior y vuelve a correr `start-server.bat`.
 ## Nota de revisión
 
 - La web reutiliza logos desde `app/src/main/res/mipmap-xxxhdpi/` para evitar agregar archivos binarios duplicados en el diff del PR.
