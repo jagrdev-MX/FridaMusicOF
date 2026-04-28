@@ -3,78 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FridaMusic | Sitio oficial</title>
-  <meta name="description" content="FridaMusic: experiencia musical visual con estilo neon blur y enlaces oficiales." />
-  <meta name="description" content="FridaMusic, app musical moderna. Sitio visual oficial con accesos directos." />
-  <link rel="preload" href="../app/src/main/res/font/be_vietnam_pro_regular.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="preload" href="../app/src/main/res/font/be_vietnam_pro_semibold.ttf" as="font" type="font/ttf" crossorigin>
+  <title>FridaMusic | Official Site</title>
+  <meta name="description" content="FridaMusic: La experiencia musical definitiva con un diseño futurista y minimalista." />
+  <link rel="icon" href="assets/fridamusic-logo-round.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div class="bg-gradient"></div>
   <div class="bg-glow bg-glow-1"></div>
   <div class="bg-glow bg-glow-2"></div>
   <div class="grain"></div>
 
-  <main class="shell">
-    <header class="hero glass">
-      <div class="brand">
-        <img src="assets/fridamusic-logo-round.svg" alt="Logo oficial de FridaMusic" class="logo" />
-        <div>
-          <p class="eyebrow">Frida Labs MX</p>
-        <img src="../app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" alt="Logo oficial de FridaMusic" class="logo" />
-        <div>
-          <p class="eyebrow">Frida Labs MX</p>
-        <img src="../app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" alt="Logo de FridaMusic" class="logo" />
-        <div>
-          <p class="eyebrow">Proyecto musical</p>
-          <h1>Frida<span>Music</span></h1>
+  <main class="container">
+    <header class="glass-card">
+      <div class="badge">Official Launch</div>
+      <div class="logo-container">
+        <img src="assets/fridamusic-logo-round.svg" alt="FridaMusic Logo" class="logo-main" />
+      </div>
+      
+      <h1>Frida<span>Music</span></h1>
+      <p class="lead">Una experiencia musical visualmente impactante, diseñada para los que buscan minimalismo y estilo neon.</p>
+
+      <nav class="links-grid" aria-label="Official Links">
+        <a class="btn primary" href="https://github.com/jagrdev-MX/FridaMusicOF" target="_blank" rel="noreferrer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          Repositorio GitHub
+        </a>
+        <a class="btn" href="https://www.instagram.com/fridalabs_mx/" target="_blank" rel="noreferrer">Instagram Labs</a>
+        <a class="btn" href="https://www.instagram.com/jagr.dev/" target="_blank" rel="noreferrer">Instagram Developer</a>
+        <a class="btn" href="mailto:fridalabs.soporte@gmail.com">Soporte Técnico</a>
+      </nav>
+    </header>
+
+    <section class="glass-card showcase">
+      <div class="showcase-content">
+        <h2>Identidad de Marca</h2>
+        <p>FridaMusic combina la elegancia del vidrio con la energía de los colores neon, creando un ecosistema visual único para tu música.</p>
+        <img src="assets/fridamusic-logo.svg" alt="FridaMusic Symbol" style="width: 200px; filter: drop-shadow(0 10px 20px rgba(178,111,255,0.3))" />
+      </div>
+
+      <div class="dev-preview">
+        <div class="avatar">
+          <img src="https://github.com/jagrdev-MX.png" alt="JAGR Developer" />
         </div>
-      </div>
-
-      <p class="tagline">Landing visual estilo glassmorphism/blur con accesos directos oficiales y contacto del equipo.</p>
-
-      <nav class="cta-grid" aria-label="Enlaces del proyecto">
-        <a class="cta primary" href="https://github.com/jagrdev-MX/FridaMusicOF" target="_blank" rel="noreferrer">Repositorio FridaMusic</a>
-        <a class="cta" href="https://github.com/jagrdev-MX?tab=overview&from=2026-04-01&to=2026-04-19" target="_blank" rel="noreferrer">GitHub JAGR</a>
-        <a class="cta" href="https://www.instagram.com/fridalabs_mx/" target="_blank" rel="noreferrer">Instagram Frida Labs</a>
-        <a class="cta" href="https://www.instagram.com/jagr.dev/" target="_blank" rel="noreferrer">Instagram JAGR Dev</a>
-        <a class="cta" href="mailto:fridalabs.soporte@gmail.com">Soporte por correo</a>
-      </nav>
-    </header>
-
-    <section class="showcase glass" aria-label="Vista visual de marca">
-      <div class="showcase-grid">
-        <article>
-          <h2>Identidad visual</h2>
-          <p>Se usan assets SVG (texto) para evitar diffs binarios y mantener la identidad visual.</p>
-          <img src="assets/fridamusic-logo.svg" alt="Símbolo oficial FridaMusic" class="show-logo" />
-          <p>Se reutiliza el logo oficial del proyecto desde recursos existentes para evitar duplicar binarios en la web.</p>
-          <img src="../app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" alt="Símbolo oficial FridaMusic" class="show-logo" />
-        </article>
-
-        <article class="dev-card">
-          <p class="eyebrow">Creado por</p>
+        <div class="dev-info">
+          <p class="badge" style="font-size: 0.7rem; margin-bottom: 4px;">Developer</p>
           <h3>JAGR Developer</h3>
-          <img src="https://github.com/jagrdev-MX.png" alt="Perfil de JAGR Developer" class="dev-avatar" loading="lazy" />
-          <a class="cta dev-link" href="https://www.instagram.com/jagr.dev/" target="_blank" rel="noreferrer">Ver perfil oficial</a>
-        </article>
+          <p>Lead Creative & Engineer</p>
+        </div>
+        <a class="btn" style="width: 100%;" href="https://github.com/jagrdev-MX" target="_blank">Ver Perfil</a>
       </div>
-      <p class="tagline">Diseño visual con efecto blur y estilo neon para presentar la app.</p>
-
-      <nav class="cta-grid" aria-label="Enlaces del proyecto">
-        <a class="cta primary" href="https://play.google.com/" target="_blank" rel="noreferrer">Google Play</a>
-        <a class="cta" href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a>
-        <a class="cta" href="https://x.com/" target="_blank" rel="noreferrer">X / Twitter</a>
-        <a class="cta" href="https://instagram.com/" target="_blank" rel="noreferrer">Instagram</a>
-        <a class="cta" href="mailto:team@fridamusic.app">Contacto del equipo</a>
-      </nav>
-    </header>
-
-    <section class="showcase glass" aria-label="Vista previa visual">
-      <h2>Experiencia FridaMusic</h2>
-      <p>Interfaz futurista, minimalista y enfocada en música.</p>
-      <img src="../app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" alt="Ícono principal de FridaMusic" class="show-logo" />
     </section>
+
+    <footer style="text-align: center; padding: 20px; color: var(--muted); font-size: 0.9rem;">
+      <p>&copy; 2026 Frida Labs MX. Hecho con pasión por el diseño.</p>
+    </footer>
   </main>
 </body>
 </html>

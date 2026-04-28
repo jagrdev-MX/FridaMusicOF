@@ -68,6 +68,8 @@ Verifica que archivos clave, logos SVG y enlaces oficiales estén presentes.
 - `site/assets/fridamusic-logo-round.svg`
 
 > Nota: Si sigues viendo la versión vieja, cierra el servidor anterior y vuelve a correr `start-server.bat`.
-## Nota de revisión
 
-- La web reutiliza logos desde `app/src/main/res/mipmap-xxxhdpi/` para evitar agregar archivos binarios duplicados en el diff del PR.
+## Mantenimiento
+
+- La web ahora utiliza assets vectoriales (SVG) y fuentes de Google para asegurar que se visualice correctamente en cualquier entorno local o de producción sin dependencias externas del proyecto Android.
+
