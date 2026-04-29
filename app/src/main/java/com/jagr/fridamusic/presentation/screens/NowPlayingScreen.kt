@@ -1,29 +1,39 @@
 package com.jagr.fridamusic.presentation.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.domain.lyrics.LyricsLine
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
+
+enum class PlayerDisplayMode {
+    COVER, LYRICS, QUEUE, INFO
+}
 
 @Composable
 fun NowPlayingScreen(
@@ -32,270 +42,351 @@ fun NowPlayingScreen(
     currentPosition: Long,
     albumArtUrl: String?,
     repeatMode: RepeatMode,
+    lyricsLines: List<LyricsLine>,
+    queue: List<Song>,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
     onToggleRepeat: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onToggleFavorite: (Song) -> Unit,
     onCollapse: () -> Unit
 ) {
-    Column(
+    var displayMode by remember { mutableStateOf(PlayerDisplayMode.COVER) }
+    
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
+            .background(Color.Black)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 32.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onCollapse) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Collapse", tint = Color.White)
-            }
-            Text(
-                text = "NOW PLAYING",
-                style = LiquidTypography.labelSmall,
-                color = LiquidPrimary,
-                letterSpacing = 2.sp
+        // 1. Blurred Background Artwork
+        if (!albumArtUrl.isNullOrEmpty()) {
+            AsyncImage(
+                model = albumArtUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(60.dp)
+                    .alpha(0.35f)
             )
-            IconButton(onClick = { /* TODO */ }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = Color.White)
-            }
         }
 
+        // 2. Sophisticated Gradient Overlay
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .aspectRatio(1f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .background(LiquidPrimary.copy(alpha = 0.4f), RoundedCornerShape(32.dp))
-                    .blur(30.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color.DarkGray)
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)),
-                        shape = RoundedCornerShape(32.dp)
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.4f),
+                            Color.Black.copy(alpha = 0.8f),
+                            Color.Black
+                        )
                     )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
+            // 3. Top Action Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (albumArtUrl != null) {
-                    AsyncImage(
-                        model = albumArtUrl,
-                        contentDescription = "Album Art",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                IconButton(onClick = onCollapse) {
+                    Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(32.dp))
+                }
+                
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "PLAYING FROM",
+                        style = LiquidTypography.labelSmall.copy(letterSpacing = 1.sp),
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                    Text(
+                        text = if (currentSong?.data?.contains("http") == true) "YouTube Music" else "Local Library",
+                        style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                }
+
+                IconButton(onClick = { /* More options */ }) {
+                    Icon(Icons.Default.MoreVert, null, tint = Color.White)
+                }
+            }
+
+            // 4. Main Interactive Area
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+            ) {
+                when (displayMode) {
+                    PlayerDisplayMode.COVER -> CoverView(albumArtUrl, currentSong)
+                    PlayerDisplayMode.LYRICS -> LyricsView(lyricsLines, currentPosition)
+                    PlayerDisplayMode.QUEUE -> QueueView(queue, currentSong)
+                    PlayerDisplayMode.INFO -> InfoView(currentSong)
+                }
+            }
+
+            // 5. Playback Controls & Info
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Song Title & Artist
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = currentSong?.title ?: "No Song Playing",
+                            style = LiquidTypography.headlineMedium,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = currentSong?.artist ?: "Unknown Artist",
+                            style = LiquidTypography.bodyLarge,
+                            color = Color.White.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(onClick = { currentSong?.let { onToggleFavorite(it) } }) {
+                        Icon(
+                            imageVector = Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(32.dp))
+
+                // Progress Bar
+                val duration = currentSong?.duration ?: 0L
+                val progress = if (duration > 0) currentPosition.toFloat() / duration else 0f
+                
+                Slider(
+                    value = progress,
+                    onValueChange = { onSeek((it * duration).toLong()) },
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = Color.White,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(formatTime(currentPosition), style = LiquidTypography.labelSmall, color = Color.White.copy(0.5f))
+                    Text(formatTime(duration), style = LiquidTypography.labelSmall, color = Color.White.copy(0.5f))
+                }
+
+                Spacer(Modifier.height(32.dp))
+
+                // Control Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onToggleRepeat) {
+                        Icon(
+                            imageVector = when(repeatMode) {
+                                RepeatMode.ONE -> Icons.Default.RepeatOne
+                                RepeatMode.ALL -> Icons.Default.Repeat
+                                else -> Icons.Default.Repeat
+                            },
+                            contentDescription = "Repeat",
+                            tint = if (repeatMode != RepeatMode.OFF) LiquidPrimary else Color.White.copy(0.5f)
+                        )
+                    }
+
+                    IconButton(onClick = onSkipPrevious, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(36.dp))
+                    }
+
+                    Surface(
+                        onClick = onPlayPause,
+                        shape = CircleShape,
+                        color = Color.White,
+                        modifier = Modifier.size(72.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = "Play/Pause",
+                                tint = Color.Black,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onSkipNext, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(36.dp))
+                    }
+
+                    IconButton(onClick = { /* Shuffle logic could go here */ }) {
+                        Icon(Icons.Default.Shuffle, null, tint = Color.White.copy(0.5f))
+                    }
+                }
+
+                Spacer(Modifier.height(48.dp))
+
+                // Bottom Dynamic Tabs (Glassmorphic)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BottomTabItem(
+                        icon = Icons.AutoMirrored.Filled.QueueMusic,
+                        isActive = displayMode == PlayerDisplayMode.QUEUE,
+                        onClick = { displayMode = if (displayMode == PlayerDisplayMode.QUEUE) PlayerDisplayMode.COVER else PlayerDisplayMode.QUEUE }
+                    )
+                    BottomTabItem(
+                        icon = Icons.Default.Lyrics,
+                        isActive = displayMode == PlayerDisplayMode.LYRICS,
+                        onClick = { displayMode = if (displayMode == PlayerDisplayMode.LYRICS) PlayerDisplayMode.COVER else PlayerDisplayMode.LYRICS }
+                    )
+                    BottomTabItem(
+                        icon = Icons.Default.Info,
+                        isActive = displayMode == PlayerDisplayMode.INFO,
+                        onClick = { displayMode = if (displayMode == PlayerDisplayMode.INFO) PlayerDisplayMode.COVER else PlayerDisplayMode.INFO }
                     )
                 }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                Text(
-                    text = currentSong?.title ?: "No Song Playing",
-                    style = LiquidTypography.headlineMedium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = currentSong?.artist ?: "Unknown Artist",
-                    style = LiquidTypography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Icon(Icons.Default.Favorite, contentDescription = "Favorite", tint = LiquidPrimary)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SeekBarSection(currentSong = currentSong, currentPosition = currentPosition, onSeek = onSeek)
-
-        PlayerControlsSection(
-            isPlaying = isPlaying,
-            repeatMode = repeatMode,
-            onPlayPause = onPlayPause,
-            onToggleRepeat = onToggleRepeat
+@Composable
+fun BottomTabItem(icon: androidx.compose.ui.graphics.vector.ImageVector, isActive: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (isActive) Color.White.copy(0.15f) else Color.Transparent)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (isActive) Color.White else Color.White.copy(0.4f),
+            modifier = Modifier.size(24.dp)
         )
+    }
+}
 
-        Row(
+@Composable
+fun CoverView(albumArtUrl: String?, currentSong: Song?) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(vertical = 40.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxWidth(0.85f)
+                .aspectRatio(1f),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.DarkGray,
+            shadowElevation = 24.dp
         ) {
-            Icon(Icons.Default.QueueMusic, contentDescription = "Queue", tint = Color.White.copy(alpha = 0.5f))
-            Icon(Icons.Default.Lyrics, contentDescription = "Lyrics", tint = Color.White.copy(alpha = 0.5f))
-            Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.5f))
+            if (!albumArtUrl.isNullOrEmpty()) {
+                AsyncImage(
+                    model = albumArtUrl,
+                    contentDescription = "Album Art",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.MusicNote, null, tint = Color.White.copy(0.1f), modifier = Modifier.size(120.dp))
+                }
+            }
         }
     }
 }
 
 @Composable
-fun SeekBarSection(currentSong: Song?, currentPosition: Long, onSeek: (Long) -> Unit) {
-    val totalDuration = currentSong?.duration ?: 0L
-    var sliderPosition by remember { mutableStateOf<Float?>(null) }
-
-    val currentProgress = if (totalDuration > 0) currentPosition.toFloat() / totalDuration.toFloat() else 0f
-    val displayProgress = sliderPosition ?: currentProgress
-
-    fun formatTime(ms: Long): String {
-        val totalSeconds = ms / 1000
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        return String.format("%d:%02d", minutes, seconds)
+fun LyricsView(lyrics: List<LyricsLine>, currentPosition: Long) {
+    // Basic implementation, can be improved with scrolling
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        items(items = lyrics) { line ->
+            val isActive = currentPosition >= line.startTime
+            Text(
+                text = line.content,
+                style = LiquidTypography.headlineSmall,
+                color = if (isActive) Color.White else Color.White.copy(alpha = 0.3f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 12.dp)
+            )
+        }
     }
+}
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
+@Composable
+fun QueueView(queue: List<Song>, currentSong: Song?) {
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        items(items = queue) { song ->
+            val isPlaying = song.id == currentSong?.id
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.2f))
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(displayProgress.coerceIn(0f, 1f))
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(50))
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(Color(0xFFFF99CC), Color(0xFFBBB0FD))
-                            )
-                        )
+                Text(
+                    text = song.title,
+                    color = if (isPlaying) LiquidPrimary else Color.White,
+                    modifier = Modifier.weight(1f)
                 )
             }
-
-            Slider(
-                value = displayProgress,
-                onValueChange = { sliderPosition = it },
-                onValueChangeFinished = {
-                    sliderPosition?.let {
-                        onSeek((it * totalDuration).toLong())
-                    }
-                    sliderPosition = null
-                },
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.Transparent,
-                    inactiveTrackColor = Color.Transparent
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            val displayTime = (displayProgress * totalDuration).toLong()
-            Text(
-                text = formatTime(displayTime),
-                style = LiquidTypography.labelSmall,
-                color = Color.White.copy(alpha = 0.6f)
-            )
-            Text(
-                text = "-${formatTime(maxOf(0L, totalDuration - displayTime))}",
-                style = LiquidTypography.labelSmall,
-                color = Color.White.copy(alpha = 0.6f)
-            )
         }
     }
 }
 
 @Composable
-fun PlayerControlsSection(
-    isPlaying: Boolean,
-    repeatMode: RepeatMode,
-    onPlayPause: () -> Unit,
-    onToggleRepeat: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 24.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = { /* TODO */ }) {
-            Icon(
-                imageVector = Icons.Default.Shuffle,
-                contentDescription = "Shuffle",
-                tint = Color.White.copy(alpha = 0.5f),
-                modifier = Modifier.size(28.dp)
-            )
-        }
-
-        IconButton(onClick = { /* TODO */ }) {
-            Icon(Icons.Default.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(36.dp))
-        }
-
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.1f))
-                .clickable(onClick = onPlayPause),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = "Play/Pause",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
-        IconButton(onClick = { /* Next */ }) {
-            Icon(Icons.Default.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(36.dp))
-        }
-
-        val repeatIcon = if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
-        val repeatTint = if (repeatMode == RepeatMode.OFF) Color.White.copy(alpha = 0.5f) else LiquidPrimary
-
-        IconButton(onClick = onToggleRepeat) {
-            Icon(
-                imageVector = repeatIcon,
-                contentDescription = "Repeat",
-                tint = repeatTint,
-                modifier = Modifier.size(28.dp)
-            )
-        }
+fun InfoView(song: Song?) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Title: ${song?.title ?: "N/A"}", color = Color.White)
+        Text("Artist: ${song?.artist ?: "N/A"}", color = Color.White)
+        Text("Path: ${song?.data ?: "N/A"}", color = Color.White.copy(0.5f), fontSize = 12.sp)
     }
+}
+
+private fun formatTime(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format("%02d:%02d", minutes, seconds)
 }

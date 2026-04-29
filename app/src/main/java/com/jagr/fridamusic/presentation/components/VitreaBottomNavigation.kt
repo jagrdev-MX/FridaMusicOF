@@ -46,6 +46,8 @@ fun VitreaBottomNavigation(
     isPlaying: Boolean,
     albumArtUrl: String?,
     onPlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
     onNavigate: (String) -> Unit,
     onExpandPlayer: () -> Unit
 ) {
@@ -128,7 +130,7 @@ fun VitreaBottomNavigation(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        IconButton(onClick = { /* Previous Action */ }) {
+                        IconButton(onClick = onSkipPrevious) {
                             Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White)
                         }
 
@@ -147,7 +149,7 @@ fun VitreaBottomNavigation(
                             )
                         }
 
-                        IconButton(onClick = { /* Next Action */ }) {
+                        IconButton(onClick = onSkipNext) {
                             Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White)
                         }
                     }

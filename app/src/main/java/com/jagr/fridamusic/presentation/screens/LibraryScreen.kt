@@ -9,10 +9,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -59,8 +57,9 @@ fun LibraryScreen(
     viewModel: LibraryViewModels
 ) {
     val songs by viewModel.songs.collectAsState()
+    val playlists by viewModel.playlists.collectAsState(initial = emptyList())
 
-    val tabs = listOf("Songs", "Albums", "Artists", "Folders")
+    val tabs = listOf("Songs", "Playlists", "Albums", "Artists")
     var selectedTab by remember { mutableStateOf(tabs[0]) }
 
     LazyColumn(
@@ -121,42 +120,108 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
 
-        val distinctAlbums = songs.distinctBy { it.albumId }.take(4)
-        if (distinctAlbums.isNotEmpty()) {
-            val rows = distinctAlbums.chunked(2)
-            items(rows) { rowItems ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    LibraryAlbumCard(rowItems[0], viewModel, Modifier.weight(1f))
-                    if (rowItems.size > 1) {
-                        LibraryAlbumCard(rowItems[1], viewModel, Modifier.weight(1f))
-                    } else {
-                        Spacer(Modifier.weight(1f))
+        when (selectedTab) {
+            "Songs" -> {
+                item {
+                    Text(
+                        text = "Recent Songs",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE2E2E2),
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
+                    )
+                }
+                items(songs, key = { it.id }) { song ->
+                    LibrarySongItem(song, viewModel) { viewModel.playSong(song) }
+                }
+            }
+            "Playlists" -> {
+                item {
+                    // Create New Playlist Button
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .glassPanel(RoundedCornerShape(12.dp))
+                            .clickable { viewModel.createPlaylist("New Playlist " + (playlists.size + 1)) }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(Color.White.copy(0.1f), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Add, null, tint = Color.White)
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Text("Create New Playlist", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+                items(playlists) { playlist ->
+                    PlaylistListItem(playlist)
+                }
+            }
+            "Albums" -> {
+                val distinctAlbums = songs.distinctBy { it.albumId }.take(10)
+                val rows = distinctAlbums.chunked(2)
+                items(rows) { rowItems ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        LibraryAlbumCard(rowItems[0], viewModel, Modifier.weight(1f))
+                        if (rowItems.size > 1) {
+                            LibraryAlbumCard(rowItems[1], viewModel, Modifier.weight(1f))
+                        } else {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+            else -> {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                        Text("Coming Soon", color = Color.White.copy(0.4f))
                     }
                 }
             }
         }
-
-        item {
-            Text(
-                text = "Recent Songs",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = (-0.01).em,
-                color = Color(0xFFE2E2E2),
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 32.dp, bottom = 8.dp)
-            )
-        }
-
-        items(songs, key = { it.id }) { song ->
-            LibrarySongItem(song, viewModel) { viewModel.playSong(song) }
-        }
     }
 }
+
+@Composable
+fun PlaylistListItem(playlist: com.jagr.fridamusic.domain.model.Playlist) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .glassPanel(RoundedCornerShape(8.dp))
+            .clickable { /* Open Playlist */ }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF6A11CB), Color(0xFF2575FC)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Color.White)
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(playlist.name, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Color.White)
+            Text("${playlist.songIds.size} songs", fontSize = 14.sp, color = Color.White.copy(0.5f))
+        }
+        Icon(Icons.Default.MoreVert, null, tint = Color.White.copy(0.5f))
+    }
+}
+
 
 @Composable
 fun LibraryAlbumCard(song: Song, viewModel: LibraryViewModels, modifier: Modifier = Modifier) {

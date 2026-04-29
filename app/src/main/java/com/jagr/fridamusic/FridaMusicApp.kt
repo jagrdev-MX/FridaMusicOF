@@ -1,7 +1,4 @@
 package com.jagr.fridamusic
 
-import android.app.Application
-import dagger.hilt.android.HiltAndroidApp
-
-@HiltAndroidApp
-class FridaMusicApp : Application()
+// Redundant class removed to resolve Hilt multiple app roots error.
+// The main app class is FridaApp.kt
