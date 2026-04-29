@@ -188,10 +188,10 @@ fun MainScreen() {
             visible = isPlayerExpanded,
             enter = slideInVertically(
                 initialOffsetY = { fullHeight -> fullHeight }
-            ),
+            ) + androidx.compose.animation.fadeIn(),
             exit = slideOutVertically(
                 targetOffsetY = { fullHeight -> fullHeight }
-            )
+            ) + androidx.compose.animation.fadeOut()
         ) {
             NowPlayingScreen(
                 currentSong = currentSong,

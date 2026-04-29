@@ -17,6 +17,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,11 +86,14 @@ fun NowPlayingScreen(
             }
         }
 
+        var showLyrics by remember { mutableStateOf(false) }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .aspectRatio(1f)
+                .clickable { showLyrics = !showLyrics }
         ) {
             Box(
                 modifier = Modifier
@@ -100,20 +106,43 @@ fun NowPlayingScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(32.dp))
-                    .background(Color.DarkGray)
+                    .background(Color.DarkGray.copy(alpha = 0.2f))
                     .border(
                         width = 1.dp,
                         brush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)),
                         shape = RoundedCornerShape(32.dp)
                     )
             ) {
-                if (albumArtUrl != null) {
-                    AsyncImage(
-                        model = albumArtUrl,
-                        contentDescription = "Album Art",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                if (showLyrics) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = currentSong?.lyrics ?: "Instrumental / No lyrics found",
+                            style = LiquidTypography.bodyLarge.copy(
+                                fontSize = 18.sp,
+                                lineHeight = 28.sp,
+                                letterSpacing = 0.5.sp
+                            ),
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.blur(if (currentSong?.lyrics == null) 4.dp else 0.dp)
+                        )
+                    }
+                } else {
+                    if (albumArtUrl != null) {
+                        AsyncImage(
+                            model = albumArtUrl,
+                            contentDescription = "Album Art",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 }
             }
         }

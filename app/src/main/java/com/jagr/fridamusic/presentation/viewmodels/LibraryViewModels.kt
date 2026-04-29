@@ -27,6 +27,10 @@ import org.json.JSONObject
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
+import com.jagr.fridamusic.data.local.MusicDatabase
+import com.jagr.fridamusic.data.local.PlaylistEntity
+import com.jagr.fridamusic.domain.model.Playlist
+import kotlinx.coroutines.flow.map
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
@@ -59,6 +63,19 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private val _currentAlbumArt = MutableStateFlow<String?>(null)
     val currentAlbumArt: StateFlow<String?> = _currentAlbumArt.asStateFlow()
+
+    private val playlistDao = MusicDatabase.getDatabase(application).playlistDao()
+    val playlists = playlistDao.getAllPlaylists().map { entities ->
+        entities.map { entity ->
+            Playlist(
+                id = entity.id,
+                name = entity.name,
+                description = entity.description,
+                songIds = entity.songIds.split(",").filter { it.isNotBlank() }.map { it.toLong() },
+                createdAt = entity.createdAt
+            )
+        }
+    }
 
     private val imageUrlCache = ConcurrentHashMap<String, String>()
 
@@ -129,7 +146,53 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             val url = getSongImageUrl(song)
             _currentAlbumArt.value = url
+            
+            // Fetch Lyrics (Option 1)
+            val lyrics = fetchLyrics(song.artist, song.title)
+            _currentSong.value = _currentSong.value?.copy(lyrics = lyrics)
+            
             updateNotification(song, true)
+        }
+    }
+
+    fun createPlaylist(name: String, description: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playlistDao.insertPlaylist(
+                PlaylistEntity(
+                    name = name,
+                    description = description,
+                    songIds = "",
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun addSongToPlaylist(playlist: Playlist, songId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val newIds = (playlist.songIds + songId).distinct().joinToString(",")
+            playlistDao.updatePlaylist(
+                PlaylistEntity(
+                    id = playlist.id,
+                    name = playlist.name,
+                    description = playlist.description,
+                    songIds = newIds,
+                    createdAt = playlist.createdAt
+                )
+            )
+        }
+    }
+
+    private suspend fun fetchLyrics(artist: String, title: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val encodedArtist = URLEncoder.encode(artist, "UTF-8")
+            val encodedTitle = URLEncoder.encode(title, "UTF-8")
+            val url = "https://api.lyrics.ovh/v1/$encodedArtist/$encodedTitle"
+            val response = URL(url).readText()
+            val json = JSONObject(response)
+            json.optString("lyrics").takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            null
         }
     }
 
