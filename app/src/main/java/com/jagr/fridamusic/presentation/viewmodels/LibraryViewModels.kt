@@ -1,16 +1,29 @@
 package com.jagr.fridamusic.presentation.viewmodels
 
+import android.net.Uri
+
+
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.MediaPlayer
 import android.media.audiofx.AudioEffect
 import android.os.Build
+import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.jagr.fridamusic.data.remote.innertube.YouTube
+import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
+import com.jagr.fridamusic.domain.lyrics.LyricsLine
+import org.schabi.newpipe.extractor.stream.StreamInfo
+import org.schabi.newpipe.extractor.ServiceList
+import com.jagr.fridamusic.domain.lyrics.LyricsParser
 import com.jagr.fridamusic.data.repository.AudioRepository
 import com.jagr.fridamusic.data.repository.SettingsManager
 import com.jagr.fridamusic.domain.model.Song
@@ -21,6 +34,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -45,10 +59,16 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     val sleepTimerMinutes = MutableStateFlow(0)
     private var sleepTimerJob: Job? = null
 
+    private val _isExtracting = MutableStateFlow(false)
+    val isExtracting = _isExtracting.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage = _errorMessage.asStateFlow()
+
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
 
-    private var mediaPlayer: MediaPlayer? = null
+    private var exoPlayer: ExoPlayer? = null
     private var progressJob: Job? = null
 
     private val _currentSong = MutableStateFlow<Song?>(null)
@@ -63,6 +83,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private val _currentAlbumArt = MutableStateFlow<String?>(null)
     val currentAlbumArt: StateFlow<String?> = _currentAlbumArt.asStateFlow()
+
+    private val _duration = MutableStateFlow(0L)
+    val duration: StateFlow<Long> = _duration.asStateFlow()
+
+    private val _lyricsLines = MutableStateFlow<List<LyricsLine>>(emptyList())
+    val lyricsLines: StateFlow<List<LyricsLine>> = _lyricsLines.asStateFlow()
+
+    private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
+    val youtubeSearchResults: StateFlow<List<YouTubeResult>> = _youtubeSearchResults.asStateFlow()
 
     private val playlistDao = MusicDatabase.getDatabase(application).playlistDao()
     val playlists = playlistDao.getAllPlaylists().map { entities ->
@@ -99,6 +128,28 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             filter,
             ContextCompat.RECEIVER_EXPORTED
         )
+        ensureFavoritesPlaylistExists()
+    }
+
+    private fun ensureFavoritesPlaylistExists() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allPlaylists = playlistDao.getAllPlaylistsOnce()
+            if (allPlaylists.none { it.name == "Favorites" }) {
+                createPlaylist("Favorites", "Your automatically liked songs")
+            }
+        }
+    }
+
+    fun searchYouTube(query: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val results = YouTube.search(query)
+                _youtubeSearchResults.value = results
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _youtubeSearchResults.value = emptyList()
+            }
+        }
     }
 
     fun loadSongs() {
@@ -114,32 +165,50 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
-        mediaPlayer?.isLooping = (repeatMode.value == RepeatMode.ONE)
+        exoPlayer?.repeatMode = when (repeatMode.value) {
+            RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+            RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+            RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+        }
     }
 
+    @OptIn(UnstableApi::class)
     fun playSong(song: Song) {
-        if (_currentSong.value?.id == song.id) {
+        if (_currentSong.value?.id == song.id && exoPlayer != null) {
             togglePlayback()
             return
         }
 
-        mediaPlayer?.release()
-        mediaPlayer = MediaPlayer().apply {
-            setDataSource(getApplication(), song.uri)
-            prepare()
-            isLooping = (repeatMode.value == RepeatMode.ONE)
-            start()
-            setOnCompletionListener {
-                _isPlaying.value = false
-                stopProgressUpdate()
-                _currentPosition.value = 0L
-                updateNotification(song, false)
+        exoPlayer?.release()
+        exoPlayer = ExoPlayer.Builder(getApplication()).build().apply {
+            val mediaItem = MediaItem.fromUri(song.uri)
+            setMediaItem(mediaItem)
+            repeatMode = when (this@LibraryViewModels.repeatMode.value) {
+                RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+                RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+                RepeatMode.ONE -> Player.REPEAT_MODE_ONE
             }
+            prepare()
+            play()
+            
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    _isPlaying.value = isPlaying
+                    if (isPlaying) startProgressUpdate() else stopProgressUpdate()
+                    updateNotification(song, isPlaying)
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_ENDED) {
+                        _currentPosition.value = 0L
+                        skipToNext()
+                    }
+                }
+            })
         }
+        
         _currentSong.value = song
         _isPlaying.value = true
         startProgressUpdate()
-
         updateNotification(song, true)
 
         _currentAlbumArt.value = null
@@ -147,9 +216,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             val url = getSongImageUrl(song)
             _currentAlbumArt.value = url
             
-            // Fetch Lyrics (Option 1)
-            val lyrics = fetchLyrics(song.artist, song.title)
+            val lyrics = fetchLyrics(song.artist ?: "", song.title ?: "")
             _currentSong.value = _currentSong.value?.copy(lyrics = lyrics)
+            _lyricsLines.value = lyrics?.let { LyricsParser.parseLrc(it) } ?: emptyList()
             
             updateNotification(song, true)
         }
@@ -197,45 +266,137 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun togglePlayback() {
-        mediaPlayer?.let {
-            if (it.isPlaying) {
-                it.pause()
-                _isPlaying.value = false
-                stopProgressUpdate()
-                _currentSong.value?.let { song -> updateNotification(song, false) }
-            } else {
-                it.start()
-                _isPlaying.value = true
-                startProgressUpdate()
-                _currentSong.value?.let { song -> updateNotification(song, true) }
-            }
+        exoPlayer?.let { player ->
+            if (player.isPlaying) player.pause() else player.play()
+            _isPlaying.value = player.isPlaying
+            _currentSong.value?.let { song -> updateNotification(song, player.isPlaying) }
         }
     }
 
     fun seekTo(position: Long) {
-        mediaPlayer?.let {
-            it.seekTo(position.toInt())
-            _currentPosition.value = position
-            _currentSong.value?.let { song -> updateNotification(song, _isPlaying.value) }
+        exoPlayer?.seekTo(position)
+    }
+
+
+    fun playYouTubeSong(result: YouTubeResult) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isExtracting.value = true
+            _errorMessage.value = null
+            
+            try {
+                // High-performance extraction with NewPipe
+                val videoUrl = "https://www.youtube.com/watch?v=" + result.videoId
+                val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+                
+                // Motor Logic: Prioritize OPUS (WebM) > M4A > anything else with high bitrate
+                val audioStream = streamInfo.audioStreams.filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }.maxByOrNull { it.bitrate }
+                    ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+                
+                if (audioStream != null) {
+                    val virtualSong = Song(
+                        id = result.videoId.hashCode().toLong(),
+                        title = result.title,
+                        artist = result.artist,
+                        data = audioStream.url ?: "",
+                        duration = streamInfo.duration * 1000L,
+                        albumId = 0L,
+                        uri = Uri.parse(audioStream.url ?: ""),
+                        artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
+                    )
+                    
+                    withContext(Dispatchers.Main) {
+                        _currentAlbumArt.value = result.thumbnailUrl
+                        playSong(virtualSong)
+                    }
+                } else {
+                    _errorMessage.value = "No compatible audio streams found"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _errorMessage.value = "Error extracting audio: ${e.localizedMessage}"
+            } finally {
+                _isExtracting.value = false
+            }
         }
     }
 
     private fun startProgressUpdate() {
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
-            while (_isPlaying.value) {
-                mediaPlayer?.let {
-                    if (it.isPlaying) {
-                        _currentPosition.value = it.currentPosition.toLong()
-                    }
-                }
-                delay(500L)
+            while (isActive) {
+                _currentPosition.value = exoPlayer?.currentPosition ?: 0L
+                _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
+                delay(500)
             }
         }
     }
 
     private fun stopProgressUpdate() {
         progressJob?.cancel()
+    }
+
+    fun skipToNext() {
+        val currentList = _songs.value
+        if (currentList.isEmpty()) return
+        
+        val currentIndex = currentList.indexOfFirst { it.id == _currentSong.value?.id }
+        val nextIndex = if (currentIndex == -1 || currentIndex == currentList.size - 1) 0 else currentIndex + 1
+        playSong(currentList[nextIndex])
+    }
+
+    fun skipToPrevious() {
+        val currentList = _songs.value
+        if (currentList.isEmpty()) return
+
+        val currentIndex = currentList.indexOfFirst { it.id == _currentSong.value?.id }
+        val prevIndex = if (currentIndex <= 0) currentList.size - 1 else currentIndex - 1
+        playSong(currentList[prevIndex])
+    }
+
+    fun toggleFavorite(song: Song) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val isAdding = !song.isFavorite
+            
+            // Update state
+            _songs.value = _songs.value.map {
+                if (it.id == song.id) it.copy(isFavorite = isAdding) else it
+            }
+            if (_currentSong.value?.id == song.id) {
+                _currentSong.value = _currentSong.value?.copy(isFavorite = isAdding)
+            }
+
+            // Sync with Favorites Playlist
+            val allPlaylists = playlistDao.getAllPlaylistsOnce()
+            val favoritesPlaylist = allPlaylists.find { it.name == "Favorites" }
+            favoritesPlaylist?.let {
+                if (isAdding) {
+                    addSongToPlaylist(
+                        Playlist(it.id, it.name, it.description, it.songIds.split(",").filter { id -> id.isNotBlank() }.map { id -> id.toLong() }), 
+                        song.id
+                    )
+                } else {
+                    removeSongFromPlaylist(
+                        Playlist(it.id, it.name, it.description, it.songIds.split(",").filter { id -> id.isNotBlank() }.map { id -> id.toLong() }), 
+                        song.id
+                    )
+                }
+            }
+        }
+    }
+
+    fun removeSongFromPlaylist(playlist: Playlist, songId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val newIds = playlist.songIds.filter { it != songId }.joinToString(",")
+            playlistDao.updatePlaylist(
+                PlaylistEntity(
+                    id = playlist.id,
+                    name = playlist.name,
+                    description = playlist.description,
+                    songIds = newIds,
+                    createdAt = playlist.createdAt
+                )
+            )
+        }
     }
 
     private fun updateNotification(song: Song, isPlaying: Boolean) {
@@ -340,7 +501,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         if (minutes > 0) {
             sleepTimerJob = viewModelScope.launch {
                 delay(minutes * 60 * 1000L)
-                mediaPlayer?.pause()
+                exoPlayer?.pause()
                 _isPlaying.value = false
                 stopProgressUpdate()
                 sleepTimerMinutes.value = 0
@@ -351,7 +512,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     fun openSystemEqualizer(intentLauncher: (Intent) -> Unit) {
         val intent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
-            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, mediaPlayer?.audioSessionId ?: 0)
+            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, 0) // ExoPlayer doesn't easily expose session ID without more setup
             putExtra(AudioEffect.EXTRA_PACKAGE_NAME, getApplication<Application>().packageName)
             putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
         }
@@ -360,7 +521,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
-        mediaPlayer?.release()
+        exoPlayer?.release()
         try {
             getApplication<Application>().unregisterReceiver(notificationReceiver)
         } catch (e: Exception) {}

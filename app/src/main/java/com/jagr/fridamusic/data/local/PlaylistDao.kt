@@ -8,6 +8,10 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists")
     fun getAllPlaylists(): Flow<List<PlaylistEntity>>
 
+    @Query("SELECT * FROM playlists")
+    suspend fun getAllPlaylistsOnce(): List<PlaylistEntity>
+
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylist(playlist: PlaylistEntity): Long
 

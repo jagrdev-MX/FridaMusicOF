@@ -1,223 +1,260 @@
 package com.jagr.fridamusic.presentation.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
+import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.theme.*
+import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+import kotlinx.coroutines.delay
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 
 @Composable
-fun SearchScreen(paddingValues: PaddingValues, listState: LazyListState) {
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(
-            top = 20.dp,
-            bottom = paddingValues.calculateBottomPadding() + 80.dp,
-            start = 20.dp,
-            end = 20.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(32.dp)
-    ) {
-        item { SearchHeaderSection() }
-        item { RecentSearchesSection() }
-        item { BrowseAllSection() }
-    }
-}
-
-@Composable
-fun SearchHeaderSection() {
+fun SearchScreen(
+    paddingValues: PaddingValues, 
+    listState: LazyListState,
+    viewModel: LibraryViewModels
+) {
     var searchQuery by remember { mutableStateOf("") }
+    val localSongs by viewModel.songs.collectAsState()
+    val onlineResults by viewModel.youtubeSearchResults.collectAsState()
+    val isExtracting by viewModel.isExtracting.collectAsState()
 
-    Column {
-        Text(
-            text = "Search",
-            style = LiquidTypography.displayLarge,
-            color = LiquidOnSurface,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
+    val filteredLocal = remember(searchQuery, localSongs) {
+        if (searchQuery.isBlank()) emptyList() 
+        else localSongs.filter { it.title.contains(searchQuery, ignoreCase = true) || (it.artist?.contains(searchQuery, ignoreCase = true) == true) }
+    }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .liquidGlassEffect(cornerRadius = 50.dp)
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null,
-                tint = LiquidOnSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                textStyle = LiquidTypography.bodyLarge.copy(color = LiquidOnSurface),
-                cursorBrush = SolidColor(LiquidPrimary),
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-                decorationBox = { innerTextField ->
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = "Artists, songs, or podcasts",
-                            style = LiquidTypography.bodyLarge,
-                            color = LiquidOnSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                    }
-                    innerTextField()
-                }
-            )
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.length > 2) {
+            delay(500)
+            viewModel.searchYouTube(searchQuery)
         }
     }
-}
 
-@Composable
-fun RecentSearchesSection() {
-    Column {
-        Text(
-            text = "Recent Searches",
-            style = LiquidTypography.headlineMedium,
-            color = LiquidOnSurface,
-            modifier = Modifier.padding(bottom = 16.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(LiquidBackground)
+    ) {
+        // Ambient Gradient
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(0.1f)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(LiquidPrimary, Color.Transparent, LiquidSecondary)
+                    )
+                )
         )
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(end = 20.dp)
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(
+                top = 20.dp,
+                bottom = paddingValues.calculateBottomPadding() + 100.dp,
+                start = 20.dp,
+                end = 20.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            val recentItems = listOf("Lofi Beats", "The Weeknd", "Synthwave")
-            items(recentItems) { item ->
-                RecentSearchChip(text = item)
+            item {
+                Column {
+                    Text(
+                        text = "Explore",
+                        style = LiquidTypography.displayLarge,
+                        color = Color.White,
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
+
+                    // Glass Search Bar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .liquidGlassEffect(cornerRadius = 32.dp)
+                            .padding(horizontal = 20.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Search, null, tint = Color.White.copy(0.6f))
+                            Spacer(Modifier.width(12.dp))
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                textStyle = LiquidTypography.bodyLarge.copy(color = Color.White),
+                                cursorBrush = SolidColor(LiquidPrimary),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                decorationBox = { innerTextField ->
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search YouTube Music...",
+                                            style = LiquidTypography.bodyLarge,
+                                            color = Color.White.copy(alpha = 0.4f)
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            )
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, null, tint = Color.White.copy(0.6f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (searchQuery.isNotBlank()) {
+                if (onlineResults.isNotEmpty()) {
+                    item { SectionHeader("From YouTube", Icons.Default.Public) }
+                    items(onlineResults) { result ->
+                        LiquidSearchItem(
+                            title = result.title,
+                            artist = result.artist,
+                            thumbnailUrl = result.thumbnailUrl,
+                            onClick = { viewModel.playYouTubeSong(result) }
+                        )
+                    }
+                }
+
+                if (filteredLocal.isNotEmpty()) {
+                    item { SectionHeader("Your Library", Icons.Default.MusicNote) }
+                    items(filteredLocal) { song ->
+                        LiquidSearchItem(
+                            title = song.title,
+                            artist = song.artist ?: "Unknown Artist",
+                            onClick = { viewModel.playSong(song) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Loading Overlay
+        if (isExtracting) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(0.7f))
+                    .clickable(enabled = false) {},
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = LiquidPrimary, strokeWidth = 4.dp)
+                    Spacer(Modifier.height(16.dp))
+                    Text("Igniting Motor...", style = LiquidTypography.titleMedium, color = Color.White)
+                }
             }
         }
     }
 }
 
 @Composable
-fun RecentSearchChip(text: String) {
+fun SectionHeader(title: String, icon: ImageVector) {
     Row(
-        modifier = Modifier
-            .liquidGlassEffect(cornerRadius = 50.dp)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 4.dp)
     ) {
-        Icon(
-            imageVector = Icons.Default.Refresh,
-            contentDescription = null,
-            tint = LiquidOnSurfaceVariant,
-            modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = text,
-            style = LiquidTypography.bodySmall,
-            color = LiquidOnSurface
-        )
-    }
-}
-
-@Composable
-fun BrowseAllSection() {
-    Column {
-        Text(
-            text = "Browse All",
-            style = LiquidTypography.headlineMedium,
-            color = LiquidOnSurface,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            CategoryCard(
-                title = "Pop",
-                gradientColor = LiquidPrimary,
-                modifier = Modifier.weight(1f)
-            )
-            CategoryCard(
-                title = "Electronic",
-                gradientColor = LiquidSecondary,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            CategoryCard(
-                title = "Chill",
-                gradientColor = LiquidTertiary,
-                modifier = Modifier.weight(1f)
-            )
-            CategoryCard(
-                title = "Rock",
-                gradientColor = Color(0xFFD7C1C9),
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-fun CategoryCard(title: String, gradientColor: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .aspectRatio(4f / 3f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        gradientColor.copy(alpha = 0.2f),
-                        gradientColor.copy(alpha = 0.05f)
-                    )
-                )
-            )
-            .liquidGlassEffect(cornerRadius = 16.dp)
-            .padding(16.dp)
-    ) {
+        Icon(icon, null, tint = LiquidPrimary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
             text = title,
-            style = LiquidTypography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = Color.White,
-            modifier = Modifier.align(Alignment.TopStart)
+            style = LiquidTypography.titleSmall,
+            color = LiquidPrimary,
+            fontWeight = FontWeight.Bold
         )
+    }
+}
 
+@Composable
+fun LiquidSearchItem(
+    title: String, 
+    artist: String, 
+    thumbnailUrl: String = "", 
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(80.dp)
+            .liquidGlassEffect(cornerRadius = 20.dp)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(
             modifier = Modifier
-                .size(60.dp)
-                .align(Alignment.BottomEnd)
-                .offset(x = 16.dp, y = 16.dp)
-                .rotate(15f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.DarkGray)
+                .size(56.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.05f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (thumbnailUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = thumbnailUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.MusicNote, null, tint = LiquidPrimary.copy(alpha = 0.4f))
+            }
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = LiquidTypography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = artist,
+                style = LiquidTypography.bodySmall,
+                color = Color.White.copy(alpha = 0.5f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.PlayArrow,
+            contentDescription = null,
+            tint = LiquidPrimary.copy(alpha = 0.8f),
+            modifier = Modifier.size(24.dp)
         )
     }
 }

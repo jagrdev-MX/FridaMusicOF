@@ -48,6 +48,7 @@ fun MainScreen() {
     val currentPosition by libraryViewModel.currentPosition.collectAsState()
     val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
+    val songs by libraryViewModel.songs.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -133,6 +134,8 @@ fun MainScreen() {
                     isPlaying = isPlaying,
                     albumArtUrl = currentAlbumArt,
                     onPlayPause = { libraryViewModel.togglePlayback() },
+                    onSkipNext = { libraryViewModel.skipToNext() },
+                    onSkipPrevious = { libraryViewModel.skipToPrevious() },
                     onNavigate = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -165,7 +168,11 @@ fun MainScreen() {
                     )
                 }
                 composable("search") {
-                    SearchScreen(paddingValues = paddingValues, listState = searchListState)
+                    SearchScreen(
+                        paddingValues = paddingValues,
+                        listState = searchListState,
+                        viewModel = libraryViewModel
+                    )
                 }
                 composable("library") {
                     LibraryScreen(
@@ -187,21 +194,27 @@ fun MainScreen() {
         AnimatedVisibility(
             visible = isPlayerExpanded,
             enter = slideInVertically(
-                initialOffsetY = { fullHeight -> fullHeight }
+                initialOffsetY = { it }
             ) + androidx.compose.animation.fadeIn(),
             exit = slideOutVertically(
-                targetOffsetY = { fullHeight -> fullHeight }
+                targetOffsetY = { it }
             ) + androidx.compose.animation.fadeOut()
         ) {
+            val lyricsLines by libraryViewModel.lyricsLines.collectAsState()
             NowPlayingScreen(
                 currentSong = currentSong,
                 isPlaying = isPlaying,
                 currentPosition = currentPosition,
                 albumArtUrl = currentAlbumArt,
                 repeatMode = repeatMode,
+                lyricsLines = lyricsLines,
+                queue = songs,
                 onPlayPause = { libraryViewModel.togglePlayback() },
                 onSeek = { position -> libraryViewModel.seekTo(position) },
                 onToggleRepeat = { libraryViewModel.toggleRepeatMode()},
+                onSkipNext = { libraryViewModel.skipToNext() },
+                onSkipPrevious = { libraryViewModel.skipToPrevious() },
+                onToggleFavorite = { song -> libraryViewModel.toggleFavorite(song) },
                 onCollapse = { isPlayerExpanded = false }
             )
         }

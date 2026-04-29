@@ -11,5 +11,6 @@ data class Song(
     val albumId: Long,
     val uri: Uri,
     val artworkUri: Uri,
-    val lyrics: String? = null
+    val lyrics: String? = null,
+    val isFavorite: Boolean = false
 )
