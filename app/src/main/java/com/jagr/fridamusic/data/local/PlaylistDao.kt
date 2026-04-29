@@ -9,11 +9,11 @@ interface PlaylistDao {
     fun getAllPlaylists(): Flow<List<PlaylistEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertPlaylist(playlist: PlaylistEntity)
+    suspend fun insertPlaylist(playlist: PlaylistEntity): Long
 
     @Delete
-    suspend fun deletePlaylist(playlist: PlaylistEntity)
+    suspend fun deletePlaylist(playlist: PlaylistEntity): Int
 
     @Update
-    suspend fun updatePlaylist(playlist: PlaylistEntity)
+    suspend fun updatePlaylist(playlist: PlaylistEntity): Int
 }

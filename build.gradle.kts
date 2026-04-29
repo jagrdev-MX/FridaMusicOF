@@ -2,6 +2,7 @@
 plugins {
     alias(libs.plugins.android.application) apply false
     kotlin("android") version "2.1.0" apply false
-    kotlin("kapt") version "2.1.0" apply false
     alias(libs.plugins.hilt) apply false
+    alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.kotlin.kapt) apply false
 }
