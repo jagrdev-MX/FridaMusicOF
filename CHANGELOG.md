@@ -1,3 +1,16 @@
+# [0.2.0](https://github.com/jagrdev-MX/FridaMusicOF/compare/v0.1.6...v0.2.0) (2026-04-29)
+
+
+### Bug Fixes
+
+* **ci:** elevate GITHUB_TOKEN permissions for release ([50478a0](https://github.com/jagrdev-MX/FridaMusicOF/commit/50478a063627e56a19f2c7c732f05897091ffc16))
+
+
+### Features
+
+* implement project site with landing page, styling, and crashlytics configuration ([66550c9](https://github.com/jagrdev-MX/FridaMusicOF/commit/66550c956b315b54056f95b14de5d8b31dce3e2a))
+* trigger release pipeline ([82235cd](https://github.com/jagrdev-MX/FridaMusicOF/commit/82235cdc282f440669659d79a1668d12a481f9f1))
+
 # CHANGELOG
 
 All notable changes in this repository are documented here, based strictly on commit history.
@@ -166,4 +179,3 @@ All notable changes in this repository are documented here, based strictly on co
 - `v0.0.4` → `ef9a2e9`
 - `v0.0.5` → `3be3a98`
 - `v0.0.6` → `9227953`
-
