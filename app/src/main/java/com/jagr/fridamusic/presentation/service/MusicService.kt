@@ -37,6 +37,8 @@ class MusicService : Service() {
 
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() {
+                    sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
+                }
                 override fun onPause() {
                     sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
                 }
