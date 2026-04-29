@@ -1,3 +1,15 @@
+# [0.4.0](https://github.com/jagrdev-MX/FridaMusicOF/compare/v0.3.0...v0.4.0) (2026-04-29)
+
+
+### Bug Fixes
+
+* resolve Kotlin 2.1.0 metadata and JVM signature conflicts ([f81e6c6](https://github.com/jagrdev-MX/FridaMusicOF/commit/f81e6c645653cdfc83d6a4285617e281b136c891))
+
+
+### Features
+
+* Frida 2.1 - Lyrics, Playlists and Motion Systems ([a9047e0](https://github.com/jagrdev-MX/FridaMusicOF/commit/a9047e00cf6325392d99601fb0e45b1f1cbff0f4))
+
 # [0.3.0](https://github.com/jagrdev-MX/FridaMusicOF/compare/v0.2.0...v0.3.0) (2026-04-29)
 
 
