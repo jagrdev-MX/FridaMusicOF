@@ -20,6 +20,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+/**
+ * [MusicService] manages the foreground audio playback and MediaSession integration.
+ * It handles system-level callbacks, notifications, and audio metadata synchronization.
+ */
 class MusicService : Service() {
 
     private lateinit var mediaSession: MediaSessionCompat
@@ -33,8 +37,6 @@ class MusicService : Service() {
 
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() {
-                    sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
-                }
                 override fun onPause() {
                     sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
                 }

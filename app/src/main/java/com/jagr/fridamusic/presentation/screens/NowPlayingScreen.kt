@@ -25,6 +25,13 @@ import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
 
+/**
+ * [NowPlayingScreen] is the main playback interface.
+ * Features:
+ * - Dynamic Neon Glow backgrounds.
+ * - Glassmorphism UI components.
+ * - Real-time playback synchronization.
+ */
 @Composable
 fun NowPlayingScreen(
     currentSong: Song?,
@@ -37,14 +44,24 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onCollapse: () -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFF1A0A2E), Color(0xFF0A0A0A)),
+                    center = androidx.compose.ui.geometry.Offset.Unspecified,
+                    radius = Float.POSITIVE_INFINITY
+                )
+            )
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+        ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -148,6 +165,7 @@ fun NowPlayingScreen(
             Icon(Icons.Default.QueueMusic, contentDescription = "Queue", tint = Color.White.copy(alpha = 0.5f))
             Icon(Icons.Default.Lyrics, contentDescription = "Lyrics", tint = Color.White.copy(alpha = 0.5f))
             Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.5f))
+        }
         }
     }
 }
@@ -261,25 +279,39 @@ fun PlayerControlsSection(
 
         Box(
             modifier = Modifier
-                .size(80.dp)
+                .size(84.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.1f))
-                .clickable(onClick = onPlayPause),
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(LiquidPrimary.copy(alpha = 0.3f), Color.Transparent)
+                    )
+                )
+                .padding(2.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(80.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f)),
+                    .background(Color.White.copy(alpha = 0.1f))
+                    .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                    .clickable(onClick = onPlayPause),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = "Play/Pause",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = "Play/Pause",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
         IconButton(onClick = { /* Next */ }) {
