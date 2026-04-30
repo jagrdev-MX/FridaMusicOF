@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -101,7 +102,7 @@ fun SettingsScreen(paddingValues: PaddingValues, listState: LazyListState, viewM
                         }
                     }
                 )
-                Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
                 SettingsToggleItem(
                     icon = Icons.Default.SkipNext,
                     title = "Gapless Playback",
@@ -109,9 +110,9 @@ fun SettingsScreen(paddingValues: PaddingValues, listState: LazyListState, viewM
                     isChecked = gaplessPlayback,
                     onCheckedChange = { viewModel.updateGapless(it) }
                 )
-                Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
                 SettingsSliderItem(
-                    icon = Icons.Default.CompareArrows,
+                    icon = Icons.AutoMirrored.Filled.CompareArrows,
                     title = "Crossfade",
                     iconTint = Color(0xFFD7CFFF),
                     value = crossfadeDuration,
@@ -134,7 +135,7 @@ fun SettingsScreen(paddingValues: PaddingValues, listState: LazyListState, viewM
                         Toast.makeText(context, "Scanning library...", Toast.LENGTH_SHORT).show()
                     }
                 )
-                Divider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 1.dp)
                 SettingsToggleItem(
                     icon = Icons.Default.VoiceOverOff,
                     title = "Filter Voice Notes",

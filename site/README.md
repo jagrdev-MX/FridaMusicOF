@@ -15,6 +15,7 @@ Abre:
 ## Opción 2 (Windows)
 
 El nuevo `start-server.bat` sirve directamente la carpeta `site/`, abre navegador automático y añade `?v=RANDOM` para refrescar caché.
+Desde la raíz del repo:
 
 ```bat
 start-server.bat
@@ -23,6 +24,16 @@ start-server.bat
 Abre (sin `/site/`):
 
 - http://127.0.0.1:8080/
+
+Abre:
+
+- http://127.0.0.1:8080/
+
+## Si ves "Directory listing for /"
+
+- Estás sirviendo la raíz sin `index` o abriste otra carpeta.
+- En este repo ya se redirige `/` hacia `/site/` automáticamente.
+- También puedes abrir directo: `http://127.0.0.1:8080/site/`.
 
 ## Cambiar puerto
 
@@ -71,3 +82,7 @@ Para agregar un nuevo colaborador, añade un objeto con:
 - `title`
 - `profile_url`
 - `avatar_url`
+## Mantenimiento
+
+- La web ahora utiliza assets vectoriales (SVG) y fuentes de Google para asegurar que se visualice correctamente en cualquier entorno local o de producción sin dependencias externas del proyecto Android.
+

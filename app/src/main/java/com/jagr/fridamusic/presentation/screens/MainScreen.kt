@@ -42,6 +42,7 @@ fun MainScreen() {
     val context = LocalContext.current
     val libraryViewModel: LibraryViewModels = viewModel()
 
+    val repeatMode by libraryViewModel.repeatMode.collectAsState()
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
     val currentPosition by libraryViewModel.currentPosition.collectAsState()
@@ -130,7 +131,11 @@ fun MainScreen() {
                     currentRoute = currentRoute,
                     currentSong = currentSong,
                     isPlaying = isPlaying,
+                    albumArtUrl = currentAlbumArt,
                     onPlayPause = { libraryViewModel.togglePlayback() },
+                    onNext = { libraryViewModel.skipToNext() },
+                    onPrevious = { libraryViewModel.skipToPrevious() },
+
                     onNavigate = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -157,12 +162,17 @@ fun MainScreen() {
                         listState = homeListState,
                         songs = songs,
                         currentSong = currentSong,
+                        viewModel = libraryViewModel,
                         onSongClick = { libraryViewModel.playSong(it) },
                         onNavigateToSettings = { navController.navigate("settings") }
                     )
                 }
                 composable("search") {
-                    SearchScreen(paddingValues = paddingValues, listState = searchListState)
+                    SearchScreen(
+                        paddingValues = paddingValues,
+                        listState = searchListState,
+                        viewModel = libraryViewModel
+                    )
                 }
                 composable("library") {
                     LibraryScreen(
@@ -195,8 +205,12 @@ fun MainScreen() {
                 isPlaying = isPlaying,
                 currentPosition = currentPosition,
                 albumArtUrl = currentAlbumArt,
+                repeatMode = repeatMode,
                 onPlayPause = { libraryViewModel.togglePlayback() },
+                onNext = { libraryViewModel.skipToNext() },
+                onPrevious = { libraryViewModel.skipToPrevious() },
                 onSeek = { position -> libraryViewModel.seekTo(position) },
+                onToggleRepeat = { libraryViewModel.toggleRepeatMode()},
                 onCollapse = { isPlayerExpanded = false }
             )
         }

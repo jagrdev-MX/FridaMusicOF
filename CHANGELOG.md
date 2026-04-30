@@ -1,3 +1,40 @@
+# [0.4.0](https://github.com/jagrdev-MX/FridaMusicOF/compare/v0.3.0...v0.4.0) (2026-04-29)
+
+
+### Bug Fixes
+
+* resolve Kotlin 2.1.0 metadata and JVM signature conflicts ([f81e6c6](https://github.com/jagrdev-MX/FridaMusicOF/commit/f81e6c645653cdfc83d6a4285617e281b136c891))
+
+
+### Features
+
+* Frida 2.1 - Lyrics, Playlists and Motion Systems ([a9047e0](https://github.com/jagrdev-MX/FridaMusicOF/commit/a9047e00cf6325392d99601fb0e45b1f1cbff0f4))
+
+# [0.3.0](https://github.com/jagrdev-MX/FridaMusicOF/compare/v0.2.0...v0.3.0) (2026-04-29)
+
+
+### Bug Fixes
+
+* restore syntax in MusicService.kt ([22a51fa](https://github.com/jagrdev-MX/FridaMusicOF/commit/22a51fa7f766f4f98db881b628a99e2d85d8dd03))
+
+
+### Features
+
+* evolution to Frida 2.0 - UI refinement, docs and CI tests ([a078d80](https://github.com/jagrdev-MX/FridaMusicOF/commit/a078d8003276f2b68ca79029e37e8d4e58417b81))
+
+# [0.2.0](https://github.com/jagrdev-MX/FridaMusicOF/compare/v0.1.6...v0.2.0) (2026-04-29)
+
+
+### Bug Fixes
+
+* **ci:** elevate GITHUB_TOKEN permissions for release ([50478a0](https://github.com/jagrdev-MX/FridaMusicOF/commit/50478a063627e56a19f2c7c732f05897091ffc16))
+
+
+### Features
+
+* implement project site with landing page, styling, and crashlytics configuration ([66550c9](https://github.com/jagrdev-MX/FridaMusicOF/commit/66550c956b315b54056f95b14de5d8b31dce3e2a))
+* trigger release pipeline ([82235cd](https://github.com/jagrdev-MX/FridaMusicOF/commit/82235cdc282f440669659d79a1668d12a481f9f1))
+
 # CHANGELOG
 
 All notable changes in this repository are documented here, based strictly on commit history.
@@ -157,3 +194,12 @@ All notable changes in this repository are documented here, based strictly on co
 ### 🧠 Dev Notes
 - ES: Versión anclada al primer commit histórico del repositorio.
 - EN: Version anchored to the repository’s first historical commit.
+
+## Tag References
+
+- `v0.0.1` → `ec8670c`
+- `v0.0.2` → `968cbfc`
+- `v0.0.3` → `22c7c5e`
+- `v0.0.4` → `ef9a2e9`
+- `v0.0.5` → `3be3a98`
+- `v0.0.6` → `9227953`
