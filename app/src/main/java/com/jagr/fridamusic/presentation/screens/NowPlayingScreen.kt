@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +42,9 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onCollapse: () -> Unit
 ) {
+    // Detectamos si la canción viene de YouTube
+    val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -51,6 +55,7 @@ fun NowPlayingScreen(
                 onClick = {}
             )
     ) {
+        // --- 1. FONDO CON EFECTO BLUR ---
         if (albumArtUrl != null) {
             AsyncImage(
                 model = albumArtUrl,
@@ -63,6 +68,7 @@ fun NowPlayingScreen(
             )
         }
 
+        // --- 2. CAPA OSCURA ---
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -76,6 +82,7 @@ fun NowPlayingScreen(
                 )
         )
 
+        // --- 3. INTERFAZ ---
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -83,6 +90,7 @@ fun NowPlayingScreen(
                 .navigationBarsPadding()
                 .padding(horizontal = 24.dp)
         ) {
+            // --- ENCABEZADO ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -93,17 +101,34 @@ fun NowPlayingScreen(
                 IconButton(onClick = onCollapse) {
                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Collapse", tint = Color.White)
                 }
-                Text(
-                    text = "NOW PLAYING",
-                    style = LiquidTypography.labelSmall,
-                    color = LiquidPrimary,
-                    letterSpacing = 2.sp
-                )
+
+                // Título y Subtítulo dinámico
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "NOW PLAYING",
+                        style = LiquidTypography.labelSmall,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    if (isYouTube) {
+                        Text(
+                            text = "from YouTube Music",
+                            fontSize = 11.sp,
+                            color = LiquidPrimary,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.5.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+
                 IconButton(onClick = { /* TODO */ }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = Color.White)
                 }
             }
 
+            // --- CARÁTULA ---
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -141,6 +166,7 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // --- INFO CANCIÓN ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -167,6 +193,7 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Llama a las funciones que ahora sí están abajo
             SeekBarSection(currentSong = currentSong, currentPosition = currentPosition, onSeek = onSeek)
 
             PlayerControlsSection(
@@ -178,6 +205,7 @@ fun NowPlayingScreen(
                 onToggleRepeat = onToggleRepeat
             )
 
+            // --- ACCIONES INFERIORES ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -192,6 +220,10 @@ fun NowPlayingScreen(
         }
     }
 }
+
+// -----------------------------------------------------------------------------------
+// FUNCIONES RESTAURADAS PARA EVITAR EL ERROR "Unresolved reference"
+// -----------------------------------------------------------------------------------
 
 @Composable
 fun SeekBarSection(currentSong: Song?, currentPosition: Long, onSeek: (Long) -> Unit) {
