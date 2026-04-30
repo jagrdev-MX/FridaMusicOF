@@ -12,6 +12,7 @@ required_files=(
   "$SITE_DIR/assets/fridamusic-logo.svg"
   "$SITE_DIR/assets/fridamusic-logo-round.svg"
   "$SITE_DIR/README.md"
+  "$SITE_DIR/assets/developers.json"
   "$ROOT_DIR/start-server.bat"
 )
 
@@ -25,5 +26,7 @@ grep -q 'https://www.instagram.com/jagr.dev/' "$INDEX"
 grep -q 'mailto:fridalabs.soporte@gmail.com' "$INDEX"
 grep -q 'assets/fridamusic-logo.svg' "$INDEX"
 grep -q 'assets/fridamusic-logo-round.svg' "$INDEX"
+grep -q 'assets/developers.json' "$INDEX"
+grep -q 'https://github.com/juliocps25' "$SITE_DIR/assets/developers.json"
 
 echo "Site validation OK"
