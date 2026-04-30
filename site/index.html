@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FridaMusic | Sitio oficial</title>
+  <meta name="description" content="FridaMusic: experiencia musical visual con estilo neon blur y enlaces oficiales." />
+  <link rel="preload" href="../app/src/main/res/font/be_vietnam_pro_regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="../app/src/main/res/font/be_vietnam_pro_semibold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
   <title>FridaMusic | Official Site</title>
   <meta name="description" content="FridaMusic: La experiencia musical definitiva con un diseño futurista y minimalista." />
   <!-- Using the high-resolution rounded logo from the official repository -->
@@ -15,6 +22,97 @@
   <div class="bg-glow bg-glow-2"></div>
   <div class="grain"></div>
 
+  <main class="shell">
+    <header class="hero glass">
+      <div class="brand">
+        <img src="assets/fridamusic-logo-round.svg" alt="Logo oficial de FridaMusic" class="logo" />
+        <div>
+          <p class="eyebrow">Frida Labs MX</p>
+          <h1>Frida<span>Music</span></h1>
+        </div>
+      </div>
+
+      <p class="tagline">Landing visual estilo glassmorphism/blur con accesos directos oficiales y contacto del equipo.</p>
+
+      <nav class="cta-grid" aria-label="Enlaces del proyecto">
+        <a class="cta primary" href="https://github.com/jagrdev-MX/FridaMusicOF" target="_blank" rel="noreferrer">Repositorio FridaMusic</a>
+        <a class="cta" href="https://github.com/jagrdev-MX?tab=overview&from=2026-04-01&to=2026-04-19" target="_blank" rel="noreferrer">GitHub JAGR</a>
+        <a class="cta" href="https://www.instagram.com/fridalabs_mx/" target="_blank" rel="noreferrer">Instagram Frida Labs</a>
+        <a class="cta" href="https://www.instagram.com/jagr.dev/" target="_blank" rel="noreferrer">Instagram JAGR Dev</a>
+        <a class="cta" href="mailto:fridalabs.soporte@gmail.com">Soporte por correo</a>
+      </nav>
+    </header>
+
+    <section class="showcase glass" aria-label="Vista visual de marca">
+      <div class="showcase-grid">
+        <article>
+          <h2>Identidad de Marca</h2>
+          <p>Se usan assets SVG (texto) para evitar diffs binarios y mantener la identidad visual.</p>
+          <img src="assets/fridamusic-logo.svg" alt="Símbolo oficial FridaMusic" class="show-logo" />
+        </article>
+      </div>
+    </section>
+
+    <section class="team glass" aria-label="Equipo de desarrollo">
+      <div class="team-head">
+        <h2>Desarrolladores</h2>
+        <p>Esta sección se genera automáticamente desde <code>site/assets/developers.json</code>.</p>
+      </div>
+      <div id="developers-grid" class="developers-grid" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <template id="developer-card-template">
+    <article class="dev-card">
+      <img class="dev-avatar" alt="" loading="lazy" />
+      <p class="dev-badge"></p>
+      <h3></h3>
+      <p class="dev-title"></p>
+      <p class="dev-role"></p>
+      <a class="cta dev-link" target="_blank" rel="noreferrer">Ver perfil</a>
+    </article>
+  </template>
+
+  <script>
+    async function loadDevelopers() {
+      const grid = document.getElementById('developers-grid');
+      const template = document.getElementById('developer-card-template');
+
+      try {
+        const response = await fetch('assets/developers.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error('No se pudo cargar developers.json');
+        const developers = await response.json();
+
+        grid.innerHTML = '';
+        developers.forEach((dev, index) => {
+          const node = template.content.cloneNode(true);
+          const card = node.querySelector('.dev-card');
+          const avatar = node.querySelector('.dev-avatar');
+          const badge = node.querySelector('.dev-badge');
+          const name = node.querySelector('h3');
+          const title = node.querySelector('.dev-title');
+          const role = node.querySelector('.dev-role');
+          const link = node.querySelector('.dev-link');
+
+          badge.textContent = index === 0 ? 'Perfil principal' : 'Miembro del equipo';
+          avatar.src = dev.avatar_url;
+          avatar.alt = `Foto de ${dev.name}`;
+          name.textContent = dev.name;
+          title.textContent = dev.title;
+          role.textContent = dev.role;
+          link.href = dev.profile_url;
+          link.textContent = index === 0 ? 'Ver perfil oficial' : 'Ver GitHub';
+
+          card.dataset.member = dev.name;
+          grid.appendChild(node);
+        });
+      } catch (error) {
+        grid.innerHTML = '<p class="dev-error">No se pudo cargar la lista de desarrolladores.</p>';
+      }
+    }
+
+    loadDevelopers();
+  </script>
   <main class="container">
     <header class="glass-card">
       <div class="badge">Official Launch</div>

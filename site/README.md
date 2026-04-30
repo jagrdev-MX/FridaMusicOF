@@ -69,6 +69,19 @@ Verifica que archivos clave, logos SVG y enlaces oficiales estén presentes.
 
 > Nota: Si sigues viendo la versión vieja, cierra el servidor anterior y vuelve a correr `start-server.bat`.
 
+## Sección automática de desarrolladores
+
+La sección de desarrolladores se genera desde:
+
+- `site/assets/developers.json`
+
+Para agregar un nuevo colaborador, añade un objeto con:
+
+- `name`
+- `role`
+- `title`
+- `profile_url`
+- `avatar_url`
 ## Mantenimiento
 
 - La web ahora utiliza assets vectoriales (SVG) y fuentes de Google para asegurar que se visualice correctamente en cualquier entorno local o de producción sin dependencias externas del proyecto Android.
