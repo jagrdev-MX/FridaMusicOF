@@ -48,6 +48,7 @@ fun MainScreen() {
     val currentPosition by libraryViewModel.currentPosition.collectAsState()
     val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
+    val lyricsLines by libraryViewModel.lyricsLines.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -135,7 +136,6 @@ fun MainScreen() {
                     onPlayPause = { libraryViewModel.togglePlayback() },
                     onNext = { libraryViewModel.skipToNext() },
                     onPrevious = { libraryViewModel.skipToPrevious() },
-
                     onNavigate = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -206,6 +206,7 @@ fun MainScreen() {
                 currentPosition = currentPosition,
                 albumArtUrl = currentAlbumArt,
                 repeatMode = repeatMode,
+                lyricsLines = lyricsLines, // <--- Pasamos las letras al reproductor
                 onPlayPause = { libraryViewModel.togglePlayback() },
                 onNext = { libraryViewModel.skipToNext() },
                 onPrevious = { libraryViewModel.skipToPrevious() },

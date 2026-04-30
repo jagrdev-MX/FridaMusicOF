@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
@@ -96,7 +95,7 @@ fun VitreaBottomNavigation(
                             if (albumArtUrl != null) {
                                 AsyncImage(
                                     model = albumArtUrl,
-                                    contentDescription = "Mini Album Art",
+                                    contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -109,7 +108,7 @@ fun VitreaBottomNavigation(
 
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = currentSong.title ?: "Unknown",
+                                text = currentSong.title,
                                 color = Color.White,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
@@ -131,7 +130,7 @@ fun VitreaBottomNavigation(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         IconButton(onClick = onPrevious) {
-                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White)
+                            Icon(Icons.Default.SkipPrevious, null, tint = Color.White)
                         }
 
                         Box(
@@ -144,13 +143,13 @@ fun VitreaBottomNavigation(
                         ) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = "Play/Pause",
+                                contentDescription = null,
                                 tint = Color.White
                             )
                         }
 
                         IconButton(onClick = onNext) {
-                            Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White)
+                            Icon(Icons.Default.SkipNext, null, tint = Color.White)
                         }
                     }
                 }
@@ -216,7 +215,7 @@ fun NavItem(
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = label,
+            contentDescription = null,
             tint = color,
             modifier = Modifier.size(24.dp)
         )
