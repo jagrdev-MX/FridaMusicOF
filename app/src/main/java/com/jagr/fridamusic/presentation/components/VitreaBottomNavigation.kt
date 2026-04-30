@@ -46,8 +46,8 @@ fun VitreaBottomNavigation(
     isPlaying: Boolean,
     albumArtUrl: String?,
     onPlayPause: () -> Unit,
-    onSkipNext: () -> Unit,
-    onSkipPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
     onNavigate: (String) -> Unit,
     onExpandPlayer: () -> Unit
 ) {
@@ -109,7 +109,7 @@ fun VitreaBottomNavigation(
 
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = currentSong.title,
+                                text = currentSong.title ?: "Unknown",
                                 color = Color.White,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
@@ -130,7 +130,7 @@ fun VitreaBottomNavigation(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        IconButton(onClick = onSkipPrevious) {
+                        IconButton(onClick = onPrevious) {
                             Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White)
                         }
 
@@ -149,7 +149,7 @@ fun VitreaBottomNavigation(
                             )
                         }
 
-                        IconButton(onClick = onSkipNext) {
+                        IconButton(onClick = onNext) {
                             Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White)
                         }
                     }
@@ -195,12 +195,6 @@ fun VitreaBottomNavigation(
                     label = "Library",
                     isSelected = currentRoute == "library",
                     onClick = { onNavigate("library") }
-                )
-                NavItem(
-                    icon = Icons.Default.Settings,
-                    label = "Settings",
-                    isSelected = currentRoute == "settings",
-                    onClick = { onNavigate("settings") }
                 )
             }
         }
