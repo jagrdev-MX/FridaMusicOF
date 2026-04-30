@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -40,7 +41,7 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onCollapse: () -> Unit
 ) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0A))
@@ -49,115 +50,145 @@ fun NowPlayingScreen(
                 indication = null,
                 onClick = {}
             )
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 32.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onCollapse) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Collapse", tint = Color.White)
-            }
-            Text(
-                text = "NOW PLAYING",
-                style = LiquidTypography.labelSmall,
-                color = LiquidPrimary,
-                letterSpacing = 2.sp
+        if (albumArtUrl != null) {
+            AsyncImage(
+                model = albumArtUrl,
+                contentDescription = "Blurred Background",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(100.dp)
+                    .alpha(0.6f)
             )
-            IconButton(onClick = { /* TODO */ }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = Color.White)
-            }
         }
 
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .aspectRatio(1f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .background(LiquidPrimary.copy(alpha = 0.4f), RoundedCornerShape(32.dp))
-                    .blur(30.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color.DarkGray)
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)),
-                        shape = RoundedCornerShape(32.dp)
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.3f),
+                            Color.Black.copy(alpha = 0.8f)
+                        )
                     )
-            ) {
-                if (albumArtUrl != null) {
-                    AsyncImage(
-                        model = albumArtUrl,
-                        contentDescription = "Album Art",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                Text(
-                    text = currentSong?.title ?: "No Song Playing",
-                    style = LiquidTypography.headlineMedium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = currentSong?.artist ?: "Unknown Artist",
-                    style = LiquidTypography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Icon(Icons.Default.Favorite, contentDescription = "Favorite", tint = LiquidPrimary)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SeekBarSection(currentSong = currentSong, currentPosition = currentPosition, onSeek = onSeek)
-
-        PlayerControlsSection(
-            isPlaying = isPlaying,
-            repeatMode = repeatMode,
-            onPlayPause = onPlayPause,
-            onNext = onNext,
-            onPrevious = onPrevious,
-            onToggleRepeat = onToggleRepeat
         )
 
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
         ) {
-            Icon(Icons.Default.QueueMusic, contentDescription = "Queue", tint = Color.White.copy(alpha = 0.5f))
-            Icon(Icons.Default.Lyrics, contentDescription = "Lyrics", tint = Color.White.copy(alpha = 0.5f))
-            Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.5f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 32.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onCollapse) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Collapse", tint = Color.White)
+                }
+                Text(
+                    text = "NOW PLAYING",
+                    style = LiquidTypography.labelSmall,
+                    color = LiquidPrimary,
+                    letterSpacing = 2.sp
+                )
+                IconButton(onClick = { /* TODO */ }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = Color.White)
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .aspectRatio(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .background(LiquidPrimary.copy(alpha = 0.4f), RoundedCornerShape(32.dp))
+                        .blur(30.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(Color.DarkGray)
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)),
+                            shape = RoundedCornerShape(32.dp)
+                        )
+                ) {
+                    if (albumArtUrl != null) {
+                        AsyncImage(
+                            model = albumArtUrl,
+                            contentDescription = "Album Art",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(
+                        text = currentSong?.title ?: "No Song Playing",
+                        style = LiquidTypography.headlineMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = currentSong?.artist ?: "Unknown Artist",
+                        style = LiquidTypography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(Icons.Default.Favorite, contentDescription = "Favorite", tint = LiquidPrimary)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SeekBarSection(currentSong = currentSong, currentPosition = currentPosition, onSeek = onSeek)
+
+            PlayerControlsSection(
+                isPlaying = isPlaying,
+                repeatMode = repeatMode,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                onPrevious = onPrevious,
+                onToggleRepeat = onToggleRepeat
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.QueueMusic, contentDescription = "Queue", tint = Color.White.copy(alpha = 0.5f))
+                Icon(Icons.Default.Lyrics, contentDescription = "Lyrics", tint = Color.White.copy(alpha = 0.5f))
+                Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White.copy(alpha = 0.5f))
+            }
         }
     }
 }
