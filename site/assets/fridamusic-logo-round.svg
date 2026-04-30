@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FridaMusic round logo">
+  <defs>
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff66c7"/>
+      <stop offset="100%" stop-color="#58b9ff"/>
+    </linearGradient>
+    <linearGradient id="note" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff87d7"/>
+      <stop offset="55%" stop-color="#b26fff"/>
+      <stop offset="100%" stop-color="#6ac5ff"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="236" fill="#070822" stroke="url(#ring)" stroke-width="16"/>
+  <path fill="url(#note)" d="M217 142c0-17 14-31 31-31h113c17 0 31 14 31 31s-14 31-31 31h-82v67h82c17 0 31 14 31 31s-14 31-31 31h-82v98c0 17-14 31-31 31s-31-14-31-31V239c0-20 16-36 36-36h15v-30h-51c-17 0-31-14-31-31Z"/>
+  <circle cx="165" cy="380" r="72" fill="url(#note)"/>
+</svg>
