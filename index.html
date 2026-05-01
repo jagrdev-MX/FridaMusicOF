@@ -462,6 +462,37 @@
       z-index: 2;
     }
 
+
+
+    /* ── SMART DEVICE LAYOUT ── */
+    body.device-phone .wrapper {
+      max-width: 100%;
+      padding: 44px 14px 28px;
+    }
+
+    body.device-phone .glass-card {
+      padding: 20px 14px;
+      border-radius: 18px;
+    }
+
+    body.device-phone .dev-card {
+      width: 100%;
+      max-width: 250px;
+    }
+
+    body.device-tablet .wrapper {
+      max-width: 940px;
+      padding: 56px 22px 34px;
+    }
+
+    body.device-tablet .brand-layout {
+      gap: 24px;
+    }
+
+    body.device-desktop .wrapper {
+      max-width: 980px;
+    }
+
     /* ── RESPONSIVE ── */
     @media(max-width:620px) {
       .glass-card {
@@ -608,6 +639,33 @@
 
   <script>
     (function () {
+
+      /* ── SMART DEVICE DETECTION ── */
+      const mqCoarse = window.matchMedia('(pointer: coarse)').matches;
+      const mqFine = window.matchMedia('(pointer: fine)').matches;
+
+      function detectDevice() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const shortest = Math.min(w, h);
+        const ua = navigator.userAgent || '';
+        const isTabletUA = /iPad|Tablet|Nexus 7|Nexus 10|SM-T|Kindle/i.test(ua);
+
+        let type = 'desktop';
+        if (w <= 767 || (mqCoarse && shortest < 700)) {
+          type = 'phone';
+        } else if (isTabletUA || (mqCoarse && w <= 1180) || (w > 767 && w <= 1180 && !mqFine)) {
+          type = 'tablet';
+        }
+
+        document.body.classList.remove('device-phone', 'device-tablet', 'device-desktop');
+        document.body.classList.add(`device-${type}`);
+      }
+
+      detectDevice();
+      window.addEventListener('resize', detectDevice);
+      window.addEventListener('orientationchange', detectDevice);
+
       /* ── ANIMATED BACKGROUND ── */
       const cv = document.getElementById('bg-canvas');
       const cx = cv.getContext('2d');
