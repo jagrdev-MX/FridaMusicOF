@@ -443,36 +443,6 @@
         width: 160px;
       }
     }
-
-    .bg-controls {
-      position: fixed;
-      right: 16px;
-      bottom: 16px;
-      z-index: 5;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      padding: 8px 10px;
-      border-radius: 999px;
-      background: rgba(10, 8, 24, .55);
-      border: 1px solid rgba(255, 255, 255, .14);
-      backdrop-filter: blur(8px);
-    }
-
-    .bg-controls label {
-      font-size: 11px;
-      color: rgba(255, 255, 255, .7);
-    }
-
-    .bg-controls input[type="color"] {
-      width: 26px;
-      height: 26px;
-      border: none;
-      border-radius: 50%;
-      background: transparent;
-      padding: 0;
-      cursor: pointer;
-    }
   </style>
 </head>
 
@@ -480,11 +450,6 @@
 
   <canvas id="bg-canvas"></canvas>
   <div class="bg-overlay"></div>
-  <div class="bg-controls" aria-label="Controles del fondo">
-    <label for="accentA">A</label><input id="accentA" type="color" value="#7c4dff">
-    <label for="accentB">B</label><input id="accentB" type="color" value="#e040fb">
-    <label for="accentC">C</label><input id="accentC" type="color" value="#40c4ff">
-  </div>
 
   <div class="wrapper">
 
@@ -667,12 +632,6 @@
       }
       init(); draw();
       window.addEventListener('resize', init);
-      palettePickers.forEach((picker, idx) => {
-        picker.addEventListener('input', () => {
-          pal[idx] = picker.value;
-          orbs.forEach((o, orbIdx) => { if (orbIdx % 3 === idx) o.color = picker.value; });
-        });
-      });
     })();
   </script>
 </body>
