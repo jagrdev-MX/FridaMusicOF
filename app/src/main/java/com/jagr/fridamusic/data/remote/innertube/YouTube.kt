@@ -13,8 +13,8 @@ import io.ktor.client.engine.cio.*
 object YouTube {
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
-            json(Json { 
-                ignoreUnknownKeys = true 
+            json(Json {
+                ignoreUnknownKeys = true
                 coerceInputValues = true
             })
         }
@@ -33,20 +33,18 @@ object YouTube {
                 val url = "$baseUrl/search"
                 val response: JsonObject = client.get(url) {
                     parameter("q", query)
-                    parameter("filter", "music_songs") // Only YouTube Music tracks
+                    parameter("filter", "all")
                     header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 }.body()
-                
+
                 val results = parsePipedResults(response)
                 if (results.isNotEmpty()) {
                     return results // Success!
                 }
             } catch (e: Exception) {
-                // If this instance fails, silently try the next one
                 continue
             }
         }
-        // PLAN C: HTML Scraper Fallback
         return try {
             val htmlUrl = "https://www.youtube.com/results"
             val html = client.get(htmlUrl) {
@@ -57,7 +55,7 @@ object YouTube {
 
             val jsonString = html.substringAfter("var ytInitialData = ").substringBefore(";</script>")
             val response = Json.parseToJsonElement(jsonString).jsonObject
-            
+
             parseHTMLResults(response)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -78,21 +76,39 @@ object YouTube {
                 val itemSection = section.jsonObject["itemSectionRenderer"]?.jsonObject
                 if (itemSection != null) {
                     val itemContents = itemSection["contents"]?.jsonArray ?: continue
+
                     for (item in itemContents) {
-                        val renderer = item.jsonObject["videoRenderer"]?.jsonObject ?: continue
-                        val videoId = renderer["videoId"]?.jsonPrimitive?.content ?: continue
-                        
-                        val title = renderer["title"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject
-                            ?.get("text")?.jsonPrimitive?.content ?: "Unknown"
-                            
-                        val artist = renderer["ownerText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject
-                            ?.get("text")?.jsonPrimitive?.content ?: "Unknown"
+                        val videoRenderer = item.jsonObject["videoRenderer"]?.jsonObject
+                        val channelRenderer = item.jsonObject["channelRenderer"]?.jsonObject
+                        val playlistRenderer = item.jsonObject["playlistRenderer"]?.jsonObject
 
-                        val thumbnail = renderer["thumbnail"]?.jsonObject
-                            ?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject
-                            ?.get("url")?.jsonPrimitive?.content ?: ""
+                        if (videoRenderer != null) {
+                            val videoId = videoRenderer["videoId"]?.jsonPrimitive?.content ?: continue
+                            val title = videoRenderer["title"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
+                            val artist = videoRenderer["ownerText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
+                            val thumbnail = videoRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
 
-                        results.add(YouTubeResult(videoId, title, artist, thumbnail))
+                            results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG))
+
+                        } else if (channelRenderer != null) {
+                            val channelId = channelRenderer["channelId"]?.jsonPrimitive?.content ?: continue
+                            val title = channelRenderer["title"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content ?: "Unknown"
+                            val thumbnail = channelRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
+
+                            results.add(YouTubeResult(channelId, title, "Artista", thumbnail, ResultType.ARTIST))
+
+                        } else if (playlistRenderer != null) {
+                            val playlistId = playlistRenderer["playlistId"]?.jsonPrimitive?.content ?: continue
+                            val title = playlistRenderer["title"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content ?: "Unknown"
+                            val uploader = playlistRenderer["longBylineText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "YouTube"
+
+                            val thumbnailsArray = playlistRenderer["thumbnails"]?.jsonArray?.getOrNull(0)?.jsonObject?.get("thumbnails")?.jsonArray
+                                ?: playlistRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray
+
+                            val thumbnail = thumbnailsArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
+
+                            results.add(YouTubeResult(playlistId, title, uploader, thumbnail, ResultType.PLAYLIST))
+                        }
                     }
                 }
             }
@@ -110,15 +126,34 @@ object YouTube {
             for (item in items) {
                 val obj = item.jsonObject
                 val url = obj["url"]?.jsonPrimitive?.content ?: ""
-                
-                // If it has a watch URL, it's a playable audio/video track
-                if (url.contains("/watch?v=")) { 
-                    val videoId = url.replace("/watch?v=", "").substringBefore("&")
-                    val title = obj["title"]?.jsonPrimitive?.content ?: "Unknown Title"
-                    val artist = obj["uploaderName"]?.jsonPrimitive?.content ?: "Unknown Artist"
-                    val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
+                val type = obj["type"]?.jsonPrimitive?.content ?: ""
 
-                    results.add(YouTubeResult(videoId, title, artist, thumbnail))
+                when (type) {
+                    "stream" -> {
+                        if (url.contains("/watch?v=")) {
+                            val videoId = url.replace("/watch?v=", "").substringBefore("&")
+                            val title = obj["title"]?.jsonPrimitive?.content ?: "Unknown Title"
+                            val artist = obj["uploaderName"]?.jsonPrimitive?.content ?: "Unknown Artist"
+                            val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
+
+                            results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG))
+                        }
+                    }
+                    "channel" -> {
+                        val channelId = url.replace("/channel/", "").substringBefore("?")
+                        val title = obj["name"]?.jsonPrimitive?.content ?: "Unknown Artist"
+                        val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
+
+                        results.add(YouTubeResult(channelId, title, "Artista", thumbnail, ResultType.ARTIST))
+                    }
+                    "playlist" -> {
+                        val playlistId = url.replace("/playlist?list=", "").substringBefore("&")
+                        val title = obj["title"]?.jsonPrimitive?.content ?: "Unknown Playlist"
+                        val uploader = obj["uploaderName"]?.jsonPrimitive?.content ?: "YouTube"
+                        val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
+
+                        results.add(YouTubeResult(playlistId, title, uploader, thumbnail, ResultType.PLAYLIST))
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -130,15 +165,16 @@ object YouTube {
     private fun emptyJsonArray() = JsonArray(emptyList())
 
     suspend fun getTranscript(videoId: String): String? {
-        // Here we would call the InnerTube transcript endpoint
-        // For now, returning null to avoid crashes until we have the full model
         return null
     }
 }
+
+enum class ResultType { SONG, ARTIST, PLAYLIST, ALBUM }
 
 data class YouTubeResult(
     val videoId: String,
     val title: String,
     val artist: String,
-    val thumbnailUrl: String = ""
+    val thumbnailUrl: String = "",
+    val type: ResultType = ResultType.SONG
 )

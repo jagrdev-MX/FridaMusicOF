@@ -79,10 +79,6 @@ fun MainScreen() {
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = isPlayerExpanded) {
-        isPlayerExpanded = false
-    }
-
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
@@ -167,11 +163,82 @@ fun MainScreen() {
                         onNavigateToSettings = { navController.navigate("settings") }
                     )
                 }
+
                 composable("search") {
                     SearchScreen(
                         paddingValues = paddingValues,
                         listState = searchListState,
-                        viewModel = libraryViewModel
+                        viewModel = libraryViewModel,
+                        onNavigateToArtist = { name, imageUrl ->
+                            val encodedName = java.net.URLEncoder.encode(name, "UTF-8")
+                            val safeUrl = if (imageUrl.isBlank()) "none" else imageUrl
+                            val encodedUrl = java.net.URLEncoder.encode(safeUrl, "UTF-8")
+
+                            navController.navigate("artist?name=$encodedName&url=$encodedUrl")
+                        }
+                    )
+                }
+
+                // --- RUTA CON QUERY PARAMETERS ---
+                composable("artist?name={artistName}&url={artistUrl}") { backStackEntry ->
+                    val rawName = backStackEntry.arguments?.getString("artistName") ?: ""
+                    val rawUrl = backStackEntry.arguments?.getString("artistUrl") ?: ""
+
+                    val name = java.net.URLDecoder.decode(rawName, "UTF-8")
+                    val decodedUrl = java.net.URLDecoder.decode(rawUrl, "UTF-8")
+                    val url = if (decodedUrl == "none") "" else decodedUrl
+
+                    val youtubeResults by libraryViewModel.youtubeSearchResults.collectAsState()
+
+                    // 1. Filtramos las canciones
+                    val artistSongs = youtubeResults
+                        .filter { it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.SONG }
+                        .map { result ->
+                            com.jagr.fridamusic.domain.model.Song(
+                                id = result.videoId.hashCode().toLong(),
+                                title = result.title,
+                                artist = result.artist,
+                                data = result.videoId,
+                                duration = 0L,
+                                albumId = 0L,
+                                uri = android.net.Uri.parse(""),
+                                artworkUri = android.net.Uri.parse(result.thumbnailUrl)
+                            )
+                        }
+
+                    // 2. NUEVO: Filtramos las listas de reproducción y álbumes
+                    val artistPlaylists = youtubeResults
+                        .filter { it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.PLAYLIST }
+                        .map { result ->
+                            com.jagr.fridamusic.domain.model.Song(
+                                id = result.videoId.hashCode().toLong(),
+                                title = result.title,
+                                artist = result.artist, // Aquí viene el uploader o creador de la lista
+                                data = result.videoId,
+                                duration = 0L,
+                                albumId = 0L,
+                                uri = android.net.Uri.parse(""),
+                                artworkUri = android.net.Uri.parse(result.thumbnailUrl)
+                            )
+                        }
+
+                    ArtistScreen(
+                        artistName = name,
+                        artistImageUrl = url,
+                        popularSongs = artistSongs,
+                        popularReleases = artistPlaylists, // Pasamos los datos reales aquí
+                        onBack = { navController.popBackStack() },
+                        onPlaySong = { song ->
+                            libraryViewModel.setShuffleMode(true)
+                            val ytResult = com.jagr.fridamusic.data.remote.innertube.YouTubeResult(
+                                videoId = song.data,
+                                title = song.title,
+                                artist = song.artist ?: "",
+                                thumbnailUrl = song.artworkUri.toString(),
+                                type = com.jagr.fridamusic.data.remote.innertube.ResultType.SONG
+                            )
+                            libraryViewModel.playYouTubeSong(ytResult)
+                        }
                     )
                 }
                 composable("library") {

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +55,10 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onCollapse: () -> Unit
 ) {
+    BackHandler {
+        onCollapse()
+    }
+
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
     val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
 

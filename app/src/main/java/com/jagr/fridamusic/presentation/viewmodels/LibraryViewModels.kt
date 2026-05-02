@@ -76,6 +76,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private val _isPlaying = MutableStateFlow(false)
     val repeatMode = MutableStateFlow(RepeatMode.OFF)
+    val isShuffleMode = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
 
     private val _currentPosition = MutableStateFlow(0L)
@@ -145,6 +146,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 createPlaylist("Favorites", "Your automatically liked songs")
             }
         }
+    }
+
+    fun setShuffleMode(enabled: Boolean) {
+        isShuffleMode.value = enabled
+    }
+
+    fun toggleShuffleMode() {
+        isShuffleMode.value = !isShuffleMode.value
     }
 
     fun searchYouTube(query: String) {
@@ -377,8 +386,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val ytIndex = ytList.indexOfFirst { it.videoId.hashCode().toLong() == currentId }
 
         if (ytIndex != -1) {
-            val nextIndex = if (ytIndex == ytList.size - 1) 0 else ytIndex + 1
-            playYouTubeSong(ytList[nextIndex])
+            if (isShuffleMode.value && ytList.size > 1) {
+                var randomResult: YouTubeResult
+                do { randomResult = ytList.random() } while (randomResult.videoId.hashCode().toLong() == currentId)
+                playYouTubeSong(randomResult)
+            } else {
+                val nextIndex = if (ytIndex == ytList.size - 1) 0 else ytIndex + 1
+                playYouTubeSong(ytList[nextIndex])
+            }
             return
         }
 
@@ -386,8 +401,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         if (localList.isEmpty()) return
 
         val localIndex = localList.indexOfFirst { it.id == currentId }
-        val nextIndex = if (localIndex == -1 || localIndex == localList.size - 1) 0 else localIndex + 1
-        playSong(localList[nextIndex])
+        if (isShuffleMode.value && localList.size > 1) {
+            var randomSong: Song
+            do { randomSong = localList.random() } while (randomSong.id == currentId)
+            playSong(randomSong)
+        } else {
+            val nextIndex = if (localIndex == -1 || localIndex == localList.size - 1) 0 else localIndex + 1
+            playSong(localList[nextIndex])
+        }
     }
 
     fun skipToPrevious() {
@@ -396,8 +417,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val ytIndex = ytList.indexOfFirst { it.videoId.hashCode().toLong() == currentId }
 
         if (ytIndex != -1) {
-            val prevIndex = if (ytIndex <= 0) ytList.size - 1 else ytIndex - 1
-            playYouTubeSong(ytList[prevIndex])
+            if (isShuffleMode.value && ytList.size > 1) {
+                var randomResult: YouTubeResult
+                do { randomResult = ytList.random() } while (randomResult.videoId.hashCode().toLong() == currentId)
+                playYouTubeSong(randomResult)
+            } else {
+                val prevIndex = if (ytIndex <= 0) ytList.size - 1 else ytIndex - 1
+                playYouTubeSong(ytList[prevIndex])
+            }
             return
         }
 
@@ -405,8 +432,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         if (localList.isEmpty()) return
 
         val localIndex = localList.indexOfFirst { it.id == currentId }
-        val prevIndex = if (localIndex <= 0) localList.size - 1 else localIndex - 1
-        playSong(localList[prevIndex])
+        if (isShuffleMode.value && localList.size > 1) {
+            var randomSong: Song
+            do { randomSong = localList.random() } while (randomSong.id == currentId)
+            playSong(randomSong)
+        } else {
+            val prevIndex = if (localIndex <= 0) localList.size - 1 else localIndex - 1
+            playSong(localList[prevIndex])
+        }
     }
 
     fun toggleFavorite(song: Song) {
