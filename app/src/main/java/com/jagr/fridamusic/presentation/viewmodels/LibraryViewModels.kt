@@ -58,6 +58,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var sleepTimerJob: Job? = null
 
     private val _isExtracting = MutableStateFlow(false)
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
     val isExtracting = _isExtracting.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
@@ -146,13 +148,18 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun searchYouTube(query: String) {
+        if (query.isBlank()) return
+
         viewModelScope.launch(Dispatchers.IO) {
+            _isSearching.value = true
             try {
                 val results = YouTube.search(query)
                 _youtubeSearchResults.value = results
             } catch (e: Exception) {
                 e.printStackTrace()
                 _youtubeSearchResults.value = emptyList()
+            } finally {
+                _isSearching.value = false
             }
         }
     }
@@ -220,9 +227,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         startProgressUpdate()
         updateNotification(song, true)
 
-        _currentAlbumArt.value = null
+        val hasPreloadedArt = song.artworkUri != Uri.EMPTY && song.artworkUri.toString().startsWith("http")
+        _currentAlbumArt.value = if (hasPreloadedArt) song.artworkUri.toString() else null
+
         viewModelScope.launch(Dispatchers.IO) {
-            val url = getSongImageUrl(song)
+            val url = if (hasPreloadedArt) song.artworkUri.toString() else getSongImageUrl(song)
             val lyrics = fetchLyrics(song.artist ?: "", song.title ?: "")
 
             withContext(Dispatchers.Main) {

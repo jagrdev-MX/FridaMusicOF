@@ -37,7 +37,7 @@ import androidx.compose.ui.layout.ContentScale
 
 @Composable
 fun SearchScreen(
-    paddingValues: PaddingValues, 
+    paddingValues: PaddingValues,
     listState: LazyListState,
     viewModel: LibraryViewModels
 ) {
@@ -45,9 +45,10 @@ fun SearchScreen(
     val localSongs by viewModel.songs.collectAsState()
     val onlineResults by viewModel.youtubeSearchResults.collectAsState()
     val isExtracting by viewModel.isExtracting.collectAsState()
+    val isSearching by viewModel.isSearching.collectAsState()
 
     val filteredLocal = remember(searchQuery, localSongs) {
-        if (searchQuery.isBlank()) emptyList() 
+        if (searchQuery.isBlank()) emptyList()
         else localSongs.filter { it.title.contains(searchQuery, ignoreCase = true) || (it.artist?.contains(searchQuery, ignoreCase = true) == true) }
     }
 
@@ -63,7 +64,6 @@ fun SearchScreen(
             .fillMaxSize()
             .background(LiquidBackground)
     ) {
-        // Ambient Gradient
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -97,7 +97,6 @@ fun SearchScreen(
                         modifier = Modifier.padding(bottom = 24.dp)
                     )
 
-                    // Glass Search Bar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -137,7 +136,21 @@ fun SearchScreen(
                 }
             }
 
-            if (searchQuery.isNotBlank()) {
+            if (isSearching) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = LiquidPrimary,
+                            strokeWidth = 4.dp
+                        )
+                    }
+                }
+            } else if (searchQuery.isNotBlank()) {
                 if (onlineResults.isNotEmpty()) {
                     item { SectionHeader("From YouTube", Icons.Default.Public) }
                     items(onlineResults) { result ->
@@ -163,7 +176,6 @@ fun SearchScreen(
             }
         }
 
-        // Loading Overlay
         if (isExtracting) {
             Box(
                 modifier = Modifier
@@ -201,9 +213,9 @@ fun SectionHeader(title: String, icon: ImageVector) {
 
 @Composable
 fun LiquidSearchItem(
-    title: String, 
-    artist: String, 
-    thumbnailUrl: String = "", 
+    title: String,
+    artist: String,
+    thumbnailUrl: String = "",
     onClick: () -> Unit
 ) {
     Row(
