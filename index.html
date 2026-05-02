@@ -448,6 +448,10 @@
     import { inject } from 'https://cdn.jsdelivr.net/npm/@vercel/analytics@1/dist/inject.mjs';
     inject();
   </script>
+  <script type="module">
+    import { injectSpeedInsights } from 'https://cdn.jsdelivr.net/npm/@vercel/speed-insights@2/dist/index.mjs';
+    injectSpeedInsights();
+  </script>
 </head>
 
 <body>
