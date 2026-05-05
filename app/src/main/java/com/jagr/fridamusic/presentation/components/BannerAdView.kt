@@ -3,7 +3,7 @@ package com.jagr.fridamusic.presentation.components
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.view.FrameLayout
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
