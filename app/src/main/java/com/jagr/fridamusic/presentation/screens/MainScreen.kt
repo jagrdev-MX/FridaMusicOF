@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Scaffold
@@ -32,6 +33,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.jagr.fridamusic.presentation.components.BannerAdView
 import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
 import com.jagr.fridamusic.presentation.theme.LiquidBackground
 import com.jagr.fridamusic.presentation.theme.LiquidSurfaceContainer
@@ -123,24 +125,27 @@ fun MainScreen() {
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
-                VitreaBottomNavigation(
-                    isCollapsed = isNavCollapsed,
-                    currentRoute = currentRoute,
-                    currentSong = currentSong,
-                    isPlaying = isPlaying,
-                    albumArtUrl = currentAlbumArt,
-                    onPlayPause = { libraryViewModel.togglePlayback() },
-                    onNext = { libraryViewModel.skipToNext() },
-                    onPrevious = { libraryViewModel.skipToPrevious() },
-                    onNavigate = { route ->
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    onExpandPlayer = { isPlayerExpanded = true }
-                )
+                Column {
+                    VitreaBottomNavigation(
+                        isCollapsed = isNavCollapsed,
+                        currentRoute = currentRoute,
+                        currentSong = currentSong,
+                        isPlaying = isPlaying,
+                        albumArtUrl = currentAlbumArt,
+                        onPlayPause = { libraryViewModel.togglePlayback() },
+                        onNext = { libraryViewModel.skipToNext() },
+                        onPrevious = { libraryViewModel.skipToPrevious() },
+                        onNavigate = { route ->
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        onExpandPlayer = { isPlayerExpanded = true }
+                    )
+                    BannerAdView()
+                }
             },
             containerColor = Color.Transparent,
             modifier = Modifier.background(fluidBackground)
