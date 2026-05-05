@@ -74,8 +74,8 @@ class AdManager private constructor(
     ) {
         val loader = AdLoader.Builder(appContext, AdConfig.NATIVE_AD_UNIT_ID)
             .forNativeAd { nativeAd ->
-                nativeAd.mediaContent.hasVideoContent()
-                Log.d(TAG, "Native ad loaded. hasVideo=${nativeAd.mediaContent.hasVideoContent()}")
+                val hasVideo = nativeAd.mediaContent?.hasVideoContent() == true
+                Log.d(TAG, "Native ad loaded. hasVideo=$hasVideo")
                 onLoaded(nativeAd)
             }
             .withNativeAdOptions(
