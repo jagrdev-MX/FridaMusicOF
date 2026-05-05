@@ -30,9 +30,5 @@ class GoogleMobileAdsConsentManager(context: Context) {
                 onCompleted()
             }
         )
-
-        if (consentInformation.canRequestAds()) {
-            onCompleted()
-        }
     }
 }
