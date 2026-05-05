@@ -70,6 +70,8 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.media:media:1.7.0")
     implementation(libs.androidx.junit)
+    implementation("com.google.android.gms:play-services-ads:24.9.0")
+    implementation("com.google.android.ump:user-messaging-platform:3.1.0")
 
     // Ktor
     implementation(libs.ktor.client.core)
