@@ -3,6 +3,7 @@ package com.jagr.fridamusic.data.ads
 import android.app.Activity
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import android.view.ViewGroup
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
@@ -23,6 +24,7 @@ class AdManager private constructor(
     private val cooldownMs = 45_000L
 
     companion object {
+        private const val TAG = "AdManager"
         @Volatile
         private var instance: AdManager? = null
 
@@ -53,6 +55,15 @@ class AdManager private constructor(
         adView.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, adWidth))
         container.removeAllViews()
         container.addView(adView)
+        adView.adListener = object : com.google.android.gms.ads.AdListener() {
+            override fun onAdLoaded() {
+                Log.d(TAG, "Banner ad loaded")
+            }
+
+            override fun onAdFailedToLoad(adError: LoadAdError) {
+                Log.e(TAG, "Banner ad failed: ${adError.message}")
+            }
+        }
         adView.loadAd(AdRequest.Builder().build())
         return adView
     }
@@ -64,6 +75,7 @@ class AdManager private constructor(
         val loader = AdLoader.Builder(appContext, AdConfig.NATIVE_AD_UNIT_ID)
             .forNativeAd { nativeAd ->
                 nativeAd.mediaContent.hasVideoContent()
+                Log.d(TAG, "Native ad loaded. hasVideo=${nativeAd.mediaContent.hasVideoContent()}")
                 onLoaded(nativeAd)
             }
             .withNativeAdOptions(
@@ -73,6 +85,7 @@ class AdManager private constructor(
             )
             .withAdListener(object : com.google.android.gms.ads.AdListener() {
                 override fun onAdFailedToLoad(adError: LoadAdError) {
+                    Log.e(TAG, "Native ad failed: ${adError.message}")
                     onFailed()
                 }
             })
