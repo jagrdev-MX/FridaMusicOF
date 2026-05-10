@@ -34,8 +34,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.platform.LocalContext
+import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
 
@@ -44,7 +47,7 @@ import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
 fun NowPlayingScreen(
     currentSong: Song?,
     isPlaying: Boolean,
-    currentPosition: Long,
+    currentPosition: () -> Long,
     albumArtUrl: String?,
     repeatMode: RepeatMode,
     lyricsLines: List<LyricsLine>,
@@ -55,6 +58,30 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onCollapse: () -> Unit
 ) {
+    val context = LocalContext.current
+    val adManager = remember { AdManager.getInstance(context) }
+    var showAd by remember { mutableStateOf(false) }
+    var adExplicitlyClosed by remember { mutableStateOf(false) }
+    
+    // Rastreamos la última canción para la que se mostró un anuncio
+    var lastAdSongId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(currentSong) {
+        if (currentSong == null) return@LaunchedEffect
+        
+        // Si la canción ha cambiado realmente
+        if (currentSong.data != lastAdSongId) {
+            adExplicitlyClosed = false
+            
+            if (adManager.canShowAdNow()) {
+                showAd = true
+                lastAdSongId = currentSong.data
+            } else {
+                showAd = false
+            }
+        }
+    }
+
     BackHandler {
         onCollapse()
     }
@@ -150,31 +177,46 @@ fun NowPlayingScreen(
                     .weight(1f)
                     .aspectRatio(1f)
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                        .background(LiquidPrimary.copy(alpha = 0.4f), RoundedCornerShape(32.dp))
-                        .blur(30.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(32.dp))
-                        .background(Color.DarkGray)
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)),
-                            shape = RoundedCornerShape(32.dp)
-                        )
-                ) {
-                    if (albumArtUrl != null) {
-                        AsyncImage(
-                            model = albumArtUrl,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
+                if (showAd && !adExplicitlyClosed) {
+                    SpotifyNativeAd(
+                        onClose = { 
+                            showAd = false
+                            adExplicitlyClosed = true 
+                        },
+                        onAdFailed = { showAd = false }
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                            .background(LiquidPrimary.copy(alpha = 0.4f), RoundedCornerShape(32.dp))
+                            .blur(30.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(Color.DarkGray)
+                            .border(
+                                width = 1.dp,
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.2f),
+                                        Color.Transparent
+                                    )
+                                ),
+                                shape = RoundedCornerShape(32.dp)
+                            )
+                    ) {
+                        if (albumArtUrl != null) {
+                            AsyncImage(
+                                model = albumArtUrl,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
                 }
             }
@@ -360,10 +402,13 @@ fun NowPlayingScreen(
 
                     if (lyricsLines.isNotEmpty()) {
                         val listState = rememberLazyListState()
-                        val activeLineIndex = remember(currentPosition, lyricsLines) {
-                            val index = lyricsLines.indexOfLast { it.startTime <= currentPosition }
-                            if (index >= 0) index else 0
-                        }
+                        val activeLineIndex = remember(lyricsLines) {
+                            derivedStateOf {
+                                val pos = currentPosition()
+                                val index = lyricsLines.indexOfLast { it.startTime <= pos }
+                                if (index >= 0) index else 0
+                            }
+                        }.value
 
                         LaunchedEffect(activeLineIndex) {
                             val targetIndex = maxOf(0, activeLineIndex - 2)
@@ -454,10 +499,14 @@ fun InfoRow(label: String, value: String) {
 }
 
 @Composable
-fun SeekBarSection(currentSong: Song?, currentPosition: Long, onSeek: (Long) -> Unit) {
+fun SeekBarSection(currentSong: Song?, currentPosition: () -> Long, onSeek: (Long) -> Unit) {
     val totalDuration = currentSong?.duration ?: 0L
     var sliderPosition by remember { mutableStateOf<Float?>(null) }
-    val currentProgress = if (totalDuration > 0) currentPosition.toFloat() / totalDuration.toFloat() else 0f
+    val currentProgress by remember(totalDuration) {
+        derivedStateOf {
+            if (totalDuration > 0) currentPosition().toFloat() / totalDuration.toFloat() else 0f
+        }
+    }
     val displayProgress = sliderPosition ?: currentProgress
 
     fun formatTime(ms: Long): String {
