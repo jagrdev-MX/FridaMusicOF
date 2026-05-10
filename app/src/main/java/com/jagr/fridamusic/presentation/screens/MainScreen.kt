@@ -47,10 +47,11 @@ fun MainScreen() {
     val repeatMode by libraryViewModel.repeatMode.collectAsState()
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
-    val currentPosition by libraryViewModel.currentPosition.collectAsState()
     val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
     val lyricsLines by libraryViewModel.lyricsLines.collectAsState()
+
+    val currentPositionState = libraryViewModel.currentPosition.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -193,45 +194,14 @@ fun MainScreen() {
                     val decodedUrl = java.net.URLDecoder.decode(rawUrl, "UTF-8")
                     val url = if (decodedUrl == "none") "" else decodedUrl
 
-                    val youtubeResults by libraryViewModel.youtubeSearchResults.collectAsState()
-
-                    // 1. Filtramos las canciones
-                    val artistSongs = youtubeResults
-                        .filter { it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.SONG }
-                        .map { result ->
-                            com.jagr.fridamusic.domain.model.Song(
-                                id = result.videoId.hashCode().toLong(),
-                                title = result.title,
-                                artist = result.artist,
-                                data = result.videoId,
-                                duration = 0L,
-                                albumId = 0L,
-                                uri = android.net.Uri.parse(""),
-                                artworkUri = android.net.Uri.parse(result.thumbnailUrl)
-                            )
-                        }
-
-                    // 2. NUEVO: Filtramos las listas de reproducción y álbumes
-                    val artistPlaylists = youtubeResults
-                        .filter { it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.PLAYLIST }
-                        .map { result ->
-                            com.jagr.fridamusic.domain.model.Song(
-                                id = result.videoId.hashCode().toLong(),
-                                title = result.title,
-                                artist = result.artist, // Aquí viene el uploader o creador de la lista
-                                data = result.videoId,
-                                duration = 0L,
-                                albumId = 0L,
-                                uri = android.net.Uri.parse(""),
-                                artworkUri = android.net.Uri.parse(result.thumbnailUrl)
-                            )
-                        }
+                    val artistSongs by libraryViewModel.artistSongs.collectAsState()
+                    val artistPlaylists by libraryViewModel.artistPlaylists.collectAsState()
 
                     ArtistScreen(
                         artistName = name,
                         artistImageUrl = url,
                         popularSongs = artistSongs,
-                        popularReleases = artistPlaylists, // Pasamos los datos reales aquí
+                        popularReleases = artistPlaylists,
                         onBack = { navController.popBackStack() },
                         onPlaySong = { song ->
                             libraryViewModel.setShuffleMode(true)
@@ -275,7 +245,7 @@ fun MainScreen() {
             NowPlayingScreen(
                 currentSong = currentSong,
                 isPlaying = isPlaying,
-                currentPosition = currentPosition,
+                currentPosition = { currentPositionState.value },
                 albumArtUrl = currentAlbumArt,
                 repeatMode = repeatMode,
                 lyricsLines = lyricsLines, // <--- Pasamos las letras al reproductor

@@ -20,8 +20,9 @@ class AdManager private constructor(
 ) {
     private val appContext = context.applicationContext
     private val lastAdDisplayAtMs = AtomicLong(0)
+    private var isFirstAdAttempt = true
 
-    private val cooldownMs = 45_000L
+    private val cooldownMs = 300_000L // 5 minutos de enfriamiento
 
     companion object {
         private const val TAG = "AdManager"
@@ -40,19 +41,28 @@ class AdManager private constructor(
     }
 
     fun canShowAdNow(): Boolean {
+        if (isFirstAdAttempt) return true
         val lastTime = lastAdDisplayAtMs.get()
         return SystemClock.elapsedRealtime() - lastTime >= cooldownMs
     }
 
     fun markAdShown() {
+        isFirstAdAttempt = false
         lastAdDisplayAtMs.set(SystemClock.elapsedRealtime())
     }
 
     fun loadLargeAnchoredAdaptiveBanner(activity: Activity, container: ViewGroup): AdView {
         val adView = AdView(activity)
         adView.adUnitId = AdConfig.BANNER_AD_UNIT_ID
-        val adWidth = container.width.coerceAtLeast(320)
+        
+        // Calculamos el ancho disponible de forma segura
+        val displayMetrics = activity.resources.displayMetrics
+        val adWidthPixels = if (container.width > 0) container.width else displayMetrics.widthPixels
+        val density = displayMetrics.density
+        val adWidth = (adWidthPixels / density).toInt()
+        
         adView.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, adWidth))
+
         container.removeAllViews()
         container.addView(adView)
         adView.adListener = object : com.google.android.gms.ads.AdListener() {

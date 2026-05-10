@@ -20,6 +20,7 @@ import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaylistEntity
 import com.jagr.fridamusic.data.remote.innertube.YouTube
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
+import com.jagr.fridamusic.data.remote.innertube.ResultType
 import com.jagr.fridamusic.data.repository.AudioRepository
 import com.jagr.fridamusic.data.repository.SettingsManager
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
@@ -31,9 +32,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -93,6 +96,38 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
     val youtubeSearchResults: StateFlow<List<YouTubeResult>> = _youtubeSearchResults.asStateFlow()
+
+    val artistSongs = _youtubeSearchResults.map { results ->
+        results.filter { it.type == ResultType.SONG }
+            .map { result ->
+                Song(
+                    id = result.videoId.hashCode().toLong(),
+                    title = result.title,
+                    artist = result.artist,
+                    data = result.videoId,
+                    duration = 0L,
+                    albumId = 0L,
+                    uri = Uri.parse(""),
+                    artworkUri = Uri.parse(result.thumbnailUrl)
+                )
+            }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val artistPlaylists = _youtubeSearchResults.map { results ->
+        results.filter { it.type == ResultType.PLAYLIST }
+            .map { result ->
+                Song(
+                    id = result.videoId.hashCode().toLong(),
+                    title = result.title,
+                    artist = result.artist,
+                    data = result.videoId,
+                    duration = 0L,
+                    albumId = 0L,
+                    uri = Uri.parse(""),
+                    artworkUri = Uri.parse(result.thumbnailUrl)
+                )
+            }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val playlistDao = MusicDatabase.getDatabase(application).playlistDao()
     val playlists = playlistDao.getAllPlaylists().map { entities ->
