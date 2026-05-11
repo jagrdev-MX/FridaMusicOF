@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -37,14 +38,19 @@ import coil.compose.AsyncImage
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 
+@Composable
 fun Modifier.glassPanel(shape: RoundedCornerShape = RoundedCornerShape(12.dp)): Modifier {
     return this
         .clip(shape)
-        .background(Color.White.copy(alpha = 0.05f))
+        // Usamos onSurface para que el cristal se adapte al modo claro/oscuro
+        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
         .border(
             width = 1.dp,
             brush = Brush.linearGradient(
-                colors = listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.05f))
+                colors = listOf(
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f)
+                )
             ),
             shape = shape
         )
@@ -78,8 +84,7 @@ fun LibraryScreen(
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.02).em,
-                color = Color.White,
-                // Corregido: start, end, bottom en lugar de horizontal + bottom
+                color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp)
             )
         }
@@ -99,7 +104,10 @@ fun LibraryScreen(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(50))
-                            .background(if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent)
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                                else Color.Transparent
+                            )
                             .clickable { selectedTab = tab }
                             .padding(vertical = 6.dp),
                         contentAlignment = Alignment.Center
@@ -109,7 +117,7 @@ fun LibraryScreen(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             letterSpacing = 0.05.em,
-                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f)
+                            color = if (isSelected) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -127,7 +135,7 @@ fun LibraryScreen(
                         text = "Recent Songs",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFE2E2E2),
+                        color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
                     )
                 }
@@ -150,13 +158,18 @@ fun LibraryScreen(
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
-                                .background(Color.White.copy(0.1f), RoundedCornerShape(8.dp)),
+                                .background(MaterialTheme.colorScheme.onSurface.copy(0.08f), RoundedCornerShape(8.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Add, null, tint = Color.White)
+                            Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onSurface)
                         }
                         Spacer(Modifier.width(16.dp))
-                        Text("Create New Playlist", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            text = "Create New Playlist",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
                 items(playlists) { playlist ->
@@ -185,7 +198,7 @@ fun LibraryScreen(
             else -> {
                 item {
                     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                        Text("Coming Soon", color = Color.White.copy(0.4f))
+                        Text("Coming Soon", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -208,20 +221,29 @@ fun PlaylistListItem(playlist: com.jagr.fridamusic.domain.model.Playlist) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF6A11CB), Color(0xFF2575FC)))),
+                // Puedes mantener este gradiente vibrante o usar MaterialTheme.colorScheme.primary/secondary
+                .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Color.White)
+            Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = MaterialTheme.colorScheme.onPrimary)
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
-            Text(playlist.name, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = Color.White)
-            Text("${playlist.songIds.size} songs", fontSize = 14.sp, color = Color.White.copy(0.5f))
+            Text(
+                text = playlist.name,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "${playlist.songIds.size} songs",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        Icon(Icons.Default.MoreVert, null, tint = Color.White.copy(0.5f))
+        Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
 
 @Composable
 fun LibraryAlbumCard(song: Song, viewModel: LibraryViewModels, modifier: Modifier = Modifier) {
@@ -245,8 +267,8 @@ fun LibraryAlbumCard(song: Song, viewModel: LibraryViewModels, modifier: Modifie
                     .alpha(0.8f)
             )
         } else {
-            Box(Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.MusicNote, null, tint = Color.White.copy(0.3f))
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             }
         }
 
@@ -255,7 +277,11 @@ fun LibraryAlbumCard(song: Song, viewModel: LibraryViewModels, modifier: Modifie
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.2f), Color.Black.copy(alpha = 0.8f)),
+                        colors = listOf(
+                            Color.Transparent,
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.9f)
+                        ),
                         startY = 50f
                     )
                 )
@@ -270,14 +296,14 @@ fun LibraryAlbumCard(song: Song, viewModel: LibraryViewModels, modifier: Modifie
                 text = song.title,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = song.artist ?: "Unknown Artist",
                 fontSize = 15.sp,
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -304,7 +330,7 @@ fun LibrarySongItem(song: Song, viewModel: LibraryViewModels, onClick: () -> Uni
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color.DarkGray)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             if (imageUrl != null) {
                 AsyncImage(
@@ -314,7 +340,12 @@ fun LibrarySongItem(song: Song, viewModel: LibraryViewModels, onClick: () -> Uni
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                Icon(Icons.Default.MusicNote, null, tint = Color.White.copy(0.3f), modifier = Modifier.align(Alignment.Center))
+                Icon(
+                    Icons.Default.MusicNote,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.align(Alignment.Center)
+                )
             }
         }
 
@@ -325,14 +356,14 @@ fun LibrarySongItem(song: Song, viewModel: LibraryViewModels, onClick: () -> Uni
                 text = song.title,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = song.artist ?: "Unknown",
                 fontSize = 15.sp,
-                color = Color(0xFFD7C1C9),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -342,7 +373,7 @@ fun LibrarySongItem(song: Song, viewModel: LibraryViewModels, onClick: () -> Uni
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "More",
-                tint = Color.White.copy(0.6f)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

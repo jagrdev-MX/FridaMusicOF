@@ -22,7 +22,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,8 +30,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.jagr.fridamusic.data.remote.innertube.ResultType
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
-import com.jagr.fridamusic.domain.model.Song
-import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import kotlinx.coroutines.delay
@@ -77,13 +74,17 @@ fun SearchScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .alpha(0.05f)
-                .background(Brush.verticalGradient(colors = listOf(LiquidPrimary, Color.Transparent)))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(MaterialTheme.colorScheme.primary, Color.Transparent)
+                    )
+                )
         )
 
         LazyColumn(
@@ -103,20 +104,20 @@ fun SearchScreen(
                         .padding(horizontal = 20.dp)
                         .height(56.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF2A2A2A)),
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     ) {
-                        Icon(Icons.Default.Search, null, tint = Color.White.copy(0.6f))
+                        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(12.dp))
                         BasicTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            textStyle = LiquidTypography.bodyLarge.copy(color = Color.White),
-                            cursorBrush = SolidColor(LiquidPrimary),
+                            textStyle = LiquidTypography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                             decorationBox = { innerTextField ->
@@ -124,7 +125,7 @@ fun SearchScreen(
                                     Text(
                                         text = "¿Qué quieres escuchar?",
                                         style = LiquidTypography.bodyLarge,
-                                        color = Color.White.copy(alpha = 0.4f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                     )
                                 }
                                 innerTextField()
@@ -132,7 +133,7 @@ fun SearchScreen(
                         )
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, null, tint = Color.White.copy(0.6f))
+                                Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -153,13 +154,16 @@ fun SearchScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(32.dp))
-                                    .background(if (isSelected) LiquidPrimary else Color(0xFF2A2A2A))
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                                    )
                                     .clickable { selectedFilter = filter }
                                     .padding(horizontal = 16.dp, vertical = 8.dp)
                             ) {
                                 Text(
                                     text = filter,
-                                    color = if (isSelected) Color.Black else Color.White,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -177,7 +181,7 @@ fun SearchScreen(
                             .padding(vertical = 40.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = LiquidPrimary, strokeWidth = 4.dp)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp)
                     }
                 }
             } else if (searchQuery.isNotBlank()) {
@@ -198,7 +202,7 @@ fun SearchScreen(
                     item {
                         Text(
                             text = if (selectedFilter == "Todo") "Resultados" else selectedFilter,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
@@ -224,7 +228,7 @@ fun SearchScreen(
                     item {
                         Text(
                             text = "En tu biblioteca",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
@@ -247,14 +251,18 @@ fun SearchScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(0.7f))
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f))
                     .clickable(enabled = false) {},
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = LiquidPrimary, strokeWidth = 4.dp)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp)
                     Spacer(Modifier.height(16.dp))
-                    Text("Cargando pista...", style = LiquidTypography.titleMedium, color = Color.White)
+                    Text(
+                        text = "Cargando pista...",
+                        style = LiquidTypography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
             }
         }
@@ -277,7 +285,7 @@ fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(Color.DarkGray)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         )
 
         Spacer(modifier = Modifier.width(16.dp))
@@ -285,7 +293,7 @@ fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = artistName,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -293,17 +301,17 @@ fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
             )
             Text(
                 text = "Artista",
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 14.sp
             )
         }
 
         Box(
             modifier = Modifier
-                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(32.dp))
+                .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(32.dp))
                 .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            Text("Seguir", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("Seguir", color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -327,7 +335,7 @@ fun SpotifyStyleSongItem(
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(Color.DarkGray)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             if (thumbnailUrl.isNotEmpty()) {
                 AsyncImage(
@@ -340,7 +348,7 @@ fun SpotifyStyleSongItem(
                 Icon(
                     Icons.Default.MusicNote,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.4f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -352,7 +360,7 @@ fun SpotifyStyleSongItem(
             Text(
                 text = title,
                 fontSize = 16.sp,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -361,10 +369,10 @@ fun SpotifyStyleSongItem(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(2.dp))
-                            .background(Color.White.copy(alpha = 0.2f))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                             .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
-                        Text("YT", fontSize = 8.sp, color = Color.White)
+                        Text("YT", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                 }
@@ -372,7 +380,7 @@ fun SpotifyStyleSongItem(
                 Text(
                     text = if (isPlaylist) "Playlist • $artist" else "Canción • $artist",
                     fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -382,11 +390,11 @@ fun SpotifyStyleSongItem(
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!isPlaylist) {
                 IconButton(onClick = { }) {
-                    Icon(Icons.Default.AddCircleOutline, null, tint = Color.White.copy(0.6f), modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.AddCircleOutline, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                 }
             }
             IconButton(onClick = { }) {
-                Icon(Icons.Default.MoreVert, null, tint = Color.White.copy(0.6f), modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
             }
         }
     }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.jagr.fridamusic.domain.model.Song
-import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
 @Composable
@@ -46,7 +46,7 @@ fun ArtistScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -72,8 +72,8 @@ fun ArtistScreen(
                                 Brush.verticalGradient(
                                     colors = listOf(
                                         Color.Transparent,
-                                        Color.Black.copy(alpha = 0.2f),
-                                        Color(0xFF0A0A0A)
+                                        MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+                                        MaterialTheme.colorScheme.background
                                     ),
                                     startY = 200f
                                 )
@@ -89,7 +89,7 @@ fun ArtistScreen(
                         Text(
                             text = artistName,
                             style = LiquidTypography.displayLarge,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontSize = 48.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(bottom = 16.dp)
@@ -105,7 +105,10 @@ fun ArtistScreen(
                                     .clip(CircleShape)
                                     .background(
                                         Brush.linearGradient(
-                                            colors = listOf(Color(0xFFFF99CC), Color(0xFF7B2B59))
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primary,
+                                                MaterialTheme.colorScheme.secondary
+                                            )
                                         )
                                     )
                                     .clickable {
@@ -118,7 +121,7 @@ fun ArtistScreen(
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
                                     contentDescription = "Play",
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
                                     modifier = Modifier.size(32.dp)
                                 )
                             }
@@ -127,10 +130,10 @@ fun ArtistScreen(
                                 modifier = Modifier
                                     .height(40.dp)
                                     .clip(RoundedCornerShape(32.dp))
-                                    .background(Color.White.copy(alpha = 0.05f))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                                     .border(
                                         1.dp,
-                                        Color.White.copy(alpha = 0.2f),
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                                         RoundedCornerShape(32.dp)
                                     )
                                     .clickable { /* TODO: Follow Action */ }
@@ -139,7 +142,7 @@ fun ArtistScreen(
                             ) {
                                 Text(
                                     text = "Seguir",
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 )
@@ -149,10 +152,10 @@ fun ArtistScreen(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.05f))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                                     .border(
                                         1.dp,
-                                        Color.White.copy(alpha = 0.2f),
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                                         CircleShape
                                     )
                                     .clickable { /* TODO: Share Action */ },
@@ -161,7 +164,7 @@ fun ArtistScreen(
                                 Icon(
                                     imageVector = Icons.Default.Share,
                                     contentDescription = "Share",
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -175,7 +178,7 @@ fun ArtistScreen(
                     Text(
                         text = "Populares",
                         style = LiquidTypography.headlineMedium,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
                     )
@@ -191,7 +194,7 @@ fun ArtistScreen(
                     ) {
                         Text(
                             text = (index + 1).toString(),
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.width(28.dp)
                         )
@@ -200,10 +203,15 @@ fun ArtistScreen(
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White.copy(alpha = 0.05f))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .border(
                                     1.dp,
-                                    Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)),
+                                    Brush.linearGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                            Color.Transparent
+                                        )
+                                    ),
                                     RoundedCornerShape(8.dp)
                                 )
                         ) {
@@ -222,7 +230,7 @@ fun ArtistScreen(
                         ) {
                             Text(
                                 text = song.title,
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onBackground,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
@@ -230,7 +238,7 @@ fun ArtistScreen(
                             )
                             Text(
                                 text = song.artist ?: "YouTube Music",
-                                color = Color.White.copy(alpha = 0.5f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -241,7 +249,7 @@ fun ArtistScreen(
                             Icon(
                                 imageVector = Icons.Default.MoreHoriz,
                                 contentDescription = "More",
-                                tint = Color.White.copy(alpha = 0.5f)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -261,7 +269,7 @@ fun ArtistScreen(
                         Text(
                             text = "Álbumes y Listas",
                             style = LiquidTypography.headlineMedium,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -285,10 +293,15 @@ fun ArtistScreen(
                                     modifier = Modifier
                                         .size(140.dp)
                                         .clip(RoundedCornerShape(16.dp))
-                                        .background(Color.White.copy(alpha = 0.05f))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
                                         .border(
                                             1.dp,
-                                            Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)),
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                                                    Color.Transparent
+                                                )
+                                            ),
                                             RoundedCornerShape(16.dp)
                                         )
                                 ) {
@@ -302,7 +315,7 @@ fun ArtistScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     text = release.title,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onBackground,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
@@ -310,7 +323,7 @@ fun ArtistScreen(
                                 )
                                 Text(
                                     text = release.artist ?: "Lista",
-                                    color = Color.White.copy(alpha = 0.5f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 12.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -333,12 +346,12 @@ fun ArtistScreen(
                 onClick = onBack,
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.4f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         }

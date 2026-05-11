@@ -43,7 +43,6 @@ fun SpotifyNativeAd(
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
     var isLoaded by remember { mutableStateOf(false) }
 
-    // Usamos un identificador único para el ciclo de vida de este anuncio específico
     LaunchedEffect(nativeAd) {
         if (nativeAd != null) {
             android.util.Log.d("SpotifyNativeAd", "Ad loaded, starting 15s timer")
@@ -165,7 +164,6 @@ fun SpotifyNativeAd(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // "Advertisement" tag
             Box(
                 modifier = Modifier
                     .padding(16.dp)

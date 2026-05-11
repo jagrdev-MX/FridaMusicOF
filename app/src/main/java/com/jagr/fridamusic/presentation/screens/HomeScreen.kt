@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,8 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.jagr.fridamusic.domain.model.Song
-import com.jagr.fridamusic.presentation.theme.LiquidOnSurfaceVariant
-import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.util.Calendar
@@ -49,11 +48,9 @@ fun HomeScreen(
 ) {
     LazyColumn(
         state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            top = 20.dp,
+            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp,
             bottom = paddingValues.calculateBottomPadding() + 80.dp,
             start = 20.dp,
             end = 20.dp
@@ -100,7 +97,7 @@ fun WelcomeSection(onProfileClick: () -> Unit) {
             Text(
                 text = greeting,
                 style = LiquidTypography.displayLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -108,7 +105,7 @@ fun WelcomeSection(onProfileClick: () -> Unit) {
             Text(
                 text = "Your personal liquid soundscape.",
                 style = LiquidTypography.bodyLarge,
-                color = LiquidOnSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -117,11 +114,15 @@ fun WelcomeSection(onProfileClick: () -> Unit) {
                 .padding(start = 16.dp)
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.1f))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                 .clickable(onClick = onProfileClick),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Person, contentDescription = "Profile and Settings", tint = Color.White)
+            Icon(
+                Icons.Default.Person,
+                contentDescription = "Profile and Settings",
+                tint = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -147,8 +148,8 @@ fun RecentlyPlayedSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Recently Played", style = LiquidTypography.headlineMedium, color = Color.White)
-            Text("See All", style = LiquidTypography.bodySmall, color = LiquidPrimary, fontWeight = FontWeight.Medium)
+            Text("Recently Played", style = LiquidTypography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+            Text("See All", style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
         }
 
         if (mainSong != null) {
@@ -157,7 +158,7 @@ fun RecentlyPlayedSection(
                     .fillMaxWidth()
                     .aspectRatio(2f / 1f)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color.DarkGray)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { onSongClick(mainSong) }
             ) {
                 if (mainSongImageUrl != null) {
@@ -189,16 +190,20 @@ fun RecentlyPlayedSection(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                        Text("NOW PLAYING", style = LiquidTypography.labelSmall, color = LiquidPrimary)
+                        Text("NOW PLAYING", style = LiquidTypography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Text(
                             text = mainSong.title,
                             style = LiquidTypography.headlineMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                            color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = mainSong.artist ?: "Unknown Artist",
                             style = LiquidTypography.bodySmall,
-                            color = Color.White.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis
+                            color = Color.White.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -206,7 +211,7 @@ fun RecentlyPlayedSection(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .background(LiquidPrimary.copy(alpha = 0.2f))
+                            .background(Color.White.copy(alpha = 0.15f))
                             .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
@@ -238,7 +243,7 @@ fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifier = Mod
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.05f))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
             .clickable(onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -247,7 +252,7 @@ fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifier = Mod
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color.DarkGray),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             if (imageUrl != null) {
@@ -258,13 +263,25 @@ fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifier = Mod
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.4f))
+                Icon(Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = song.title, style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(text = song.artist ?: "Unknown", fontSize = 12.sp, color = Color.White.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                text = song.title,
+                style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.artist ?: "Unknown",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -282,7 +299,7 @@ fun TopArtistsSection(songs: List<Song>, viewModel: LibraryViewModels) {
         Text(
             text = "Top Artists",
             style = LiquidTypography.headlineMedium,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -317,7 +334,7 @@ fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewModels) {
                 .clip(CircleShape)
                 .border(
                     width = 2.dp,
-                    color = if (isActive) LiquidPrimary.copy(alpha = 0.4f) else Color.Transparent,
+                    color = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.Transparent,
                     shape = CircleShape
                 )
                 .padding(4.dp)
@@ -326,7 +343,7 @@ fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewModels) {
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape)
-                    .background(Color.DarkGray),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 if (imageUrl != null) {
@@ -337,7 +354,12 @@ fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewModels) {
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Icon(Icons.Default.Person, contentDescription = null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(32.dp))
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
             }
         }
@@ -345,7 +367,7 @@ fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewModels) {
         Text(
             text = name,
             style = LiquidTypography.bodySmall,
-            color = if (isActive) Color.White else Color.White.copy(alpha = 0.7f),
+            color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

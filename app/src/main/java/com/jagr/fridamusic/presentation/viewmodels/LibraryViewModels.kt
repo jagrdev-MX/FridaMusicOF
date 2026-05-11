@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
@@ -56,7 +57,12 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     val keepScreenOn = MutableStateFlow(settingsManager.keepScreenOn)
     val gaplessPlayback = MutableStateFlow(settingsManager.gaplessPlayback)
     val crossfadeDuration = MutableStateFlow(settingsManager.crossfadeDuration)
+    private val _currentTheme = MutableStateFlow(AppTheme.SYSTEM)
+    val currentTheme = _currentTheme.asStateFlow()
 
+    fun updateTheme(theme: AppTheme) {
+        _currentTheme.value = theme
+    }
     val sleepTimerMinutes = MutableStateFlow(0)
     private var sleepTimerJob: Job? = null
 
@@ -204,6 +210,28 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 _youtubeSearchResults.value = emptyList()
             } finally {
                 _isSearching.value = false
+            }
+        }
+    }
+
+    fun toggleLike(song: Song) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentPlaylists = playlists.first()
+            var likePlaylist = currentPlaylists.find { it.name == "Me gusta" }
+
+            if (likePlaylist == null) {
+                createPlaylist("Me gusta")
+                delay(300)
+                likePlaylist = playlists.first().find { it.name == "Me gusta" }
+            }
+
+            likePlaylist?.let { playlist ->
+                val isAlreadyLiked = playlist.songIds.contains(song.id)
+                if (isAlreadyLiked) {
+                    removeSongFromPlaylist(playlist, song.id)
+                } else {
+                    addSongToPlaylist(playlist, song.id)
+                }
             }
         }
     }
@@ -657,3 +685,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 }
 
 enum class RepeatMode { OFF, ALL, ONE}
+enum class AppTheme(val displayName: String) {
+    SYSTEM("System Default"),
+    LIGHT("Light"),
+    DARK("Dark")
+}

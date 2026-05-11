@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.os.Build
 import android.view.WindowManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,10 +33,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.jagr.fridamusic.presentation.components.BannerAdView
 import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
-import com.jagr.fridamusic.presentation.theme.LiquidBackground
-import com.jagr.fridamusic.presentation.theme.LiquidSurfaceContainer
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 
 @Composable
@@ -45,23 +42,27 @@ fun MainScreen() {
     val libraryViewModel: LibraryViewModels = viewModel()
 
     val repeatMode by libraryViewModel.repeatMode.collectAsState()
+    val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
     val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
     val lyricsLines by libraryViewModel.lyricsLines.collectAsState()
-
     val currentPositionState = libraryViewModel.currentPosition.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val audioGranted = permissions[Manifest.permission.READ_MEDIA_AUDIO] ?: permissions[Manifest.permission.READ_EXTERNAL_STORAGE] ?: false
-        if (audioGranted) {
-            libraryViewModel.loadSongs()
-        }
+        if (audioGranted) { libraryViewModel.loadSongs() }
     }
 
+    val isCurrentSongLiked by remember(currentSong, playlists) {
+        derivedStateOf {
+            val likedPlaylist = playlists.find { it.name == "Me gusta" }
+            currentSong != null && likedPlaylist?.songIds?.contains(currentSong!!.id) == true
+        }
+    }
     LaunchedEffect(Unit) {
         val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
@@ -81,7 +82,6 @@ fun MainScreen() {
     }
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
-
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
@@ -91,44 +91,20 @@ fun MainScreen() {
     val libraryListState = rememberLazyListState()
     val settingsListState = rememberLazyListState()
 
-    val isNavCollapsed by remember(currentRoute) {
-        derivedStateOf {
-            when (currentRoute) {
-                "home" -> {
-                    val isScrollable = homeListState.layoutInfo.totalItemsCount > homeListState.layoutInfo.visibleItemsInfo.size
-                    isScrollable && (homeListState.firstVisibleItemIndex > 0 || homeListState.firstVisibleItemScrollOffset > 20)
-                }
-                "search" -> {
-                    val isScrollable = searchListState.layoutInfo.totalItemsCount > searchListState.layoutInfo.visibleItemsInfo.size
-                    isScrollable && (searchListState.firstVisibleItemIndex > 0 || searchListState.firstVisibleItemScrollOffset > 20)
-                }
-                "library" -> {
-                    val isScrollable = libraryListState.layoutInfo.totalItemsCount > libraryListState.layoutInfo.visibleItemsInfo.size
-                    isScrollable && (libraryListState.firstVisibleItemIndex > 0 || libraryListState.firstVisibleItemScrollOffset > 20)
-                }
-                "settings" -> {
-                    val isScrollable = settingsListState.layoutInfo.totalItemsCount > settingsListState.layoutInfo.visibleItemsInfo.size
-                    isScrollable && (settingsListState.firstVisibleItemIndex > 0 || settingsListState.firstVisibleItemScrollOffset > 20)
-                }
-                else -> false
-            }
-        }
-    }
-
     val fluidBackground = Brush.verticalGradient(
         colors = listOf(
-            LiquidBackground,
-            LiquidSurfaceContainer,
-            Color(0xFF050505)
+            MaterialTheme.colorScheme.background,
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.background.copy(alpha = 0.9f)
         )
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
-                Column {
+                if (currentRoute != "settings") {
                     VitreaBottomNavigation(
-                        isCollapsed = isNavCollapsed,
+                        isCollapsed = false,
                         currentRoute = currentRoute,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
@@ -145,18 +121,12 @@ fun MainScreen() {
                         },
                         onExpandPlayer = { isPlayerExpanded = true }
                     )
-                    BannerAdView()
                 }
             },
             containerColor = Color.Transparent,
             modifier = Modifier.background(fluidBackground)
         ) { paddingValues ->
-
-            NavHost(
-                navController = navController,
-                startDestination = "home",
-                modifier = Modifier.fillMaxSize()
-            ) {
+            NavHost(navController = navController, startDestination = "home", modifier = Modifier.fillMaxSize()) {
                 composable("home") {
                     val songs by libraryViewModel.songs.collectAsState()
                     HomeScreen(
@@ -169,65 +139,52 @@ fun MainScreen() {
                         onNavigateToSettings = { navController.navigate("settings") }
                     )
                 }
-
                 composable("search") {
                     SearchScreen(
                         paddingValues = paddingValues,
                         listState = searchListState,
                         viewModel = libraryViewModel,
-                        onNavigateToArtist = { name, imageUrl ->
-                            val encodedName = java.net.URLEncoder.encode(name, "UTF-8")
-                            val safeUrl = if (imageUrl.isBlank()) "none" else imageUrl
-                            val encodedUrl = java.net.URLEncoder.encode(safeUrl, "UTF-8")
-
-                            navController.navigate("artist?name=$encodedName&url=$encodedUrl")
+                        onNavigateToArtist = { name, url ->
+                            val encName = java.net.URLEncoder.encode(name, "UTF-8")
+                            val encUrl = java.net.URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
+                            navController.navigate("artist?name=$encName&url=$encUrl")
                         }
                     )
                 }
-
-                // --- RUTA CON QUERY PARAMETERS ---
                 composable("artist?name={artistName}&url={artistUrl}") { backStackEntry ->
-                    val rawName = backStackEntry.arguments?.getString("artistName") ?: ""
-                    val rawUrl = backStackEntry.arguments?.getString("artistUrl") ?: ""
-
-                    val name = java.net.URLDecoder.decode(rawName, "UTF-8")
-                    val decodedUrl = java.net.URLDecoder.decode(rawUrl, "UTF-8")
-                    val url = if (decodedUrl == "none") "" else decodedUrl
-
+                    val name = java.net.URLDecoder.decode(backStackEntry.arguments?.getString("artistName") ?: "", "UTF-8")
+                    val rawUrl = java.net.URLDecoder.decode(backStackEntry.arguments?.getString("artistUrl") ?: "", "UTF-8")
                     val artistSongs by libraryViewModel.artistSongs.collectAsState()
                     val artistPlaylists by libraryViewModel.artistPlaylists.collectAsState()
 
                     ArtistScreen(
                         artistName = name,
-                        artistImageUrl = url,
+                        artistImageUrl = if (rawUrl == "none") "" else rawUrl,
                         popularSongs = artistSongs,
                         popularReleases = artistPlaylists,
                         onBack = { navController.popBackStack() },
                         onPlaySong = { song ->
                             libraryViewModel.setShuffleMode(true)
-                            val ytResult = com.jagr.fridamusic.data.remote.innertube.YouTubeResult(
-                                videoId = song.data,
-                                title = song.title,
-                                artist = song.artist ?: "",
-                                thumbnailUrl = song.artworkUri.toString(),
-                                type = com.jagr.fridamusic.data.remote.innertube.ResultType.SONG
+                            libraryViewModel.playYouTubeSong(
+                                com.jagr.fridamusic.data.remote.innertube.YouTubeResult(
+                                    videoId = song.data,
+                                    title = song.title,
+                                    artist = song.artist ?: "",
+                                    thumbnailUrl = song.artworkUri.toString()
+                                )
                             )
-                            libraryViewModel.playYouTubeSong(ytResult)
                         }
                     )
                 }
                 composable("library") {
-                    LibraryScreen(
-                        paddingValues = paddingValues,
-                        listState = libraryListState,
-                        viewModel = libraryViewModel
-                    )
+                    LibraryScreen(paddingValues = paddingValues, listState = libraryListState, viewModel = libraryViewModel)
                 }
                 composable("settings") {
                     SettingsScreen(
                         paddingValues = paddingValues,
                         listState = settingsListState,
-                        viewModel = libraryViewModel
+                        viewModel = libraryViewModel,
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }
@@ -235,25 +192,23 @@ fun MainScreen() {
 
         AnimatedVisibility(
             visible = isPlayerExpanded,
-            enter = slideInVertically(
-                initialOffsetY = { fullHeight -> fullHeight }
-            ),
-            exit = slideOutVertically(
-                targetOffsetY = { fullHeight -> fullHeight }
-            )
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it })
         ) {
             NowPlayingScreen(
                 currentSong = currentSong,
                 isPlaying = isPlaying,
+                isLiked = isCurrentSongLiked,
                 currentPosition = { currentPositionState.value },
                 albumArtUrl = currentAlbumArt,
                 repeatMode = repeatMode,
-                lyricsLines = lyricsLines, // <--- Pasamos las letras al reproductor
+                lyricsLines = lyricsLines,
                 onPlayPause = { libraryViewModel.togglePlayback() },
                 onNext = { libraryViewModel.skipToNext() },
                 onPrevious = { libraryViewModel.skipToPrevious() },
-                onSeek = { position -> libraryViewModel.seekTo(position) },
-                onToggleRepeat = { libraryViewModel.toggleRepeatMode()},
+                onSeek = { libraryViewModel.seekTo(it) },
+                onToggleRepeat = { libraryViewModel.toggleRepeatMode() },
+                onToggleLike = { currentSong?.let { libraryViewModel.toggleLike(it) } },
                 onCollapse = { isPlayerExpanded = false }
             )
         }

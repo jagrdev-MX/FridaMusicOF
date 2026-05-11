@@ -2,21 +2,15 @@ package com.jagr.fridamusic.presentation.theme
 
 import androidx.compose.ui.graphics.Color
 
-val LiquidBackground = Color(0xFF131313)
-val LiquidSurface = Color(0xFF131313)
-val LiquidSurfaceContainer = Color(0xFF1F1F1F)
-val LiquidSurfaceHigh = Color(0xFF2A2A2A)
+val LiquidPrimary = Color(0xFFFF99CC)
+val LiquidSecondary = Color(0xFF7B2B59)
 
-val LiquidOnSurface = Color(0xFFE2E2E2)
-val LiquidOnSurfaceVariant = Color(0xFFD7C1C9)
-val LiquidOutline = Color(0xFF9F8C93)
+val LiquidBackgroundDark = Color(0xFF0A0A0A)
+val LiquidSurfaceDark = Color(0xFF121212)
+val LiquidTextDark = Color.White
+val LiquidTextSecondaryDark = Color.White.copy(alpha = 0.6f)
 
-val LiquidPrimary = Color(0xFFFFC4DE)
-val LiquidOnPrimary = Color(0xFF5C103F)
-val LiquidSecondary = Color(0xFFA7C8FF)
-val LiquidTertiary = Color(0xFFD7CFFF)
-val LiquidError = Color(0xFFFFB4AB)
-
-val GlassBackgroundTint = Color(0xFFFFFFFF).copy(alpha = 0.1f)
-val GlassBorderLight = Color(0xFFFFFFFF).copy(alpha = 0.3f)
-val GlassBorderDark = Color(0xFFFFFFFF).copy(alpha = 0.05f)
+val LiquidBackgroundLight = Color(0xFFF5F5F7)
+val LiquidSurfaceLight = Color(0xFFFFFFFF)
+val LiquidTextLight = Color(0xFF1D1D1F)
+val LiquidTextSecondaryLight = Color(0xFF86868B)

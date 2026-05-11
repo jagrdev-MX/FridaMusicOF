@@ -18,14 +18,15 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -35,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.jagr.fridamusic.domain.model.Song
-import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 
 @Composable
 fun VitreaBottomNavigation(
@@ -51,11 +51,7 @@ fun VitreaBottomNavigation(
     onExpandPlayer: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .navigationBarsPadding()
-            .padding(bottom = 12.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
         AnimatedVisibility(
             visible = currentSong != null,
@@ -66,16 +62,9 @@ fun VitreaBottomNavigation(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.linearGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.05f))
-                            ),
-                            shape = RoundedCornerShape(16.dp)
-                        )
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable(onClick = onExpandPlayer)
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -88,8 +77,8 @@ fun VitreaBottomNavigation(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.DarkGray),
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
                             contentAlignment = Alignment.Center
                         ) {
                             if (albumArtUrl != null) {
@@ -100,7 +89,7 @@ fun VitreaBottomNavigation(
                                     modifier = Modifier.fillMaxSize()
                                 )
                             } else {
-                                Icon(Icons.Default.MusicNote, null, tint = Color.White.copy(0.3f))
+                                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
                             }
                         }
 
@@ -109,15 +98,15 @@ fun VitreaBottomNavigation(
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = currentSong.title,
-                                color = Color.White,
-                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = currentSong.artist ?: "Unknown Artist",
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -130,26 +119,26 @@ fun VitreaBottomNavigation(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         IconButton(onClick = onPrevious) {
-                            Icon(Icons.Default.SkipPrevious, null, tint = Color.White)
+                            Icon(Icons.Default.SkipPrevious, null, tint = MaterialTheme.colorScheme.onSurface)
                         }
 
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
                                 .clickable { onPlayPause() },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = null,
-                                tint = Color.White
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
 
                         IconButton(onClick = onNext) {
-                            Icon(Icons.Default.SkipNext, null, tint = Color.White)
+                            Icon(Icons.Default.SkipNext, null, tint = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -161,40 +150,46 @@ fun VitreaBottomNavigation(
             enter = slideInVertically(initialOffsetY = { it }),
             exit = slideOutVertically(targetOffsetY = { it })
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color.Black.copy(alpha = 0.3f))
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(Color.White.copy(alpha = 0.3f), Color.White.copy(alpha = 0.05f))
-                        ),
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    .padding(vertical = 12.dp, horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .background(MaterialTheme.colorScheme.surface)
+                    .navigationBarsPadding()
             ) {
-                NavItem(
-                    icon = Icons.Default.Home,
-                    label = "Home",
-                    isSelected = currentRoute == "home",
-                    onClick = { onNavigate("home") }
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    thickness = 1.dp
                 )
-                NavItem(
-                    icon = Icons.Default.Search,
-                    label = "Search",
-                    isSelected = currentRoute == "search",
-                    onClick = { onNavigate("search") }
-                )
-                NavItem(
-                    icon = Icons.Default.LibraryMusic,
-                    label = "Library",
-                    isSelected = currentRoute == "library",
-                    onClick = { onNavigate("library") }
-                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NavItem(
+                        icon = Icons.Default.Home,
+                        label = "Home",
+                        isSelected = currentRoute == "home",
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigate("home") }
+                    )
+                    NavItem(
+                        icon = Icons.Default.Search,
+                        label = "Search",
+                        isSelected = currentRoute == "search",
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigate("search") }
+                    )
+                    NavItem(
+                        icon = Icons.Default.LibraryMusic,
+                        label = "Library",
+                        isSelected = currentRoute == "library",
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigate("library") }
+                    )
+                }
             }
         }
     }
@@ -205,13 +200,18 @@ fun NavItem(
     icon: ImageVector,
     label: String,
     isSelected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val color = if (isSelected) LiquidPrimary else Color.White.copy(alpha = 0.5f)
+    val color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .fillMaxHeight()
+            .clickable(onClick = onClick)
     ) {
         Icon(
             imageVector = icon,
@@ -219,13 +219,12 @@ fun NavItem(
             tint = color,
             modifier = Modifier.size(24.dp)
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = label.uppercase(),
+            text = label,
             fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
-            color = color,
-            letterSpacing = 1.5.sp
+            fontWeight = fontWeight,
+            color = color
         )
     }
 }
