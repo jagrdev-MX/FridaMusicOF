@@ -145,7 +145,7 @@ fun SearchScreen(
                     items(filteredOnline.filter { it.type != ResultType.ARTIST }) { result ->
                         SpotifyStyleSongItem(
                             title = result.title,
-                            artist = result.artist,
+                            artist = result.artist ?: "Artista desconocido",
                             thumbnailUrl = result.thumbnailUrl,
                             isLocal = false,
                             isPlaylist = result.type == ResultType.PLAYLIST,
