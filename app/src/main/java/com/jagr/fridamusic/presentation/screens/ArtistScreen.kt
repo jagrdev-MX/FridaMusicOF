@@ -53,230 +53,35 @@ fun ArtistScreen(
             contentPadding = PaddingValues(bottom = 120.dp)
         ) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(380.dp)
-                ) {
-                    AsyncImage(
-                        model = artistImageUrl,
-                        contentDescription = "Artist Image",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
-                                        MaterialTheme.colorScheme.background
-                                    ),
-                                    startY = 200f
-                                )
-                            )
-                    )
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomStart)
-                            .padding(horizontal = 20.dp, vertical = 16.dp)
-                    ) {
-                        Text(
-                            text = artistName,
-                            style = LiquidTypography.displayLarge,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontSize = 48.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.primary,
-                                                MaterialTheme.colorScheme.secondary
-                                            )
-                                        )
-                                    )
-                                    .clickable {
-                                        if(popularSongs.isNotEmpty()) {
-                                            onPlaySong(popularSongs.random())
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(32.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-                                    .border(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                        RoundedCornerShape(32.dp)
-                                    )
-                                    .clickable { /* TODO: Follow Action */ }
-                                    .padding(horizontal = 24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Seguir",
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 14.sp
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
-                                    .border(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                        CircleShape
-                                    )
-                                    .clickable { /* TODO: Share Action */ },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "Share",
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                ArtistHeader(
+                    artistName = artistName,
+                    artistImageUrl = artistImageUrl,
+                    onPlayRandom = {
+                        if (popularSongs.isNotEmpty()) onPlaySong(popularSongs.random())
                     }
-                }
+                )
             }
 
             if (popularSongs.isNotEmpty()) {
                 item {
-                    Text(
-                        text = "Populares",
-                        style = LiquidTypography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
-                    )
+                    SectionTitle(title = "Populares")
                 }
 
                 itemsIndexed(popularSongs.take(5)) { index, song ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPlaySong(song) }
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = (index + 1).toString(),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(28.dp)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .border(
-                                    1.dp,
-                                    Brush.linearGradient(
-                                        listOf(
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                            Color.Transparent
-                                        )
-                                    ),
-                                    RoundedCornerShape(8.dp)
-                                )
-                        ) {
-                            AsyncImage(
-                                model = song.artworkUri ?: artistImageUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp)
-                        ) {
-                            Text(
-                                text = song.title,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = song.artist ?: "YouTube Music",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        IconButton(onClick = { /* TODO: More options */ }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreHoriz,
-                                contentDescription = "More",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    PopularSongItem(
+                        index = index + 1,
+                        song = song,
+                        fallbackImageUrl = artistImageUrl,
+                        onClick = { onPlaySong(song) }
+                    )
                 }
             }
 
             if (popularReleases.isNotEmpty()) {
                 item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 16.dp)
-                            .padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Álbumes y Listas",
-                            style = LiquidTypography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    SectionTitle(title = "Álbumes y Listas", paddingTop = 32.dp)
                 }
-            }
 
-            if (popularReleases.isNotEmpty()) {
                 item {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 20.dp),
@@ -284,76 +89,257 @@ fun ArtistScreen(
                         modifier = Modifier.padding(bottom = 24.dp)
                     ) {
                         items(popularReleases) { release ->
-                            Column(
-                                modifier = Modifier
-                                    .width(140.dp)
-                                    .clickable { /* TODO: Navegar a la playlist o reproducirla */ }
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(140.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .border(
-                                            1.dp,
-                                            Brush.linearGradient(
-                                                listOf(
-                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                                    Color.Transparent
-                                                )
-                                            ),
-                                            RoundedCornerShape(16.dp)
-                                        )
-                                ) {
-                                    AsyncImage(
-                                        model = release.artworkUri,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = release.title,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = release.artist ?: "Lista",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            ReleaseCard(release = release)
                         }
                     }
                 }
             }
         }
+        BackButtonOverlay(onBack = onBack)
+    }
+}
 
-        Row(
+@Composable
+private fun ArtistHeader(
+    artistName: String,
+    artistImageUrl: String,
+    onPlayRandom: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(380.dp)
+    ) {
+        AsyncImage(
+            model = artistImageUrl,
+            contentDescription = "Artist Image",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+                            MaterialTheme.colorScheme.background
+                        ),
+                        startY = 200f
+                    )
+                )
+        )
+
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .align(Alignment.BottomStart)
+                .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+            Text(
+                text = artistName,
+                style = LiquidTypography.displayLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.secondary
+                                )
+                            )
+                        )
+                        .clickable(onClick = onPlayRandom),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, paddingTop: androidx.compose.ui.unit.Dp = 16.dp) {
+    Text(
+        text = title,
+        style = LiquidTypography.headlineMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(
+            start = 20.dp,
+            end = 20.dp,
+            top = paddingTop,
+            bottom = 16.dp
+        )
+    )
+}
+
+@Composable
+private fun PopularSongItem(
+    index: Int,
+    song: Song,
+    fallbackImageUrl: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = index.toString(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(28.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+        ) {
+            AsyncImage(
+                model = song.artworkUri ?: fallbackImageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp)
+        ) {
+            Text(
+                text = song.title,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.artist ?: "YouTube Music",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        IconButton(onClick = { /* TODO: More options */ }) {
+            Icon(
+                imageVector = Icons.Default.MoreHoriz,
+                contentDescription = "More",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReleaseCard(release: Song) {
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable { /* TODO: Navegar a la playlist o reproducirla */ }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(140.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+        ) {
+            AsyncImage(
+                model = release.artworkUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = release.title,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = release.artist ?: "Lista",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun BackButtonOverlay(onBack: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.jagr.fridamusic.data.remote.innertube.ResultType
-import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import kotlinx.coroutines.delay
@@ -47,7 +46,7 @@ fun SearchScreen(
     val isExtracting by viewModel.isExtracting.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
 
-    val filters = listOf("Todo", "Canciones", "Artistas", "Listas")
+    val filters = remember { listOf("Todo", "Canciones", "Artistas", "Listas") }
     var selectedFilter by remember { mutableStateOf(filters[0]) }
 
     val filteredOnline = remember(onlineResults, selectedFilter) {
@@ -71,6 +70,11 @@ fun SearchScreen(
         }
     }
 
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val bgGradient = remember(primaryColor) {
+        Brush.verticalGradient(colors = listOf(primaryColor, Color.Transparent))
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -80,11 +84,7 @@ fun SearchScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .alpha(0.05f)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(MaterialTheme.colorScheme.primary, Color.Transparent)
-                    )
-                )
+                .background(bgGradient)
         )
 
         LazyColumn(
@@ -98,87 +98,27 @@ fun SearchScreen(
             )
         ) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    ) {
-                        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(12.dp))
-                        BasicTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            textStyle = LiquidTypography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            decorationBox = { innerTextField ->
-                                if (searchQuery.isEmpty()) {
-                                    Text(
-                                        text = "¿Qué quieres escuchar?",
-                                        style = LiquidTypography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        )
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
+                SearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    onClearQuery = { searchQuery = "" }
+                )
             }
 
             if (searchQuery.isNotBlank()) {
                 item {
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp, bottom = 8.dp),
-                        contentPadding = PaddingValues(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(filters) { filter ->
-                            val isSelected = selectedFilter == filter
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(32.dp))
-                                    .background(
-                                        if (isSelected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                    .clickable { selectedFilter = filter }
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = filter,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
+                    FilterRow(
+                        filters = filters,
+                        selectedFilter = selectedFilter,
+                        onFilterSelected = { selectedFilter = it }
+                    )
                 }
             }
 
             if (isSearching) {
                 item {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 40.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp)
@@ -200,13 +140,7 @@ fun SearchScreen(
 
                 if (filteredOnline.isNotEmpty() && selectedFilter != "Artistas") {
                     item {
-                        Text(
-                            text = if (selectedFilter == "Todo") "Resultados" else selectedFilter,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-                        )
+                        SectionTitle(title = if (selectedFilter == "Todo") "Resultados" else selectedFilter)
                     }
                     items(filteredOnline.filter { it.type != ResultType.ARTIST }) { result ->
                         SpotifyStyleSongItem(
@@ -216,9 +150,7 @@ fun SearchScreen(
                             isLocal = false,
                             isPlaylist = result.type == ResultType.PLAYLIST,
                             onClick = {
-                                if (result.type == ResultType.SONG) {
-                                    viewModel.playYouTubeSong(result)
-                                }
+                                if (result.type == ResultType.SONG) viewModel.playYouTubeSong(result)
                             }
                         )
                     }
@@ -226,13 +158,7 @@ fun SearchScreen(
 
                 if (filteredLocal.isNotEmpty() && (selectedFilter == "Todo" || selectedFilter == "Canciones")) {
                     item {
-                        Text(
-                            text = "En tu biblioteca",
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
-                        )
+                        SectionTitle(title = "En tu biblioteca")
                     }
                     items(filteredLocal) { song ->
                         SpotifyStyleSongItem(
@@ -248,21 +174,49 @@ fun SearchScreen(
         }
 
         if (isExtracting) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f))
-                    .clickable(enabled = false) {},
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp)
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = "Cargando pista...",
-                        style = LiquidTypography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+            ExtractionOverlay()
+        }
+    }
+}
+
+@Composable
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit, onClearQuery: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .height(56.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(12.dp))
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                textStyle = LiquidTypography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                decorationBox = { innerTextField ->
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "¿Qué quieres escuchar?",
+                            style = LiquidTypography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    innerTextField()
+                }
+            )
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClearQuery) {
+                    Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -270,7 +224,47 @@ fun SearchScreen(
 }
 
 @Composable
-fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
+private fun FilterRow(filters: List<String>, selectedFilter: String, onFilterSelected: (String) -> Unit) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(filters) { filter ->
+            val isSelected = selectedFilter == filter
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    .clickable { onFilterSelected(filter) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = filter,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String) {
+    Text(
+        text = title,
+        color = MaterialTheme.colorScheme.onBackground,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+    )
+}
+
+@Composable
+private fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -282,10 +276,7 @@ fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
             model = imageUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+            modifier = Modifier.size(80.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
         )
 
         Spacer(modifier = Modifier.width(16.dp))
@@ -299,11 +290,7 @@ fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(
-                text = "Artista",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
-            )
+            Text(text = "Artista", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         }
 
         Box(
@@ -317,7 +304,7 @@ fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun SpotifyStyleSongItem(
+private fun SpotifyStyleSongItem(
     title: String,
     artist: String,
     thumbnailUrl: String = "",
@@ -332,70 +319,55 @@ fun SpotifyStyleSongItem(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
+        Box(modifier = Modifier.size(56.dp).background(MaterialTheme.colorScheme.surfaceVariant)) {
             if (thumbnailUrl.isNotEmpty()) {
-                AsyncImage(
-                    model = thumbnailUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+                AsyncImage(model = thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
-                Icon(
-                    Icons.Default.MusicNote,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.align(Alignment.Center))
             }
         }
 
         Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Text(text = title, fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (!isLocal) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
+                    Box(modifier = Modifier.clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)).padding(horizontal = 4.dp, vertical = 2.dp)) {
                         Text("YT", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                 }
-
-                Text(
-                    text = if (isPlaylist) "Playlist • $artist" else "Canción • $artist",
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(text = if (isPlaylist) "Playlist • $artist" else "Canción • $artist", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!isPlaylist) {
-                IconButton(onClick = { }) {
-                    Icon(Icons.Default.AddCircleOutline, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                }
+                IconButton(onClick = { }) { Icon(Icons.Default.AddCircleOutline, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp)) }
             }
-            IconButton(onClick = { }) {
-                Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-            }
+            IconButton(onClick = { }) { Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun ExtractionOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp)
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Cargando pista...",
+                style = LiquidTypography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
         }
     }
 }

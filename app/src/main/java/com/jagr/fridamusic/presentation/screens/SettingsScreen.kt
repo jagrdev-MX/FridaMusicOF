@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.*
@@ -45,71 +44,23 @@ fun SettingsScreen(
     val crossfadeDuration by viewModel.crossfadeDuration.collectAsState()
     val saveLastPlayback by viewModel.saveLastPlayback.collectAsState()
     val sleepTimer by viewModel.sleepTimerMinutes.collectAsState()
-
-    var showTimerDialog by remember { mutableStateOf(false) }
-
-    var showThemeDialog by remember { mutableStateOf(false) }
     val currentTheme by viewModel.currentTheme.collectAsState()
 
+    var showTimerDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
+
     if (showTimerDialog) {
-        AlertDialog(
-            onDismissRequest = { showTimerDialog = false },
-            title = { Text("Sleep Timer", color = MaterialTheme.colorScheme.onSurface) },
-            text = { Text("Stop audio after:", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            containerColor = MaterialTheme.colorScheme.surface,
-            confirmButton = {
-                TextButton(onClick = { viewModel.setSleepTimer(15); showTimerDialog = false }) {
-                    Text("15 min", color = MaterialTheme.colorScheme.primary)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.setSleepTimer(0); showTimerDialog = false }) {
-                    Text("Off", color = MaterialTheme.colorScheme.onSurface)
-                }
-            }
+        SleepTimerDialog(
+            onDismiss = { showTimerDialog = false },
+            onSetTimer = { viewModel.setSleepTimer(it) }
         )
     }
 
     if (showThemeDialog) {
-        AlertDialog(
-            onDismissRequest = { showThemeDialog = false },
-            title = { Text("App Theme", color = MaterialTheme.colorScheme.onSurface) },
-            containerColor = MaterialTheme.colorScheme.surface,
-            text = {
-                Column {
-                    AppTheme.values().forEach { themeOption ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    viewModel.updateTheme(themeOption)
-                                    showThemeDialog = false
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = currentTheme == themeOption,
-                                onClick = {
-                                    viewModel.updateTheme(themeOption)
-                                    showThemeDialog = false
-                                },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = MaterialTheme.colorScheme.primary,
-                                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = themeOption.displayName, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showThemeDialog = false }) {
-                    Text("Cancel", color = MaterialTheme.colorScheme.primary)
-                }
-            }
+        ThemeSelectionDialog(
+            currentTheme = currentTheme,
+            onDismiss = { showThemeDialog = false },
+            onSelectTheme = { viewModel.updateTheme(it) }
         )
     }
 
@@ -119,7 +70,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 80.dp,
-                bottom = paddingValues.calculateBottomPadding() + 40.dp, // Reducimos el padding bottom ya que no hay navbar
+                bottom = paddingValues.calculateBottomPadding() + 40.dp,
                 start = 20.dp,
                 end = 20.dp
             ),
@@ -169,7 +120,6 @@ fun SettingsScreen(
                     SettingsToggleItem(
                         icon = Icons.Default.SkipNext,
                         title = "Gapless Playback",
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         isChecked = gaplessPlayback,
                         onCheckedChange = { viewModel.updateGapless(it) }
                     )
@@ -177,7 +127,6 @@ fun SettingsScreen(
                     SettingsSliderItem(
                         icon = Icons.AutoMirrored.Filled.CompareArrows,
                         title = "Crossfade",
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         value = crossfadeDuration,
                         valueRange = 0f..10f,
                         leftLabel = "Off",
@@ -202,7 +151,6 @@ fun SettingsScreen(
                     SettingsToggleItem(
                         icon = Icons.Default.VoiceOverOff,
                         title = "Filter Voice Notes",
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         isChecked = filterVoiceNotes,
                         onCheckedChange = { viewModel.updateFilterVoiceNotes(it) }
                     )
@@ -221,7 +169,6 @@ fun SettingsScreen(
                     SettingsToggleItem(
                         icon = Icons.Default.Lightbulb,
                         title = "Keep Screen On",
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         isChecked = keepScreenOn,
                         onCheckedChange = { viewModel.updateKeepScreenOn(it) }
                     )
@@ -229,13 +176,13 @@ fun SettingsScreen(
                     SettingsToggleItem(
                         icon = Icons.Default.History,
                         title = "Remember Last Played",
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         isChecked = saveLastPlayback,
                         onCheckedChange = { viewModel.updateSaveLastPlayback(it) }
                     )
                 }
             }
         }
+
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -259,7 +206,75 @@ fun SettingsScreen(
 }
 
 @Composable
-fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SleepTimerDialog(onDismiss: () -> Unit, onSetTimer: (Int) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sleep Timer", color = MaterialTheme.colorScheme.onSurface) },
+        text = { Text("Stop audio after:", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        confirmButton = {
+            TextButton(onClick = { onSetTimer(15); onDismiss() }) {
+                Text("15 min", color = MaterialTheme.colorScheme.primary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onSetTimer(0); onDismiss() }) {
+                Text("Off", color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
+    )
+}
+
+@Composable
+private fun ThemeSelectionDialog(
+    currentTheme: AppTheme,
+    onDismiss: () -> Unit,
+    onSelectTheme: (AppTheme) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("App Theme", color = MaterialTheme.colorScheme.onSurface) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        text = {
+            Column {
+                AppTheme.entries.forEach { themeOption ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSelectTheme(themeOption)
+                                onDismiss()
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = currentTheme == themeOption,
+                            onClick = {
+                                onSelectTheme(themeOption)
+                                onDismiss()
+                            },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = MaterialTheme.colorScheme.primary,
+                                unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(text = themeOption.displayName, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    )
+}
+
+@Composable
+private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column {
         Text(
             text = title,
@@ -279,7 +294,7 @@ fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) 
 }
 
 @Composable
-fun AppInfoItem() {
+private fun AppInfoItem() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -306,10 +321,9 @@ fun AppInfoItem() {
 }
 
 @Composable
-fun SettingsToggleItem(
+private fun SettingsToggleItem(
     icon: ImageVector,
     title: String,
-    iconTint: Color,
     isChecked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
@@ -321,7 +335,7 @@ fun SettingsToggleItem(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Text(text = title, style = LiquidTypography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
         }
@@ -340,7 +354,7 @@ fun SettingsToggleItem(
 }
 
 @Composable
-fun SettingsNavigationItem(
+private fun SettingsNavigationItem(
     icon: ImageVector,
     title: String,
     value: String,
@@ -355,7 +369,7 @@ fun SettingsNavigationItem(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Text(text = title, style = LiquidTypography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
         }
@@ -368,10 +382,9 @@ fun SettingsNavigationItem(
 }
 
 @Composable
-fun SettingsSliderItem(
+private fun SettingsSliderItem(
     icon: ImageVector,
     title: String,
-    iconTint: Color,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     leftLabel: String,
@@ -384,7 +397,7 @@ fun SettingsSliderItem(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Text(text = title, style = LiquidTypography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
         }
