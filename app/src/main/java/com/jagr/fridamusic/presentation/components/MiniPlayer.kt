@@ -21,8 +21,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material3.MaterialTheme
 import com.jagr.fridamusic.domain.model.Song
-import com.jagr.fridamusic.presentation.theme.LiquidPrimary
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
 @Composable
@@ -67,7 +67,7 @@ fun MiniPlayer(
             Text(
                 text = currentSong?.artist ?: "Unknown Artist",
                 fontSize = 12.sp,
-                color = LiquidPrimary,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

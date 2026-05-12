@@ -57,6 +57,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     val keepScreenOn = MutableStateFlow(settingsManager.keepScreenOn)
     val gaplessPlayback = MutableStateFlow(settingsManager.gaplessPlayback)
     val crossfadeDuration = MutableStateFlow(settingsManager.crossfadeDuration)
+    val saveLastPlayback = MutableStateFlow(settingsManager.saveLastPlayback)
     private val _currentTheme = MutableStateFlow(AppTheme.SYSTEM)
     val currentTheme = _currentTheme.asStateFlow()
 
@@ -646,6 +647,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun updateCrossfade(duration: Float) {
         settingsManager.crossfadeDuration = duration
         crossfadeDuration.value = duration
+    }
+
+    fun updateSaveLastPlayback(enabled: Boolean) {
+        settingsManager.saveLastPlayback = enabled
+        saveLastPlayback.value = enabled
     }
 
     fun setSleepTimer(minutes: Int) {

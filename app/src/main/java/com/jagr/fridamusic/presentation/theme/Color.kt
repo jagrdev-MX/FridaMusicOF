@@ -1,16 +1,42 @@
 package com.jagr.fridamusic.presentation.theme
 
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-val LiquidPrimary = Color(0xFFFF99CC)
-val LiquidSecondary = Color(0xFF7B2B59)
+val FridaPink = Color(0xFFFF4D9D)
+val FridaPurple = Color(0xFFA855F7)
+val FridaBlue = Color(0xFF3B82F6)
 
-val LiquidBackgroundDark = Color(0xFF0A0A0A)
-val LiquidSurfaceDark = Color(0xFF121212)
-val LiquidTextDark = Color.White
-val LiquidTextSecondaryDark = Color.White.copy(alpha = 0.6f)
+val FridaBrandGradient = Brush.linearGradient(
+    colors = listOf(FridaPink, FridaPurple, FridaBlue)
+)
 
-val LiquidBackgroundLight = Color(0xFFF5F5F7)
-val LiquidSurfaceLight = Color(0xFFFFFFFF)
-val LiquidTextLight = Color(0xFF1D1D1F)
-val LiquidTextSecondaryLight = Color(0xFF86868B)
+val DarkBgPrimary = Color(0xFF050510)
+val DarkBgSecondary = Color(0xFF0B0B1A)
+val DarkBgTertiary = Color(0xFF111128)
+val DarkBgElevation1 = Color(0xFF1A1A2E)
+val DarkBgElevation2 = Color(0xFF23233A)
+
+val LightBgPrimary = Color(0xFFF7F7FB)
+val LightBgSecondary = Color(0xFFFFFFFF)
+val LightBgTertiary = Color(0xFFF0F0F6)
+val LightBgElevation1 = Color(0xFFE9E9F2)
+val LightBgElevation2 = Color(0xFFE2E2EC)
+
+val DarkTextPrimary = Color(0xFFFFFFFF)
+val DarkTextSecondary = Color(0xFFB3B3CC)
+val DarkTextTertiary = Color(0xFF8A8AA3)
+val DarkTextDisabled = Color(0xFF6B6B8A)
+val DarkTextInverse = Color(0xFF050510)
+
+val LightTextPrimary = Color(0xFF0A0A0F)
+val LightTextSecondary = Color(0xFF5C5C7A)
+val LightTextTertiary = Color(0xFF8A8AA3)
+val LightTextDisabled = Color(0xFFB0B0C6)
+val LightTextInverse = Color(0xFFFFFFFF)
+
+val StateSuccess = Color(0xFF22C55E)
+val StateWarning = Color(0xFFF59E0B)
+val StateError = Color(0xFFEF4444)
+val StateInfo = Color(0xFF3B82F6)
+val StateNeutral = Color(0xFF6B7280)

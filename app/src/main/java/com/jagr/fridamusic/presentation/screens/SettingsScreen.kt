@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.*
@@ -42,6 +43,7 @@ fun SettingsScreen(
     val keepScreenOn by viewModel.keepScreenOn.collectAsState()
     val gaplessPlayback by viewModel.gaplessPlayback.collectAsState()
     val crossfadeDuration by viewModel.crossfadeDuration.collectAsState()
+    val saveLastPlayback by viewModel.saveLastPlayback.collectAsState()
     val sleepTimer by viewModel.sleepTimerMinutes.collectAsState()
 
     var showTimerDialog by remember { mutableStateOf(false) }
@@ -222,6 +224,14 @@ fun SettingsScreen(
                         iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         isChecked = keepScreenOn,
                         onCheckedChange = { viewModel.updateKeepScreenOn(it) }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    SettingsToggleItem(
+                        icon = Icons.Default.History,
+                        title = "Remember Last Played",
+                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        isChecked = saveLastPlayback,
+                        onCheckedChange = { viewModel.updateSaveLastPlayback(it) }
                     )
                 }
             }

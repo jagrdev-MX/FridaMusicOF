@@ -13,25 +13,41 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = LiquidPrimary,
-    secondary = LiquidSecondary,
-    background = LiquidBackgroundDark,
-    surface = LiquidSurfaceDark,
-    onBackground = LiquidTextDark,
-    onSurface = LiquidTextDark,
-    surfaceVariant = Color(0xFF2A2A2A),
-    onSurfaceVariant = LiquidTextSecondaryDark
+    primary = FridaPink,
+    onPrimary = DarkTextInverse,
+    secondary = FridaPurple,
+    onSecondary = DarkTextPrimary,
+    tertiary = FridaBlue,
+
+    background = DarkBgPrimary,
+    onBackground = DarkTextPrimary,
+    surface = DarkBgSecondary,
+    onSurface = DarkTextPrimary,
+    surfaceVariant = DarkBgElevation1,
+    onSurfaceVariant = DarkTextSecondary,
+
+    outline = DarkTextDisabled,
+    error = StateError,
+    onError = DarkTextPrimary
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = LiquidPrimary,
-    secondary = LiquidSecondary,
-    background = LiquidBackgroundLight,
-    surface = LiquidSurfaceLight,
-    onBackground = LiquidTextLight,
-    onSurface = LiquidTextLight,
-    surfaceVariant = Color(0xFFE5E5EA),
-    onSurfaceVariant = LiquidTextSecondaryLight
+    primary = FridaPink,
+    onPrimary = LightTextInverse,
+    secondary = FridaPurple,
+    onSecondary = LightTextInverse,
+    tertiary = FridaBlue,
+
+    background = LightBgPrimary,
+    onBackground = LightTextPrimary,
+    surface = LightBgSecondary,
+    onSurface = LightTextPrimary,
+    surfaceVariant = LightBgElevation1,
+    onSurfaceVariant = LightTextSecondary,
+
+    outline = LightTextDisabled,
+    error = StateError,
+    onError = LightTextInverse
 )
 
 @Composable
@@ -46,8 +62,9 @@ fun FridaMusicTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
+            window.navigationBarColor = Color.Transparent.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            window.navigationBarColor = colorScheme.background.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

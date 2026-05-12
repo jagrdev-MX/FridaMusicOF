@@ -21,4 +21,8 @@ class SettingsManager(context: Context) {
     var crossfadeDuration: Float
         get() = prefs.getFloat("crossfade", 2f)
         set(value) = prefs.edit().putFloat("crossfade", value).apply()
+
+    var saveLastPlayback: Boolean
+        get() = prefs.getBoolean("save_last_playback", true)
+        set(value) = prefs.edit().putBoolean("save_last_playback", value).apply()
 }
