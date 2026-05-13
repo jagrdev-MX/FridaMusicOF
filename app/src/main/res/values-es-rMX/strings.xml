@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FridaMusic</string>
+    <string name="good_morning">Buenos Días</string>
+    <string name="good_afternoon">Buenas Tardes</string>
+    <string name="good_evening">Buenas Noches</string>
+    <string name="good_night">Buenas Noches</string>
+    <string name="recently_played">Reproducido recientemente</string>
+    <string name="see_all">Ver Todo</string>
+    <string name="now_playing">REPRODUCIENDO AHORA</string>
+    <string name="top_artists">Los mejores artistas</string>
+    <string name="unknown_artist">Artista desconocido</string>
+    <string name="unknown">Desconocido</string>
+    <string name="settings">Ajustes</string>
+    <string name="about">ACERCA</string>
+    <string name="appearance">APARIENCIA</string>
+    <string name="theme">Tema</string>
+    <string name="playback">REPRODUCCIÓN</string>
+    <string name="equalizer">Ecualizador</string>
+    <string name="system">Sistema</string>
+    <string name="no_equalizer_found">No se ha detectado ningún ecualizador en este dispositivo.</string>
+    <string name="gapless_playback">Reproducción sin interrupciones</string>
+    <string name="crossfade">Crossfade</string>
+    <string name="off_label">Off</string>
+    <string name="scan_new_music">Buscar música nueva.</string>
+    <string name="update">Actualizar</string>
+    <string name="scanning_library">Escaneando biblioteca&#8230;</string>
+    <string name="search_placeholder">¿Qué quieres escuchar?</string>
+    <string name="recent_searches">Búsquedas recientes</string>
+    <string name="clear_all">Borrar todo</string>
+    <string name="results">Resultados</string>
+    <string name="all_filter">Todo</string>
+    <string name="songs_filter">Canciones</string>
+    <string name="artists_filter">Artistas</string>
+    <string name="playlists_filter">Listas</string>
+</resources>

@@ -31,6 +31,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
@@ -64,7 +66,7 @@ fun ArtistScreen(
 
             if (popularSongs.isNotEmpty()) {
                 item {
-                    SectionTitle(title = "Populares")
+                    SectionTitle(title = stringResource(R.string.populares))
                 }
 
                 itemsIndexed(popularSongs.take(5)) { index, song ->
@@ -79,7 +81,7 @@ fun ArtistScreen(
 
             if (popularReleases.isNotEmpty()) {
                 item {
-                    SectionTitle(title = "Álbumes y Listas", paddingTop = 32.dp)
+                    SectionTitle(title = stringResource(R.string.albums_and_lists), paddingTop = 32.dp)
                 }
 
                 item {
@@ -112,7 +114,7 @@ private fun ArtistHeader(
     ) {
         AsyncImage(
             model = artistImageUrl,
-            contentDescription = "Artist Image",
+            contentDescription = stringResource(R.string.artist_image),
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
@@ -168,7 +170,7 @@ private fun ArtistHeader(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.play),
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(32.dp)
                     )
@@ -253,7 +255,7 @@ private fun PopularSongItem(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = song.artist ?: "YouTube Music",
+                text = song.artist ?: stringResource(R.string.yt_music),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 maxLines = 1,
@@ -264,7 +266,7 @@ private fun PopularSongItem(
         IconButton(onClick = { /* TODO: More options */ }) {
             Icon(
                 imageVector = Icons.Default.MoreHoriz,
-                contentDescription = "More",
+                contentDescription = stringResource(R.string.more_options),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -311,7 +313,7 @@ private fun ReleaseCard(release: Song) {
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = release.artist ?: "Lista",
+            text = release.artist ?: stringResource(R.string.playlist_label),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
             maxLines = 1,
@@ -337,7 +339,7 @@ private fun BackButtonOverlay(onBack: () -> Unit) {
         ) {
             Icon(
                 imageVector = Icons.Default.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.back),
                 tint = MaterialTheme.colorScheme.onSurface
             )
         }

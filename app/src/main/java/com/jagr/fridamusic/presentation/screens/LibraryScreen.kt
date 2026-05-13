@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
@@ -47,7 +49,12 @@ fun LibraryScreen(
     val songs by viewModel.songs.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
 
-    val tabs = listOf("Songs", "Playlists", "Albums", "Artists")
+    val tabs = listOf(
+        stringResource(R.string.songs_tab),
+        stringResource(R.string.playlists_tab),
+        stringResource(R.string.albums_tab),
+        stringResource(R.string.artists_tab)
+    )
     var selectedTab by remember { mutableStateOf(tabs[0]) }
 
     val chunkedAlbums = remember(songs) {
@@ -64,7 +71,7 @@ fun LibraryScreen(
     ) {
         item {
             Text(
-                text = "Library",
+                text = stringResource(R.string.library),
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.02).em,
@@ -107,22 +114,23 @@ fun LibraryScreen(
         item { Spacer(modifier = Modifier.height(24.dp)) }
 
         when (selectedTab) {
-            "Songs" -> {
+            tabs[0] -> {
                 item {
-                    Text("Recent Songs", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(start = 20.dp, bottom = 8.dp))
+                    Text(stringResource(R.string.recent_songs), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(start = 20.dp, bottom = 8.dp))
                 }
                 items(songs, key = { it.id }) { song ->
                     LibrarySongItem(song, viewModel) { viewModel.playSong(song) }
                 }
             }
-            "Playlists" -> {
+            tabs[1] -> {
                 item {
+                    val newPlaylistName = stringResource(R.string.new_playlist_format, playlists.size + 1)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp, vertical = 8.dp)
                             .liquidGlassEffect(12.dp)
-                            .clickable { viewModel.createPlaylist("New Playlist " + (playlists.size + 1)) }
+                            .clickable { viewModel.createPlaylist(newPlaylistName) }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -135,12 +143,12 @@ fun LibraryScreen(
                             Icon(Icons.Default.Add, null)
                         }
                         Spacer(Modifier.width(16.dp))
-                        Text("Create New Playlist", color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.create_new_playlist), color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                     }
                 }
                 items(playlists) { PlaylistListItem(it) }
             }
-            "Albums" -> {
+            tabs[2] -> {
                 items(chunkedAlbums) { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
@@ -158,7 +166,7 @@ fun LibraryScreen(
             else -> {
                 item {
                     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                        Text("Coming Soon", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.coming_soon), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -189,7 +197,7 @@ private fun PlaylistListItem(playlist: com.jagr.fridamusic.domain.model.Playlist
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(playlist.name, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Text("${playlist.songIds.size} songs", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.songs_count, playlist.songIds.size), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -203,7 +211,7 @@ private fun LibraryAlbumCard(song: Song, viewModel: LibraryViewModels, modifier:
         Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background.copy(alpha = 0.9f)), startY = 50f)))
         Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
             Text(song.title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist ?: "Unknown Artist", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist ?: stringResource(R.string.unknown_artist), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -230,7 +238,7 @@ private fun LibrarySongItem(song: Song, viewModel: LibraryViewModels, onClick: (
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(song.title, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist ?: "Unknown", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist ?: stringResource(R.string.unknown), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = { }) { Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     }

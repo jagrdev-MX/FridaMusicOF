@@ -19,6 +19,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaylistEntity
 import com.jagr.fridamusic.data.remote.innertube.ResultType
@@ -96,6 +97,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
     val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
 
+    private val _searchHistory = MutableStateFlow<List<String>>(emptyList())
+    val searchHistory = _searchHistory.asStateFlow()
+
     val artistSongs = _youtubeSearchResults.map { results ->
         results.filter { it.type == ResultType.SONG }.map { result ->
             Song(result.videoId.hashCode().toLong(), result.title, result.artist, result.videoId, 0L, 0L, Uri.parse(""), Uri.parse(result.thumbnailUrl))
@@ -139,6 +143,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         ContextCompat.registerReceiver(getApplication(), notificationReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
         ensureFavoritesPlaylistExists()
         restoreLastPlaybackState()
+        _searchHistory.value = settingsManager.searchHistory.split("|").filter { it.isNotBlank() }
     }
 
     @OptIn(UnstableApi::class)
@@ -400,9 +405,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private fun ensureFavoritesPlaylistExists() {
         viewModelScope.launch(Dispatchers.IO) {
+            val favoritesName = getApplication<Application>().getString(R.string.favorites_playlist_name)
+            val favoritesDesc = getApplication<Application>().getString(R.string.favorites_playlist_description)
             val allPlaylists = playlistDao.getAllPlaylistsOnce()
-            if (allPlaylists.none { it.name == "Me gusta" }) {
-                createPlaylist("Me gusta", "Tus canciones favoritas")
+            if (allPlaylists.none { it.name == favoritesName }) {
+                createPlaylist(favoritesName, favoritesDesc)
             }
         }
     }
@@ -436,13 +443,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     fun toggleLike(song: Song) {
         viewModelScope.launch(Dispatchers.IO) {
+            val favoritesName = getApplication<Application>().getString(R.string.favorites_playlist_name)
             val currentPlaylists = playlists.first()
-            var likePlaylist = currentPlaylists.find { it.name == "Me gusta" }
+            var likePlaylist = currentPlaylists.find { it.name == favoritesName }
 
             if (likePlaylist == null) {
-                createPlaylist("Me gusta")
+                createPlaylist(favoritesName)
                 delay(300)
-                likePlaylist = playlists.first().find { it.name == "Me gusta" }
+                likePlaylist = playlists.first().find { it.name == favoritesName }
             }
 
             likePlaylist?.let { playlist ->
@@ -467,6 +475,28 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 _isSearching.value = false
             }
         }
+    }
+
+    fun addToSearchHistory(query: String) {
+        if (query.isBlank()) return
+        val currentHistory = _searchHistory.value.toMutableList()
+        currentHistory.remove(query)
+        currentHistory.add(0, query)
+        val newHistory = currentHistory.take(15) // Keep last 15
+        _searchHistory.value = newHistory
+        settingsManager.searchHistory = newHistory.joinToString("|")
+    }
+
+    fun removeFromSearchHistory(query: String) {
+        val currentHistory = _searchHistory.value.toMutableList()
+        currentHistory.remove(query)
+        _searchHistory.value = currentHistory
+        settingsManager.searchHistory = currentHistory.joinToString("|")
+    }
+
+    fun clearSearchHistory() {
+        _searchHistory.value = emptyList()
+        settingsManager.searchHistory = ""
     }
 
     fun setShuffleMode(enabled: Boolean) { isShuffleMode.value = enabled }

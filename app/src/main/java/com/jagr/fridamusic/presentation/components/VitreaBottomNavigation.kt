@@ -1,6 +1,8 @@
 package com.jagr.fridamusic.presentation.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -35,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 
 @Composable
@@ -55,8 +59,14 @@ fun VitreaBottomNavigation(
     ) {
         AnimatedVisibility(
             visible = currentSong != null,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it })
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+            )
         ) {
             if (currentSong != null) {
                 Row(
@@ -105,7 +115,7 @@ fun VitreaBottomNavigation(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = currentSong.artist ?: "Unknown Artist",
+                                text = currentSong.artist ?: stringResource(R.string.unknown_artist),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp,
                                 maxLines = 1,
@@ -147,8 +157,14 @@ fun VitreaBottomNavigation(
 
         AnimatedVisibility(
             visible = !isCollapsed,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it })
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+            )
         ) {
             Column(
                 modifier = Modifier
@@ -170,21 +186,21 @@ fun VitreaBottomNavigation(
                 ) {
                     NavItem(
                         icon = Icons.Default.Home,
-                        label = "Home",
+                        label = stringResource(R.string.nav_home),
                         isSelected = currentRoute == "home",
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigate("home") }
                     )
                     NavItem(
                         icon = Icons.Default.Search,
-                        label = "Search",
+                        label = stringResource(R.string.nav_search),
                         isSelected = currentRoute == "search",
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigate("search") }
                     )
                     NavItem(
                         icon = Icons.Default.LibraryMusic,
-                        label = "Library",
+                        label = stringResource(R.string.nav_library),
                         isSelected = currentRoute == "library",
                         modifier = Modifier.weight(1f),
                         onClick = { onNavigate("library") }

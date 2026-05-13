@@ -1,3 +1,126 @@
 <resources>
     <string name="app_name">FridaMusic</string>
+
+    <!-- Home Screen -->
+    <string name="good_morning">Good Morning</string>
+    <string name="good_afternoon">Good Afternoon</string>
+    <string name="good_evening">Good Evening</string>
+    <string name="good_night">Good Night</string>
+    <string name="personal_soundscape">Your personal liquid soundscape.</string>
+    <string name="recently_played">Recently Played</string>
+    <string name="see_all">See All</string>
+    <string name="now_playing">NOW PLAYING</string>
+    <string name="top_artists">Top Artists</string>
+    <string name="unknown_artist">Unknown Artist</string>
+    <string name="unknown">Unknown</string>
+
+    <!-- Settings Screen -->
+    <string name="settings">Settings</string>
+    <string name="about">ABOUT</string>
+    <string name="appearance">APPEARANCE</string>
+    <string name="theme">Theme</string>
+    <string name="playback">PLAYBACK</string>
+    <string name="equalizer">Equalizer</string>
+    <string name="system">System</string>
+    <string name="no_equalizer_found">No equalizer found on this device</string>
+    <string name="gapless_playback">Gapless Playback</string>
+    <string name="crossfade">Crossfade</string>
+    <string name="off_label">Off</string>
+    <string name="library_storage">BIBLIOTECA &amp; ALMACENAMIENTO</string>
+    <string name="scan_new_music">Scan for new music</string>
+    <string name="update">Update</string>
+    <string name="scanning_library">Scanning library&#8230;</string>
+    <string name="filter_voice_notes">Filter Voice Notes</string>
+    <string name="general">GENERAL</string>
+    <string name="sleep_timer">Sleep Timer</string>
+    <string name="keep_screen_on">Keep Screen On</string>
+    <string name="remember_last_played">Remember Last Played</string>
+    <string name="stop_audio_after">Stop audio after:</string>
+    <string name="app_theme">App Theme</string>
+    <string name="cancel">Cancel</string>
+    <string name="local_audio_player">Local Audio Player</string>
+    <string name="min_format">%1$d min</string>
+
+    <!-- Themes -->
+    <string name="theme_system">System Default</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <!-- Search Screen -->
+    <string name="all_filter">All</string>
+    <string name="songs_filter">Songs</string>
+    <string name="artists_filter">Artists</string>
+    <string name="playlists_filter">Playlists</string>
+    <string name="search_placeholder">What do you want to listen to?</string>
+    <string name="recent_searches">Recent Searches</string>
+    <string name="clear_all">Clear All</string>
+    <string name="results">Results</string>
+    <string name="in_your_library">In your library</string>
+    <string name="artist">Artist</string>
+    <string name="follow">Follow</string>
+    <string name="unknown_artist_search">Unknown artist</string>
+    <string name="yt_label">YT</string>
+    <string name="playlist_format">Playlist • %1$s</string>
+    <string name="song_format">Song • %1$s</string>
+    <string name="loading_track">Loading track&#8230;</string>
+
+    <!-- Library Screen -->
+    <string name="library">Library</string>
+    <string name="songs_tab">Songs</string>
+    <string name="playlists_tab">Playlists</string>
+    <string name="albums_tab">Albums</string>
+    <string name="artists_tab">Artists</string>
+    <string name="recent_songs">Recent Songs</string>
+    <string name="new_playlist_format">New Playlist %1$d</string>
+    <string name="coming_soon">Coming Soon</string>
+    <string name="your_library">Your Library</string>
+    <string name="create_new_playlist">Create new playlist</string>
+    <string name="playlist_name">Playlist Name</string>
+    <string name="playlist_description">Description (optional)</string>
+    <string name="create">Create</string>
+    <string name="songs_count">%1$d songs</string>
+    <!-- Now Playing Screen -->
+    <string name="minimize">Minimize</string>
+    <string name="from_youtube_music">from YouTube Music</string>
+    <string name="options">Options</string>
+    <string name="album_art">Album Art</string>
+    <string name="no_song_playing">No Song Playing</string>
+    <string name="like">Like</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="previous">Previous</string>
+    <string name="pause">Pause</string>
+    <string name="play">Play</string>
+    <string name="next">Next</string>
+    <string name="queue">Queue</string>
+    <string name="autoplay">Autoplay</string>
+    <string name="up_next">UP NEXT</string>
+    <string name="infinite_mode_on">Infinite Mode is ON.\nSimilar songs will play automatically after the queue ends.</string>
+    <string name="queue_empty_autoplay">Your queue is empty.\nTurn on Autoplay to keep the music going forever.</string>
+    <string name="lyrics">Lyrics</string>
+    <string name="looking_for_lyrics">Looking for lyrics&#8230;\nIf they don\'t appear, they might not be available in the database.</string>
+    <string name="song_info">Song Info</string>
+    <string name="title_label">Title</string>
+    <string name="artist_label">Artist</string>
+    <string name="source_label">Source</string>
+    <string name="duration_label">Duration</string>
+    <string name="source_youtube">YouTube Music (InnerTube)</string>
+    <string name="source_local">Local Device</string>
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_library">Library</string>
+
+    <!-- Artist Screen -->
+    <string name="popular_songs">Popular Songs</string>
+    <string name="popular_releases">Popular Releases</string>
+    <string name="back">Back</string>
+    <string name="populares">Popular</string>
+    <string name="albums_and_lists">Albums &amp; Playlists</string>
+    <string name="artist_image">Artist Image</string>
+    <string name="more_options">More options</string>
+    <string name="yt_music">YouTube Music</string>
+    <string name="playlist_label">Playlist</string>
+
+    <!-- Playlist Management -->
+    <string name="favorites_playlist_name">Favorites</string>
+    <string name="favorites_playlist_description">Your favorite songs</string>
 </resources>

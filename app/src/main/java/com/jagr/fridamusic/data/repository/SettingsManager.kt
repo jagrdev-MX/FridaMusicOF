@@ -53,4 +53,8 @@ class SettingsManager(context: Context) {
     var lastPosition: Long
         get() = prefs.getLong("last_position", 0L)
         set(value) = prefs.edit().putLong("last_position", value).apply()
+
+    var searchHistory: String
+        get() = prefs.getString("search_history", "") ?: ""
+        set(value) = prefs.edit().putString("search_history", value).apply()
 }

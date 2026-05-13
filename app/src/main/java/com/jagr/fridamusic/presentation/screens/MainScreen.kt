@@ -7,6 +7,8 @@ import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -31,6 +33,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.res.stringResource
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.net.URLDecoder
@@ -52,7 +56,8 @@ fun MainScreen() {
     val currentPositionState = libraryViewModel.currentPosition.collectAsState()
 
     val isCurrentSongLiked = remember(currentSong, playlists) {
-        val likedPlaylist = playlists.find { it.name == "Me gusta" }
+        val favoritesName = context.getString(R.string.favorites_playlist_name)
+        val likedPlaylist = playlists.find { it.name == favoritesName }
         currentSong?.let { song ->
             likedPlaylist?.songIds?.contains(song.id) == true
         } ?: false
@@ -60,7 +65,6 @@ fun MainScreen() {
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
 
-    // Estados de navegación y scroll
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
@@ -209,8 +213,20 @@ fun MainScreen() {
 
         AnimatedVisibility(
             visible = isPlayerExpanded,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it })
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
         ) {
             NowPlayingScreen(
                 currentSong = currentSong,

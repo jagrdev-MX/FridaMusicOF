@@ -19,7 +19,6 @@
         android:roundIcon="@drawable/logofmpr"
         android:supportsRtl="true"
         android:theme="@style/Theme.FridaMusic">
-
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-4175362947670909~4405267564" />
@@ -31,7 +30,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar"> <intent-filter>
+            android:theme="@style/Theme.FridaMusic"> <intent-filter>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>

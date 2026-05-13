@@ -32,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
@@ -81,14 +83,11 @@ fun HomeScreen(
 
 @Composable
 private fun WelcomeSection(onProfileClick: () -> Unit) {
-    val greeting = remember {
-        val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        when (currentHour) {
-            in 5..11 -> "Good Morning"
-            in 12..17 -> "Good Afternoon"
-            in 18..21 -> "Good Evening"
-            else -> "Good Night"
-        }
+    val greeting = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+        in 5..11 -> stringResource(R.string.good_morning)
+        in 12..17 -> stringResource(R.string.good_afternoon)
+        in 18..21 -> stringResource(R.string.good_evening)
+        else -> stringResource(R.string.good_night)
     }
 
     Row(
@@ -106,7 +105,7 @@ private fun WelcomeSection(onProfileClick: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Your personal liquid soundscape.",
+                text = stringResource(R.string.personal_soundscape),
                 style = LiquidTypography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -151,8 +150,8 @@ private fun RecentlyPlayedSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Recently Played", style = LiquidTypography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
-            Text("See All", style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            Text(stringResource(R.string.recently_played), style = LiquidTypography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+            Text(stringResource(R.string.see_all), style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
         }
 
         if (mainSong != null) {
@@ -190,7 +189,7 @@ private fun RecentlyPlayedSection(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                        Text("NOW PLAYING", style = LiquidTypography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.now_playing), style = LiquidTypography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Text(
                             text = mainSong.title,
                             style = LiquidTypography.headlineMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
@@ -199,7 +198,7 @@ private fun RecentlyPlayedSection(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = mainSong.artist ?: "Unknown Artist",
+                            text = mainSong.artist ?: stringResource(R.string.unknown_artist),
                             style = LiquidTypography.bodySmall,
                             color = Color.White.copy(alpha = 0.7f),
                             maxLines = 1,
@@ -261,16 +260,17 @@ private fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifi
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(song.title, style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist ?: "Unknown", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(song.artist ?: stringResource(R.string.unknown), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
 private fun TopArtistsSection(songs: List<Song>, viewModel: LibraryViewModels) {
-    val artists = remember(songs) {
+    val unknownStr = stringResource(R.string.unknown)
+    val artists = remember(songs, unknownStr) {
         songs.mapNotNull { it.artist }
-            .filter { it.isNotBlank() && !it.contains("unknown", ignoreCase = true) }
+            .filter { it.isNotBlank() && !it.contains(unknownStr, ignoreCase = true) && !it.contains("unknown", ignoreCase = true) }
             .distinct()
             .take(10)
     }
@@ -278,7 +278,7 @@ private fun TopArtistsSection(songs: List<Song>, viewModel: LibraryViewModels) {
     if (artists.isEmpty()) return
 
     Column {
-        Text("Top Artists", style = LiquidTypography.headlineMedium, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(bottom = 16.dp))
+        Text(stringResource(R.string.top_artists), style = LiquidTypography.headlineMedium, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(bottom = 16.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = 20.dp)) {
             itemsIndexed(artists) { index, artistName ->
                 ArtistItem(name = artistName, isActive = index == 0, viewModel = viewModel)

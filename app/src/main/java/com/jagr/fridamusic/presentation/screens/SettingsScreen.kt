@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.AppTheme
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
@@ -78,7 +80,7 @@ fun SettingsScreen(
         ) {
             item {
                 Text(
-                    text = "Settings",
+                    text = stringResource(R.string.settings),
                     style = LiquidTypography.displayLarge.copy(fontSize = 28.sp),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -86,16 +88,16 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection(title = "ABOUT") {
+                SettingsSection(title = stringResource(R.string.about)) {
                     AppInfoItem()
                 }
             }
 
             item {
-                SettingsSection(title = "APPEARANCE") {
+                SettingsSection(title = stringResource(R.string.appearance)) {
                     SettingsNavigationItem(
                         icon = Icons.Default.Palette,
-                        title = "Theme",
+                        title = stringResource(R.string.theme),
                         value = currentTheme.displayName,
                         onClick = { showThemeDialog = true }
                     )
@@ -103,33 +105,34 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection(title = "PLAYBACK") {
+                SettingsSection(title = stringResource(R.string.playback)) {
                     SettingsNavigationItem(
                         icon = Icons.Default.GraphicEq,
-                        title = "Equalizer",
-                        value = "System",
+                        title = stringResource(R.string.equalizer),
+                        value = stringResource(R.string.system),
                         onClick = {
                             try {
                                 viewModel.openSystemEqualizer { intent -> context.startActivity(intent) }
                             } catch (e: Exception) {
-                                Toast.makeText(context, "No equalizer found on this device", Toast.LENGTH_SHORT).show()
+                                val msg = context.getString(R.string.no_equalizer_found)
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
                         }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
                     SettingsToggleItem(
                         icon = Icons.Default.SkipNext,
-                        title = "Gapless Playback",
+                        title = stringResource(R.string.gapless_playback),
                         isChecked = gaplessPlayback,
                         onCheckedChange = { viewModel.updateGapless(it) }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
                     SettingsSliderItem(
                         icon = Icons.AutoMirrored.Filled.CompareArrows,
-                        title = "Crossfade",
+                        title = stringResource(R.string.crossfade),
                         value = crossfadeDuration,
                         valueRange = 0f..10f,
-                        leftLabel = "Off",
+                        leftLabel = stringResource(R.string.off_label),
                         rightLabel = "10s",
                         onValueChange = { viewModel.updateCrossfade(it) }
                     )
@@ -137,20 +140,21 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection(title = "LIBRARY & STORAGE") {
+                SettingsSection(title = stringResource(R.string.library_storage)) {
                     SettingsNavigationItem(
                         icon = Icons.Default.Sync,
-                        title = "Scan for new music",
-                        value = "Update",
+                        title = stringResource(R.string.scan_new_music),
+                        value = stringResource(R.string.update),
                         onClick = {
                             viewModel.loadSongs()
-                            Toast.makeText(context, "Scanning library...", Toast.LENGTH_SHORT).show()
+                            val msg = context.getString(R.string.scanning_library)
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
                     SettingsToggleItem(
                         icon = Icons.Default.VoiceOverOff,
-                        title = "Filter Voice Notes",
+                        title = stringResource(R.string.filter_voice_notes),
                         isChecked = filterVoiceNotes,
                         onCheckedChange = { viewModel.updateFilterVoiceNotes(it) }
                     )
@@ -158,24 +162,24 @@ fun SettingsScreen(
             }
 
             item {
-                SettingsSection(title = "GENERAL") {
+                SettingsSection(title = stringResource(R.string.general)) {
                     SettingsNavigationItem(
                         icon = Icons.Default.Timer,
-                        title = "Sleep Timer",
-                        value = if (sleepTimer > 0) "$sleepTimer min" else "Off",
+                        title = stringResource(R.string.sleep_timer),
+                        value = if (sleepTimer > 0) stringResource(R.string.min_format, sleepTimer) else stringResource(R.string.off_label),
                         onClick = { showTimerDialog = true }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
                     SettingsToggleItem(
                         icon = Icons.Default.Lightbulb,
-                        title = "Keep Screen On",
+                        title = stringResource(R.string.keep_screen_on),
                         isChecked = keepScreenOn,
                         onCheckedChange = { viewModel.updateKeepScreenOn(it) }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                     SettingsToggleItem(
                         icon = Icons.Default.History,
-                        title = "Remember Last Played",
+                        title = stringResource(R.string.remember_last_played),
                         isChecked = saveLastPlayback,
                         onCheckedChange = { viewModel.updateSaveLastPlayback(it) }
                     )
@@ -209,17 +213,17 @@ fun SettingsScreen(
 private fun SleepTimerDialog(onDismiss: () -> Unit, onSetTimer: (Int) -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sleep Timer", color = MaterialTheme.colorScheme.onSurface) },
-        text = { Text("Stop audio after:", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        title = { Text(stringResource(R.string.sleep_timer), color = MaterialTheme.colorScheme.onSurface) },
+        text = { Text(stringResource(R.string.stop_audio_after), color = MaterialTheme.colorScheme.onSurfaceVariant) },
         containerColor = MaterialTheme.colorScheme.surface,
         confirmButton = {
             TextButton(onClick = { onSetTimer(15); onDismiss() }) {
-                Text("15 min", color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.min_format, 15), color = MaterialTheme.colorScheme.primary)
             }
         },
         dismissButton = {
             TextButton(onClick = { onSetTimer(0); onDismiss() }) {
-                Text("Off", color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.off_label), color = MaterialTheme.colorScheme.onSurface)
             }
         }
     )
@@ -233,11 +237,16 @@ private fun ThemeSelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("App Theme", color = MaterialTheme.colorScheme.onSurface) },
+        title = { Text(stringResource(R.string.app_theme), color = MaterialTheme.colorScheme.onSurface) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column {
                 AppTheme.entries.forEach { themeOption ->
+                    val themeName = when(themeOption) {
+                        AppTheme.SYSTEM -> stringResource(R.string.theme_system)
+                        AppTheme.LIGHT -> stringResource(R.string.theme_light)
+                        AppTheme.DARK -> stringResource(R.string.theme_dark)
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -260,14 +269,14 @@ private fun ThemeSelectionDialog(
                             )
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = themeOption.displayName, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = themeName, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.cancel), color = MaterialTheme.colorScheme.primary)
             }
         }
     )
@@ -314,8 +323,8 @@ private fun AppInfoItem() {
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = "Frida Music", style = LiquidTypography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onBackground)
-            Text(text = "Local Audio Player • v1.0.0", style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = stringResource(R.string.app_name), style = LiquidTypography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onBackground)
+            Text(text = stringResource(R.string.local_audio_player) + " • v1.0.0", style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
