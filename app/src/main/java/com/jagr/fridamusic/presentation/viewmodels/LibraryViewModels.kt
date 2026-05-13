@@ -15,7 +15,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaylistEntity
 import com.jagr.fridamusic.data.remote.innertube.ResultType
@@ -139,6 +142,18 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     @OptIn(UnstableApi::class)
+    private fun createExoPlayer(): ExoPlayer {
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .setAllowCrossProtocolRedirects(true)
+        val dataSourceFactory = DefaultDataSource.Factory(getApplication(), httpDataSourceFactory)
+
+        return ExoPlayer.Builder(getApplication())
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .build()
+    }
+
+    @OptIn(UnstableApi::class)
     fun playSong(song: Song) {
         if (_currentSong.value?.id == song.id && exoPlayer != null) {
             togglePlayback()
@@ -148,7 +163,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         saveCurrentPlaybackState()
 
         exoPlayer?.release()
-        exoPlayer = ExoPlayer.Builder(getApplication()).build().apply {
+        exoPlayer = createExoPlayer().apply {
             setMediaItem(MediaItem.fromUri(song.uri))
             repeatMode = when (this@LibraryViewModels.repeatMode.value) {
                 RepeatMode.OFF -> Player.REPEAT_MODE_OFF
@@ -348,7 +363,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             _duration.value = settingsManager.lastSongDuration
             _currentAlbumArt.value = settingsManager.lastSongArtwork
 
-            exoPlayer = ExoPlayer.Builder(getApplication()).build().apply {
+            exoPlayer = createExoPlayer().apply {
                 val uriString = settingsManager.lastSongUri
                 if (!uriString.isNullOrBlank()) {
                     setMediaItem(MediaItem.fromUri(Uri.parse(uriString)))
