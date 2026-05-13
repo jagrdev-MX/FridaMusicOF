@@ -13,4 +13,5 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
           -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+          -d "message_thread_id=24" \
           -d "text=🚀 New FridaMusic Release: ${{ github.event.release.tag_name }}"
