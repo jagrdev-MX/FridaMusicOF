@@ -1,4 +1,4 @@
-name: Telegram AI Smart Release Notify
+name: Telegram Local Smart Release Notify
 
 on:
   release:
@@ -12,10 +12,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 50
+          fetch-depth: 80
 
-      - name: Build release context
-        id: ctx
+      - name: Build local smart intelligence
+        id: smart
         shell: bash
         run: |
           TAG="${{ github.event.release.tag_name }}"
@@ -28,60 +28,61 @@ jobs:
           PREV_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
 
           if [ -n "$PREV_TAG" ]; then
-            CHANGED_FILES="$(git diff --name-only "$PREV_TAG"..HEAD | head -80 | tr '\n' ' ')"
-            COMMITS="$(git log --pretty=format:'- %s' "$PREV_TAG"..HEAD | head -30)"
+            FILES="$(git diff --name-only "$PREV_TAG"..HEAD | head -120 | tr '\n' ' ')"
+            COMMITS="$(git log --pretty=format:'%s' "$PREV_TAG"..HEAD | head -40 | tr '\n' ' ')"
           else
-            CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r HEAD | head -80 | tr '\n' ' ')"
-            COMMITS="$(git log --pretty=format:'- %s' -20)"
+            FILES="$(git diff-tree --no-commit-id --name-only -r HEAD | head -120 | tr '\n' ' ')"
+            COMMITS="$(git log --pretty=format:'%s' -30 | tr '\n' ' ')"
           fi
 
-          {
-            echo "tag=$TAG"
-            echo "title=$TITLE"
-            echo "author=$AUTHOR"
-            echo "url=$URL"
-            echo "is_prerelease=$IS_PRERELEASE"
-            echo "body<<EOF"
-            echo "$BODY"
-            echo "EOF"
-            echo "changed_files<<EOF"
-            echo "$CHANGED_FILES"
-            echo "EOF"
-            echo "commits<<EOF"
-            echo "$COMMITS"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          CONTEXT="$(printf "%s %s %s %s %s" "$TAG" "$TITLE" "$BODY" "$FILES" "$COMMITS" | tr '[:upper:]' '[:lower:]')"
 
-      - name: Local fallback intelligence
-        id: fallback
-        shell: bash
-        run: |
-          TAG="${{ steps.ctx.outputs.tag }}"
-          TITLE="${{ steps.ctx.outputs.title }}"
-          BODY="${{ steps.ctx.outputs.body }}"
-          FILES="${{ steps.ctx.outputs.changed_files }}"
-          COMMITS="${{ steps.ctx.outputs.commits }}"
-          IS_PRERELEASE="${{ steps.ctx.outputs.is_prerelease }}"
+          APK_SCORE=0
+          WEB_SCORE=0
+          UI_SCORE=0
+          AUDIO_SCORE=0
+          FIX_SCORE=0
+          FEATURE_SCORE=0
+          TECH_SCORE=0
+          MAJOR_SCORE=0
 
-          FULL_CONTEXT="$(printf "%s %s %s %s %s" "$TAG" "$TITLE" "$BODY" "$FILES" "$COMMITS" | tr '[:upper:]' '[:lower:]')"
+          add_score() {
+            if echo "$CONTEXT" | grep -Eiq "$1"; then
+              eval "$2=\$(( $2 + $3 ))"
+            fi
+          }
 
-          if [ "$IS_PRERELEASE" = "true" ] || echo "$FULL_CONTEXT" | grep -Eiq "beta|alpha|test|testing|preview|internal"; then
-            TYPE_EN="Beta"
-            TYPE_ES="Beta"
+          add_score "apk|android|gradle|kotlin|manifest|mainactivity|drawable|mipmap|exoplayer|player|mobile|app/" APK_SCORE 5
+          add_score "website|web|vercel|landing|frontend|index\.html|package\.json|vite|next|react|site" WEB_SCORE 5
+          add_score "ui|ux|design|layout|icon|logo|splash|theme|visual|interfaz|diseño" UI_SCORE 4
+          add_score "audio|music|youtube|metadata|cover|lyrics|player|stream|playback|song" AUDIO_SCORE 4
+          add_score "fix|bug|patch|hotfix|crash|error|arreglo|corrige|repair|solve" FIX_SCORE 4
+          add_score "feat|feature|new|nuevo|add|added|implement|improvement|mejora|upgrade" FEATURE_SCORE 4
+          add_score "ci|workflow|github|actions|build|release|version|refactor|cache|backend|api" TECH_SCORE 3
+          add_score "breaking|major|migration|architecture|overhaul|redesign|rewrite" MAJOR_SCORE 8
+
+          if [ "$IS_PRERELEASE" = "true" ] || echo "$CONTEXT" | grep -Eiq "beta|alpha|preview|test|testing|internal"; then
+            TYPE_EN="Beta Build"
+            TYPE_ES="Versión Beta"
+            TYPE_EMOJI="🧪"
           else
             TYPE_EN="Official Release"
             TYPE_ES="Release oficial"
+            TYPE_EMOJI="🚀"
           fi
 
-          if echo "$FULL_CONTEXT" | grep -Eiq "website|web|vercel|index\.html|package\.json|landing|site|frontend"; then
-            TARGET_EN="Official website"
-            TARGET_ES="Website oficial"
-          elif echo "$FULL_CONTEXT" | grep -Eiq "apk|android|app/|gradle|kotlin|mainactivity|manifest|drawable|mipmap|player|exoplayer|mobile"; then
-            TARGET_EN="APK / Android application"
+          if [ "$APK_SCORE" -gt "$WEB_SCORE" ]; then
+            TARGET_EN="APK / Android Application"
             TARGET_ES="APK / Aplicación Android"
+            TARGET_EMOJI="📱"
+          elif [ "$WEB_SCORE" -gt "$APK_SCORE" ]; then
+            TARGET_EN="Official Website"
+            TARGET_ES="Website oficial"
+            TARGET_EMOJI="🌐"
           else
-            TARGET_EN="FridaMusic project"
+            TARGET_EN="FridaMusic Project"
             TARGET_ES="Proyecto FridaMusic"
+            TARGET_EMOJI="🎵"
           fi
 
           VERSION="${TAG#v}"
@@ -91,230 +92,90 @@ jobs:
           MINOR="${MINOR:-0}"
           PATCH="${PATCH:-0}"
 
-          if echo "$FULL_CONTEXT" | grep -Eiq "breaking|major|overhaul|redesign|architecture|migration"; then
-            LEVEL_EN="Major update"
+          if [ "$MAJOR_SCORE" -ge 8 ] || { [ "$MAJOR" -gt 0 ] && [ "$MINOR" = "0" ] && [ "$PATCH" = "0" ]; }; then
+            LEVEL_EN="Major Update"
             LEVEL_ES="Actualización mayor"
-            EMOJI="🔥"
-          elif echo "$FULL_CONTEXT" | grep -Eiq "feature|feat|improvement|mejora|new|nuevo|add|added|agrega|implement"; then
-            LEVEL_EN="Medium update"
+            LEVEL_EMOJI="🔥"
+          elif [ "$FEATURE_SCORE" -ge "$FIX_SCORE" ] && { [ "$FEATURE_SCORE" -gt 0 ] || [ "$MINOR" -gt 0 ]; }; then
+            LEVEL_EN="Medium Update"
             LEVEL_ES="Actualización media"
-            EMOJI="🚀"
-          elif echo "$FULL_CONTEXT" | grep -Eiq "fix|bug|patch|hotfix|arreglo|corrige|error|crash"; then
-            LEVEL_EN="Minor fix"
+            LEVEL_EMOJI="⚡"
+          elif [ "$FIX_SCORE" -gt 0 ] || [ "$PATCH" -gt 0 ]; then
+            LEVEL_EN="Minor Fix"
             LEVEL_ES="Fix menor"
-            EMOJI="🛠"
-          elif [ "$MAJOR" -gt 0 ] && [ "$MINOR" = "0" ] && [ "$PATCH" = "0" ]; then
-            LEVEL_EN="Major update"
-            LEVEL_ES="Actualización mayor"
-            EMOJI="🔥"
-          elif [ "$MINOR" -gt 0 ] && [ "$PATCH" = "0" ]; then
-            LEVEL_EN="Medium update"
-            LEVEL_ES="Actualización media"
-            EMOJI="🚀"
+            LEVEL_EMOJI="🛠"
           else
-            LEVEL_EN="Minor fix"
-            LEVEL_ES="Fix menor"
-            EMOJI="🛠"
+            LEVEL_EN="General Update"
+            LEVEL_ES="Actualización general"
+            LEVEL_EMOJI="🎵"
           fi
 
-          if echo "$FULL_CONTEXT" | grep -Eiq "ui|ux|design|interfaz|diseño|layout|icon|logo|splash"; then
-            SUMMARY_EN="Visual and user experience improvements were added."
-            SUMMARY_ES="Se agregaron mejoras visuales y de experiencia de usuario."
-          elif echo "$FULL_CONTEXT" | grep -Eiq "player|audio|exoplayer|youtube|music|metadata|cover|lyrics"; then
-            SUMMARY_EN="Playback, music experience, metadata, or audio stability was improved."
-            SUMMARY_ES="Se mejoró la reproducción, experiencia musical, metadata o estabilidad de audio."
-          elif echo "$FULL_CONTEXT" | grep -Eiq "website|web|vercel|index\.html|landing|site"; then
-            SUMMARY_EN="The official FridaMusic website was updated."
-            SUMMARY_ES="Se actualizó la website oficial de FridaMusic."
-          elif echo "$FULL_CONTEXT" | grep -Eiq "fix|bug|hotfix|patch|error|crash"; then
-            SUMMARY_EN="Bugs were fixed to improve stability and reliability."
-            SUMMARY_ES="Se corrigieron errores para mejorar estabilidad y confiabilidad."
+          if [ "$UI_SCORE" -gt 0 ] && [ "$AUDIO_SCORE" -gt 0 ]; then
+            SUMMARY_EN="UI/UX and music playback areas received improvements for a cleaner and more stable experience."
+            SUMMARY_ES="Se mejoraron áreas de UI/UX y reproducción musical para una experiencia más limpia y estable."
+          elif [ "$UI_SCORE" -gt 0 ]; then
+            SUMMARY_EN="Visual interface and user experience improvements were applied."
+            SUMMARY_ES="Se aplicaron mejoras visuales, de interfaz y experiencia de usuario."
+          elif [ "$AUDIO_SCORE" -gt 0 ]; then
+            SUMMARY_EN="Music playback, metadata, covers, lyrics, or audio stability were improved."
+            SUMMARY_ES="Se mejoró reproducción, metadata, carátulas, lyrics o estabilidad de audio."
+          elif [ "$WEB_SCORE" -gt "$APK_SCORE" ]; then
+            SUMMARY_EN="The official FridaMusic website received presentation, navigation, or deployment improvements."
+            SUMMARY_ES="La website oficial de FridaMusic recibió mejoras de presentación, navegación o despliegue."
+          elif [ "$FIX_SCORE" -gt 0 ]; then
+            SUMMARY_EN="Stability fixes were applied to improve reliability and reduce unexpected behavior."
+            SUMMARY_ES="Se aplicaron correcciones de estabilidad para mejorar confiabilidad y reducir errores."
+          elif [ "$TECH_SCORE" -gt 0 ]; then
+            SUMMARY_EN="Internal technical improvements were added to strengthen the release workflow and project base."
+            SUMMARY_ES="Se agregaron mejoras técnicas internas para fortalecer el flujo de releases y la base del proyecto."
           else
-            SUMMARY_EN="A new FridaMusic update was published with general improvements."
-            SUMMARY_ES="Se publicó una nueva actualización de FridaMusic con mejoras generales."
+            SUMMARY_EN="A new FridaMusic update was published with general improvements and project refinements."
+            SUMMARY_ES="Se publicó una nueva actualización de FridaMusic con mejoras generales y refinamientos del proyecto."
           fi
 
-          {
-            echo "type_en=$TYPE_EN"
-            echo "type_es=$TYPE_ES"
-            echo "target_en=$TARGET_EN"
-            echo "target_es=$TARGET_ES"
-            echo "level_en=$LEVEL_EN"
-            echo "level_es=$LEVEL_ES"
-            echo "summary_en=$SUMMARY_EN"
-            echo "summary_es=$SUMMARY_ES"
-            echo "emoji=$EMOJI"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Try AI intelligence
-        id: ai
-        shell: bash
-        continue-on-error: true
-        run: |
-          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
-            echo "AI key missing. Skipping AI."
-            exit 0
-          fi
-
-          PROMPT=$(cat <<'EOF'
-          You are FridaMusic release intelligence.
-
-          Return ONLY compact JSON.
-
-          Rules:
-          - Bilingual English and Spanish.
-          - Detect if this is Beta or Official Release.
-          - Detect target: APK Android app, official website, or general project.
-          - Detect level: minor fix, medium update, major update.
-          - Explain what changed in one short sentence per language.
-          - Do not invent changes. Use only provided context.
-          - Tone: professional, concise, startup/open-source.
-
-          Required JSON:
-          {
-            "type_en": "",
-            "type_es": "",
-            "target_en": "",
-            "target_es": "",
-            "level_en": "",
-            "level_es": "",
-            "summary_en": "",
-            "summary_es": "",
-            "emoji": ""
-          }
-
-          Context:
-          Tag: ${{ steps.ctx.outputs.tag }}
-          Title: ${{ steps.ctx.outputs.title }}
-          Author: ${{ steps.ctx.outputs.author }}
-          Is prerelease: ${{ steps.ctx.outputs.is_prerelease }}
-          Release body: ${{ steps.ctx.outputs.body }}
-          Changed files: ${{ steps.ctx.outputs.changed_files }}
-          Commits: ${{ steps.ctx.outputs.commits }}
-          EOF
-          )
-
-          RESPONSE=$(curl -s https://api.openai.com/v1/responses \
-            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n \
-              --arg model "gpt-4.1-mini" \
-              --arg input "$PROMPT" \
-              '{model:$model,input:$input}')")
-
-          AI_TEXT=$(echo "$RESPONSE" | jq -r '.output[0].content[0].text // empty')
-
-          if [ -z "$AI_TEXT" ]; then
-            echo "AI returned empty response. Using fallback."
-            exit 0
-          fi
-
-          echo "$AI_TEXT" > ai.json
-
-          if ! jq empty ai.json >/dev/null 2>&1; then
-            echo "AI returned invalid JSON. Using fallback."
-            exit 0
-          fi
-
-          {
-            echo "type_en=$(jq -r '.type_en // empty' ai.json)"
-            echo "type_es=$(jq -r '.type_es // empty' ai.json)"
-            echo "target_en=$(jq -r '.target_en // empty' ai.json)"
-            echo "target_es=$(jq -r '.target_es // empty' ai.json)"
-            echo "level_en=$(jq -r '.level_en // empty' ai.json)"
-            echo "level_es=$(jq -r '.level_es // empty' ai.json)"
-            echo "summary_en=$(jq -r '.summary_en // empty' ai.json)"
-            echo "summary_es=$(jq -r '.summary_es // empty' ai.json)"
-            echo "emoji=$(jq -r '.emoji // empty' ai.json)"
-            echo "ai_success=true"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Choose final intelligence
-        id: final
-        shell: bash
-        run: |
-          pick() {
-            AI_VALUE="$1"
-            FALLBACK_VALUE="$2"
-
-            if [ -n "$AI_VALUE" ] && [ "$AI_VALUE" != "null" ]; then
-              echo "$AI_VALUE"
-            else
-              echo "$FALLBACK_VALUE"
-            fi
-          }
-
-          TYPE_EN="$(pick "${{ steps.ai.outputs.type_en }}" "${{ steps.fallback.outputs.type_en }}")"
-          TYPE_ES="$(pick "${{ steps.ai.outputs.type_es }}" "${{ steps.fallback.outputs.type_es }}")"
-          TARGET_EN="$(pick "${{ steps.ai.outputs.target_en }}" "${{ steps.fallback.outputs.target_en }}")"
-          TARGET_ES="$(pick "${{ steps.ai.outputs.target_es }}" "${{ steps.fallback.outputs.target_es }}")"
-          LEVEL_EN="$(pick "${{ steps.ai.outputs.level_en }}" "${{ steps.fallback.outputs.level_en }}")"
-          LEVEL_ES="$(pick "${{ steps.ai.outputs.level_es }}" "${{ steps.fallback.outputs.level_es }}")"
-          SUMMARY_EN="$(pick "${{ steps.ai.outputs.summary_en }}" "${{ steps.fallback.outputs.summary_en }}")"
-          SUMMARY_ES="$(pick "${{ steps.ai.outputs.summary_es }}" "${{ steps.fallback.outputs.summary_es }}")"
-          EMOJI="$(pick "${{ steps.ai.outputs.emoji }}" "${{ steps.fallback.outputs.emoji }}")"
-
-          {
-            echo "type_en=$TYPE_EN"
-            echo "type_es=$TYPE_ES"
-            echo "target_en=$TARGET_EN"
-            echo "target_es=$TARGET_ES"
-            echo "level_en=$LEVEL_EN"
-            echo "level_es=$LEVEL_ES"
-            echo "summary_en=$SUMMARY_EN"
-            echo "summary_es=$SUMMARY_ES"
-            echo "emoji=$EMOJI"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Choose media
-        id: media
-        shell: bash
-        run: |
-          TEXT="${{ steps.final.outputs.type_en }} ${{ steps.final.outputs.target_en }} ${{ steps.final.outputs.level_en }}"
-          TEXT="$(echo "$TEXT" | tr '[:upper:]' '[:lower:]')"
-
-          if echo "$TEXT" | grep -q "beta"; then
+          if echo "$TYPE_EN $TARGET_EN $LEVEL_EN" | tr '[:upper:]' '[:lower:]' | grep -q "beta"; then
             MEDIA_URL="https://media.giphy.com/media/l0HlNaQ6gWfllcjDO/giphy.gif"
-          elif echo "$TEXT" | grep -q "website\|web"; then
+          elif echo "$TARGET_EN" | tr '[:upper:]' '[:lower:]' | grep -q "website"; then
             MEDIA_URL="https://media.giphy.com/media/13HgwGsXF0aiGY/giphy.gif"
-          elif echo "$TEXT" | grep -q "major"; then
+          elif echo "$LEVEL_EN" | tr '[:upper:]' '[:lower:]' | grep -q "major"; then
             MEDIA_URL="https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif"
-          elif echo "$TEXT" | grep -q "minor\|fix"; then
+          elif echo "$LEVEL_EN" | tr '[:upper:]' '[:lower:]' | grep -q "fix"; then
             MEDIA_URL="https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif"
           else
             MEDIA_URL="https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif"
           fi
 
-          echo "media_url=$MEDIA_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Send Telegram notification
-        shell: bash
-        run: |
-          CAPTION="${{ steps.final.outputs.emoji }} <b>FridaMusic Update</b>%0A"
+          CAPTION="${TYPE_EMOJI} <b>FridaMusic Smart Update</b>%0A"
           CAPTION+="━━━━━━━━━━━━━━%0A%0A"
           CAPTION+="🇺🇸 <b>English</b>%0A"
-          CAPTION+="📦 <b>Type:</b> ${{ steps.final.outputs.type_en }}%0A"
-          CAPTION+="🎯 <b>Target:</b> ${{ steps.final.outputs.target_en }}%0A"
-          CAPTION+="🏷 <b>Version:</b> ${{ steps.ctx.outputs.tag }}%0A"
-          CAPTION+="🛠 <b>Level:</b> ${{ steps.final.outputs.level_en }}%0A"
-          CAPTION+="👤 <b>Contributor:</b> ${{ steps.ctx.outputs.author }}%0A"
-          CAPTION+="🧠 <b>Summary:</b> ${{ steps.final.outputs.summary_en }}%0A%0A"
+          CAPTION+="📦 <b>Type:</b> ${TYPE_EN}%0A"
+          CAPTION+="${TARGET_EMOJI} <b>Target:</b> ${TARGET_EN}%0A"
+          CAPTION+="🏷 <b>Version:</b> ${TAG}%0A"
+          CAPTION+="${LEVEL_EMOJI} <b>Level:</b> ${LEVEL_EN}%0A"
+          CAPTION+="👤 <b>Contributor:</b> ${AUTHOR}%0A"
+          CAPTION+="🧠 <b>Detected summary:</b> ${SUMMARY_EN}%0A%0A"
           CAPTION+="🇲🇽 <b>Español</b>%0A"
-          CAPTION+="📦 <b>Tipo:</b> ${{ steps.final.outputs.type_es }}%0A"
-          CAPTION+="🎯 <b>Objetivo:</b> ${{ steps.final.outputs.target_es }}%0A"
-          CAPTION+="🏷 <b>Versión:</b> ${{ steps.ctx.outputs.tag }}%0A"
-          CAPTION+="🛠 <b>Nivel:</b> ${{ steps.final.outputs.level_es }}%0A"
-          CAPTION+="👤 <b>Colaborador:</b> ${{ steps.ctx.outputs.author }}%0A"
-          CAPTION+="🧠 <b>Resumen:</b> ${{ steps.final.outputs.summary_es }}%0A%0A"
-          CAPTION+="📥 <b>Download / Descargar:</b>%0A${{ steps.ctx.outputs.url }}%0A%0A"
+          CAPTION+="📦 <b>Tipo:</b> ${TYPE_ES}%0A"
+          CAPTION+="${TARGET_EMOJI} <b>Objetivo:</b> ${TARGET_ES}%0A"
+          CAPTION+="🏷 <b>Versión:</b> ${TAG}%0A"
+          CAPTION+="${LEVEL_EMOJI} <b>Nivel:</b> ${LEVEL_ES}%0A"
+          CAPTION+="👤 <b>Colaborador:</b> ${AUTHOR}%0A"
+          CAPTION+="🧠 <b>Resumen detectado:</b> ${SUMMARY_ES}%0A%0A"
+          CAPTION+="📥 <b>Download / Descargar:</b>%0A${URL}%0A%0A"
           CAPTION+="━━━━━━━━━━━━━━%0A"
           CAPTION+="👨‍💻 <b>Lead:</b> JAGR Developer%0A"
           CAPTION+="🏢 <b>Organization:</b> Frida Labs%0A"
           CAPTION+="🎵 <b>Project:</b> FridaMusic"
 
+          echo "caption=$CAPTION" >> "$GITHUB_OUTPUT"
+          echo "media_url=$MEDIA_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Send Telegram smart notification
+        shell: bash
+        run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendAnimation" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d "message_thread_id=24" \
-            -d "animation=${{ steps.media.outputs.media_url }}" \
+            -d "animation=${{ steps.smart.outputs.media_url }}" \
             -d "parse_mode=HTML" \
-            -d "caption=$CAPTION"
+            -d "caption=${{ steps.smart.outputs.caption }}"
