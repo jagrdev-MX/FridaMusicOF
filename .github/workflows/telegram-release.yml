@@ -9,10 +9,52 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Build Telegram message
+        id: msg
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          AUTHOR="${{ github.event.release.author.login }}"
+          URL="${{ github.event.release.html_url }}"
+          IS_PRERELEASE="${{ github.event.release.prerelease }}"
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            RELEASE_TYPE="🧪 Beta"
+          else
+            RELEASE_TYPE="🚀 Release"
+          fi
+
+          VERSION="${TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          MAJOR="${MAJOR:-0}"
+          MINOR="${MINOR:-0}"
+          PATCH="${PATCH:-0}"
+
+          if [ "$MAJOR" -gt 0 ] && [ "$MINOR" = "0" ] && [ "$PATCH" = "0" ]; then
+            UPDATE_LEVEL="🔴 Major / Mayor"
+          elif [ "$MINOR" -gt 0 ] && [ "$PATCH" = "0" ]; then
+            UPDATE_LEVEL="🟡 Medium / Medio"
+          else
+            UPDATE_LEVEL="🟢 Minor Fix / Fix menor"
+          fi
+
+          TEXT="🎵 <b>FridaMusic Update</b>%0A%0A"
+          TEXT+="📦 Type / Tipo: <b>${RELEASE_TYPE}</b>%0A"
+          TEXT+="🏷 Version / Versión: <b>${TAG}</b>%0A"
+          TEXT+="🛠 Update Level / Nivel: <b>${UPDATE_LEVEL}</b>%0A"
+          TEXT+="👤 Contributor / Colaborador: <b>${AUTHOR}</b>%0A%0A"
+          TEXT+="🔗 Download / Descargar:%0A${URL}%0A%0A"
+          TEXT+="👨‍💻 Lead Developer: JAGR Developer%0A"
+          TEXT+="🏢 Organization: Frida Labs%0A"
+          TEXT+="🎵 Project: FridaMusic"
+
+          echo "text=$TEXT" >> "$GITHUB_OUTPUT"
+
       - name: Send Telegram Message
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
           -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
           -d "message_thread_id=24" \
           -d "parse_mode=HTML" \
-          -d "text=🚀 <b>New FridaMusic Release</b>%0A%0A🏷 Version: <b>${{ github.event.release.tag_name }}</b>%0A📦 Download / Descargar:%0A${{ github.event.release.html_url }}%0A%0A👨‍💻 Lead: JAGR Developer%0A🏢 Organization: Frida Labs%0A🎵 Project: FridaMusic"
+          -d "text=${{ steps.msg.outputs.text }}"
