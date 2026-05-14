@@ -1,6 +1,7 @@
 package com.jagr.fridamusic.data.local
 
 import androidx.room.*
+import com.jagr.fridamusic.data.local.PlaylistEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -20,4 +21,6 @@ interface PlaylistDao {
 
     @Update
     suspend fun updatePlaylist(playlist: PlaylistEntity): Int
+    @Query("DELETE FROM playlists WHERE id = :id")
+    suspend fun deletePlaylistById(id: Long)
 }

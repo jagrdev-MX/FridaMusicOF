@@ -11,8 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,13 +24,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import androidx.compose.ui.res.stringResource
-import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.remote.innertube.ResultType
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
@@ -46,25 +41,21 @@ fun SearchScreen(
     onNavigateToArtist: (String, String) -> Unit = { _, _ -> }
 ) {
     var searchQuery by remember { mutableStateOf("") }
+
     val localSongs by viewModel.songs.collectAsState()
     val onlineResults by viewModel.youtubeSearchResults.collectAsState()
     val isExtracting by viewModel.isExtracting.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val searchHistory by viewModel.searchHistory.collectAsState()
 
-    val filters = listOf(
-        stringResource(R.string.all_filter),
-        stringResource(R.string.songs_filter),
-        stringResource(R.string.artists_filter),
-        stringResource(R.string.playlists_filter)
-    )
+    val filters = remember { listOf("Todo", "Canciones", "Artistas", "Listas") }
     var selectedFilter by remember { mutableStateOf(filters[0]) }
 
-    val filteredOnline = remember(onlineResults, selectedFilter, filters) {
+    val filteredOnline = remember(onlineResults, selectedFilter) {
         when (selectedFilter) {
-            filters[1] -> onlineResults.filter { it.type == ResultType.SONG }
-            filters[2] -> onlineResults.filter { it.type == ResultType.ARTIST }
-            filters[3] -> onlineResults.filter { it.type == ResultType.PLAYLIST }
+            "Canciones" -> onlineResults.filter { it.type == ResultType.SONG }
+            "Artistas" -> onlineResults.filter { it.type == ResultType.ARTIST }
+            "Listas" -> onlineResults.filter { it.type == ResultType.PLAYLIST }
             else -> onlineResults
         }
     }
@@ -112,64 +103,8 @@ fun SearchScreen(
                 SearchBar(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
-                    onClearQuery = { searchQuery = "" },
-                    onSearch = { query ->
-                        viewModel.addToSearchHistory(query)
-                        viewModel.searchYouTube(query)
-                    }
+                    onClearQuery = { searchQuery = "" }
                 )
-            }
-
-            if (searchQuery.isBlank() && searchHistory.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.recent_searches),
-                            style = LiquidTypography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        TextButton(onClick = { viewModel.clearSearchHistory() }) {
-                            Text(stringResource(R.string.clear_all), color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                }
-
-                items(searchHistory) { historyItem ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                searchQuery = historyItem
-                                viewModel.addToSearchHistory(historyItem)
-                                viewModel.searchYouTube(historyItem)
-                            }
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            text = historyItem,
-                            style = LiquidTypography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        IconButton(onClick = { viewModel.removeFromSearchHistory(historyItem) }) {
-                            Icon(
-                                Icons.Default.Close,
-                                null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
             }
 
             if (searchQuery.isNotBlank()) {
@@ -181,7 +116,53 @@ fun SearchScreen(
                     )
                 }
             }
+            if (searchQuery.isBlank() && searchHistory.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Búsquedas recientes",
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            text = "Borrar todo",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.clickable { viewModel.clearSearchHistory() }
+                        )
+                    }
+                }
 
+                items(searchHistory) { pastQuery ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                searchQuery = pastQuery
+                            }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            text = pastQuery,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontSize = 16.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { viewModel.removeFromSearchHistory(pastQuery) }) {
+                            Icon(Icons.Default.Close, contentDescription = "Eliminar del historial", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
             if (isSearching) {
                 item {
                     Box(
@@ -195,50 +176,47 @@ fun SearchScreen(
 
                 val topArtistResult = onlineResults.firstOrNull { it.type == ResultType.ARTIST }
 
-                if (topArtistResult != null && (selectedFilter == filters[0] || selectedFilter == filters[2])) {
+                if (topArtistResult != null && (selectedFilter == "Todo" || selectedFilter == "Artistas")) {
                     item {
                         ArtistTopResult(
                             artistName = topArtistResult.title,
                             imageUrl = topArtistResult.thumbnailUrl,
-                            onClick = {
-                                viewModel.addToSearchHistory(searchQuery)
-                                onNavigateToArtist(topArtistResult.title, topArtistResult.thumbnailUrl)
-                            }
+                            onClick = { onNavigateToArtist(topArtistResult.title, topArtistResult.thumbnailUrl) }
                         )
                     }
                 }
 
-                if (filteredOnline.isNotEmpty() && selectedFilter != filters[2]) {
+                if (filteredOnline.isNotEmpty() && selectedFilter != "Artistas") {
                     item {
-                        SectionTitle(title = if (selectedFilter == filters[0]) stringResource(R.string.results) else selectedFilter)
+                        SectionTitle(title = if (selectedFilter == "Todo") "Resultados" else selectedFilter)
                     }
                     items(filteredOnline.filter { it.type != ResultType.ARTIST }) { result ->
                         SpotifyStyleSongItem(
                             title = result.title,
-                            artist = result.artist ?: stringResource(R.string.unknown_artist_search),
+                            artist = result.artist ?: "Artista desconocido",
                             thumbnailUrl = result.thumbnailUrl,
                             isLocal = false,
                             isPlaylist = result.type == ResultType.PLAYLIST,
                             onClick = {
-                                viewModel.addToSearchHistory(searchQuery)
-                                if (result.type == ResultType.SONG) viewModel.playYouTubeSong(result)
+                                if (result.type == ResultType.SONG) {
+                                    viewModel.playYouTubeSong(result)
+                                }
                             }
                         )
                     }
                 }
 
-                if (filteredLocal.isNotEmpty() && (selectedFilter == filters[0] || selectedFilter == filters[1])) {
+                if (filteredLocal.isNotEmpty() && (selectedFilter == "Todo" || selectedFilter == "Canciones")) {
                     item {
-                        SectionTitle(title = stringResource(R.string.in_your_library))
+                        SectionTitle(title = "En tu biblioteca")
                     }
                     items(filteredLocal) { song ->
                         SpotifyStyleSongItem(
                             title = song.title,
-                            artist = song.artist ?: stringResource(R.string.unknown_artist),
+                            artist = song.artist ?: "Artista desconocido",
                             isLocal = true,
                             isPlaylist = false,
                             onClick = {
-                                viewModel.addToSearchHistory(searchQuery)
                                 viewModel.playSong(song)
                             }
                         )
@@ -252,14 +230,8 @@ fun SearchScreen(
         }
     }
 }
-
 @Composable
-private fun SearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClearQuery: () -> Unit,
-    onSearch: (String) -> Unit = {}
-) {
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit, onClearQuery: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -281,13 +253,11 @@ private fun SearchBar(
                 textStyle = LiquidTypography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
                 modifier = Modifier.weight(1f),
                 decorationBox = { innerTextField ->
                     if (query.isEmpty()) {
                         Text(
-                            text = stringResource(R.string.search_placeholder),
+                            text = "¿Qué quieres escuchar?",
                             style = LiquidTypography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -371,7 +341,7 @@ private fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () ->
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(text = stringResource(R.string.artist), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            Text(text = "Artista", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         }
 
         Box(
@@ -379,7 +349,7 @@ private fun ArtistTopResult(artistName: String, imageUrl: String, onClick: () ->
                 .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, RoundedCornerShape(32.dp))
                 .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            Text(stringResource(R.string.follow), color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("Seguir", color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -415,16 +385,11 @@ private fun SpotifyStyleSongItem(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (!isLocal) {
                     Box(modifier = Modifier.clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)).padding(horizontal = 4.dp, vertical = 2.dp)) {
-                        Text(stringResource(R.string.yt_label), fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Text("YT", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                 }
-                val subtitle = if (isPlaylist) {
-                    stringResource(R.string.playlist_format, artist)
-                } else {
-                    stringResource(R.string.song_format, artist)
-                }
-                Text(text = subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = if (isPlaylist) "Playlist • $artist" else "Canción • $artist", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
 
@@ -450,7 +415,7 @@ private fun ExtractionOverlay() {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp)
             Spacer(Modifier.height(16.dp))
             Text(
-                text = stringResource(R.string.loading_track),
+                text = "Cargando pista...",
                 style = LiquidTypography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground
             )

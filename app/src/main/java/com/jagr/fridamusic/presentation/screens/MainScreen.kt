@@ -45,23 +45,13 @@ fun MainScreen() {
     val context = LocalContext.current
     val libraryViewModel: LibraryViewModels = viewModel()
 
-
     val repeatMode by libraryViewModel.repeatMode.collectAsState()
-    val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
     val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
     val lyricsLines by libraryViewModel.lyricsLines.collectAsState()
     val currentPositionState = libraryViewModel.currentPosition.collectAsState()
-
-    val isCurrentSongLiked = remember(currentSong, playlists) {
-        val favoritesName = context.getString(R.string.favorites_playlist_name)
-        val likedPlaylist = playlists.find { it.name == favoritesName }
-        currentSong?.let { song ->
-            likedPlaylist?.songIds?.contains(song.id) == true
-        } ?: false
-    }
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
 
@@ -231,7 +221,6 @@ fun MainScreen() {
             NowPlayingScreen(
                 currentSong = currentSong,
                 isPlaying = isPlaying,
-                isLiked = isCurrentSongLiked,
                 currentPosition = { currentPositionState.value },
                 albumArtUrl = currentAlbumArt,
                 repeatMode = repeatMode,
@@ -241,8 +230,8 @@ fun MainScreen() {
                 onPrevious = { libraryViewModel.skipToPrevious() },
                 onSeek = { libraryViewModel.seekTo(it) },
                 onToggleRepeat = { libraryViewModel.toggleRepeatMode() },
-                onToggleLike = { currentSong?.let { libraryViewModel.toggleLike(it) } },
-                onCollapse = { isPlayerExpanded = false }
+                onCollapse = { isPlayerExpanded = false },
+                viewModel = libraryViewModel
             )
         }
     }

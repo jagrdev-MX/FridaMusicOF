@@ -22,7 +22,7 @@ class AdManager private constructor(
     private val lastAdDisplayAtMs = AtomicLong(0)
     private var isFirstAdAttempt = true
 
-    private val cooldownMs = 300_000L // 5 minutos de enfriamiento
+    private val cooldownMs = 300_000L
 
     companion object {
         private const val TAG = "AdManager"
@@ -55,7 +55,6 @@ class AdManager private constructor(
         val adView = AdView(activity)
         adView.adUnitId = AdConfig.BANNER_AD_UNIT_ID
         
-        // Calculamos el ancho disponible de forma segura
         val displayMetrics = activity.resources.displayMetrics
         val adWidthPixels = if (container.width > 0) container.width else displayMetrics.widthPixels
         val density = displayMetrics.density

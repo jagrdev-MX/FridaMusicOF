@@ -45,6 +45,7 @@ import com.jagr.fridamusic.domain.lyrics.LyricsLine
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.theme.*
+import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -54,7 +55,6 @@ import kotlin.math.roundToInt
 fun NowPlayingScreen(
     currentSong: Song?,
     isPlaying: Boolean,
-    isLiked: Boolean,
     currentPosition: () -> Long,
     albumArtUrl: String?,
     repeatMode: RepeatMode,
@@ -64,8 +64,8 @@ fun NowPlayingScreen(
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     onToggleRepeat: () -> Unit,
-    onToggleLike: () -> Unit,
-    onCollapse: () -> Unit
+    onCollapse: () -> Unit,
+    viewModel: LibraryViewModels
 ) {
     val context = LocalContext.current
     val adManager = remember { AdManager.getInstance(context) }
@@ -81,6 +81,17 @@ fun NowPlayingScreen(
 
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
     val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
+    val playlists by viewModel.playlists.collectAsState(initial = emptyList())
+
+    val isLiked = remember(playlists, currentSong) {
+        playlists.find { it.name == "Me gusta" }?.songIds?.contains(currentSong?.id) == true
+    }
+
+    val onToggleLike: () -> Unit = {
+        if (currentSong != null) {
+            viewModel.toggleLike(currentSong)
+        }
+    }
 
     LaunchedEffect(currentSong) {
         if (currentSong == null) return@LaunchedEffect

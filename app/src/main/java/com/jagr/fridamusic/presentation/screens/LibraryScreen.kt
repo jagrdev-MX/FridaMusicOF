@@ -10,10 +10,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,13 +33,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
@@ -59,6 +64,32 @@ fun LibraryScreen(
 
     val chunkedAlbums = remember(songs) {
         songs.distinctBy { it.albumId }.take(10).chunked(2)
+    }
+
+    var playlistToDelete by remember { mutableStateOf<com.jagr.fridamusic.domain.model.Playlist?>(null) }
+
+    if (playlistToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { playlistToDelete = null },
+            title = { Text("¿Eliminar Playlist?") },
+            text = { Text("¿Estás seguro de que deseas eliminar '${playlistToDelete?.name}'? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        playlistToDelete?.let { viewModel.deletePlaylist(it) }
+                        playlistToDelete = null
+                    }
+                ) {
+                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistToDelete = null }) {
+                    Text("Cancelar", color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 
     LazyColumn(
@@ -146,7 +177,14 @@ fun LibraryScreen(
                         Text(stringResource(R.string.create_new_playlist), color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.Medium)
                     }
                 }
-                items(playlists) { PlaylistListItem(it) }
+                items(playlists) { playlist ->
+                    PlaylistListItem(
+                        playlist = playlist,
+                        onPlay = { /* Implementar play playlist */ },
+                        onShuffle = { /* Implementar aleatorio playlist */ },
+                        onDelete = { playlistToDelete = playlist } // Abre el diálogo
+                    )
+                }
             }
             tabs[2] -> {
                 items(chunkedAlbums) { rowItems ->
@@ -175,13 +213,20 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun PlaylistListItem(playlist: com.jagr.fridamusic.domain.model.Playlist) {
+private fun PlaylistListItem(
+    playlist: com.jagr.fridamusic.domain.model.Playlist,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 4.dp)
             .liquidGlassEffect(12.dp)
-            .clickable { }
+            .clickable { /* Navegar al detalle */ }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -199,7 +244,46 @@ private fun PlaylistListItem(playlist: com.jagr.fridamusic.domain.model.Playlist
             Text(playlist.name, fontSize = 17.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
             Text(stringResource(R.string.songs_count, playlist.songIds.size), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Box {
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+                modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Reproducir") },
+                    leadingIcon = { Icon(Icons.Default.PlayArrow, null) },
+                    onClick = {
+                        showMenu = false
+                        onPlay()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Reproducción aleatoria") },
+                    leadingIcon = { Icon(Icons.Default.Shuffle, null) },
+                    onClick = {
+                        showMenu = false
+                        onShuffle()
+                    }
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                )
+                DropdownMenuItem(
+                    text = { Text("Eliminar playlist", color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                    onClick = {
+                        showMenu = false
+                        onDelete()
+                    }
+                )
+            }
+        }
     }
 }
 

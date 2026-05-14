@@ -15,11 +15,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaylistEntity
 import com.jagr.fridamusic.data.remote.innertube.ResultType
@@ -32,13 +28,8 @@ import com.jagr.fridamusic.domain.lyrics.LyricsParser
 import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.service.MusicService
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
@@ -62,6 +53,33 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     val sleepTimerMinutes = MutableStateFlow(0)
     private var sleepTimerJob: Job? = null
+    private val _searchHistory = MutableStateFlow<List<String>>(
+        settingsManager.searchHistory.split("||").filter { it.isNotBlank() }
+    )
+    val searchHistory = _searchHistory.asStateFlow()
+
+    fun addToSearchHistory(query: String) {
+        if (query.isBlank()) return
+        val current = _searchHistory.value.toMutableList()
+        current.remove(query)
+        current.add(0, query)
+        if (current.size > 10) current.removeAt(current.lastIndex)
+
+        _searchHistory.value = current
+        settingsManager.searchHistory = current.joinToString("||")
+    }
+
+    fun removeFromSearchHistory(query: String) {
+        val current = _searchHistory.value.toMutableList()
+        current.remove(query)
+        _searchHistory.value = current
+        settingsManager.searchHistory = current.joinToString("||")
+    }
+
+    fun clearSearchHistory() {
+        _searchHistory.value = emptyList()
+        settingsManager.searchHistory = ""
+    }
     private val _isExtracting = MutableStateFlow(false)
     val isExtracting = _isExtracting.asStateFlow()
 
@@ -94,11 +112,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     val repeatMode = MutableStateFlow(RepeatMode.OFF)
     val isShuffleMode = MutableStateFlow(false)
+
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
     val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
-
-    private val _searchHistory = MutableStateFlow<List<String>>(emptyList())
-    val searchHistory = _searchHistory.asStateFlow()
 
     val artistSongs = _youtubeSearchResults.map { results ->
         results.filter { it.type == ResultType.SONG }.map { result ->
@@ -114,12 +130,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     val playlists = playlistDao.getAllPlaylists().map { entities ->
         entities.map { entity ->
-            Playlist(entity.id, entity.name, entity.description, entity.songIds.split(",").filter { it.isNotBlank() }.map { it.toLong() }, entity.createdAt)
+            Playlist(entity.id, entity.name, entity.description ?: "", entity.songIds.split(",").filter { it.isNotBlank() }.map { it.toLong() }, entity.createdAt)
         }
     }
 
     private var exoPlayer: ExoPlayer? = null
     private var progressJob: Job? = null
+    private var extractionJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
 
     private val notificationReceiver = object : BroadcastReceiver() {
@@ -143,19 +160,66 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         ContextCompat.registerReceiver(getApplication(), notificationReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
         ensureFavoritesPlaylistExists()
         restoreLastPlaybackState()
-        _searchHistory.value = settingsManager.searchHistory.split("|").filter { it.isNotBlank() }
     }
 
     @OptIn(UnstableApi::class)
-    private fun createExoPlayer(): ExoPlayer {
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            .setAllowCrossProtocolRedirects(true)
-        val dataSourceFactory = DefaultDataSource.Factory(getApplication(), httpDataSourceFactory)
+    private fun restoreLastPlaybackState() {
+        exoPlayer = ExoPlayer.Builder(getApplication()).build().apply {
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    _isPlaying.value = isPlaying
+                    if (isPlaying) startProgressUpdate() else stopProgressUpdate()
+                    _currentSong.value?.let { updateNotification(it, isPlaying) }
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_READY) {
+                        _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
+                    }
+                    if (state == Player.STATE_ENDED) {
+                        _currentPosition.value = 0L
+                        skipToNext()
+                    }
+                }
+            })
+        }
 
-        return ExoPlayer.Builder(getApplication())
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-            .build()
+        viewModelScope.launch {
+            delay(150)
+            val (shouldRestore, savedSong, lastPos) = withContext(Dispatchers.IO) {
+                val restore = settingsManager.saveLastPlayback && settingsManager.lastSongId != -1L
+                if (!restore) return@withContext Triple(false, null, 0L)
+
+                val song = Song(
+                    id = settingsManager.lastSongId,
+                    title = settingsManager.lastSongTitle ?: "Unknown Title",
+                    artist = settingsManager.lastSongArtist ?: "Unknown Artist",
+                    data = "",
+                    duration = settingsManager.lastSongDuration,
+                    albumId = 0L,
+                    uri = Uri.parse(settingsManager.lastSongUri ?: ""),
+                    artworkUri = Uri.parse(settingsManager.lastSongArtwork ?: "")
+                )
+                Triple(true, song, settingsManager.lastPosition)
+            }
+
+            if (shouldRestore && savedSong != null) {
+                _currentSong.value = savedSong
+                _currentPosition.value = lastPos
+                _duration.value = savedSong.duration
+                _currentAlbumArt.value = savedSong.artworkUri.toString()
+
+                exoPlayer?.apply {
+                    val uriString = savedSong.uri.toString()
+                    if (uriString.isNotBlank()) {
+                        try {
+                            setMediaItem(MediaItem.fromUri(Uri.parse(uriString)))
+                            prepare()
+                            seekTo(lastPos)
+                        } catch (e: Exception) {}
+                    }
+                }
+            }
+        }
     }
 
     @OptIn(UnstableApi::class)
@@ -167,8 +231,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         saveCurrentPlaybackState()
 
-        exoPlayer?.release()
-        exoPlayer = createExoPlayer().apply {
+        exoPlayer?.apply {
             setMediaItem(MediaItem.fromUri(song.uri))
             repeatMode = when (this@LibraryViewModels.repeatMode.value) {
                 RepeatMode.OFF -> Player.REPEAT_MODE_OFF
@@ -177,24 +240,6 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             }
             prepare()
             play()
-
-            addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    _isPlaying.value = isPlaying
-                    if (isPlaying) startProgressUpdate() else stopProgressUpdate()
-                    updateNotification(song, isPlaying)
-                }
-                override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY) {
-                        _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
-                        updateNotification(song, _isPlaying.value)
-                    }
-                    if (state == Player.STATE_ENDED) {
-                        _currentPosition.value = 0L
-                        skipToNext()
-                    }
-                }
-            })
         }
 
         _currentSong.value = song
@@ -207,7 +252,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch(Dispatchers.IO) {
             val url = if (hasPreloadedArt) song.artworkUri.toString() else getSongImageUrl(song)
-            val lyrics = fetchLyrics(song.artist ?: "", song.title ?: "")
+            val lyrics = fetchLyrics(song.artist ?: "Unknown Artist", song.title ?: "Unknown Title")
 
             withContext(Dispatchers.Main) {
                 _currentAlbumArt.value = url
@@ -219,7 +264,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun playYouTubeSong(result: YouTubeResult) {
-        viewModelScope.launch(Dispatchers.IO) {
+        extractionJob?.cancel()
+
+        extractionJob = viewModelScope.launch(Dispatchers.IO) {
             _isExtracting.value = true
             _errorMessage.value = null
 
@@ -227,14 +274,18 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 val videoUrl = "https://www.youtube.com/watch?v=" + result.videoId
                 val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
 
-                val audioStream = streamInfo.audioStreams.filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }.maxByOrNull { it.bitrate }
+                if (!isActive) return@launch
+
+                val audioStream = streamInfo.audioStreams
+                    .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
+                    .maxByOrNull { it.bitrate }
                     ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
 
                 if (audioStream != null) {
                     val virtualSong = Song(
                         id = result.videoId.hashCode().toLong(),
                         title = result.title,
-                        artist = result.artist,
+                        artist = result.artist ?: "Unknown Artist",
                         data = audioStream.url ?: "",
                         duration = streamInfo.duration * 1000L,
                         albumId = 0L,
@@ -250,9 +301,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     _errorMessage.value = "No compatible audio streams found"
                 }
             } catch (e: Exception) {
-                _errorMessage.value = "Error extracting audio: ${e.localizedMessage}"
+                if (e !is CancellationException) {
+                    _errorMessage.value = "Error extracting audio: ${e.localizedMessage}"
+                }
             } finally {
-                _isExtracting.value = false
+                withContext(Dispatchers.Main) {
+                    _isExtracting.value = false
+                }
             }
         }
     }
@@ -262,7 +317,6 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             if (player.isPlaying) player.pause() else player.play()
             _isPlaying.value = player.isPlaying
             _currentSong.value?.let { song -> updateNotification(song, player.isPlaying) }
-
             if (!player.isPlaying) saveCurrentPlaybackState()
         }
     }
@@ -342,58 +396,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         settingsManager.lastSongId = song.id
         settingsManager.lastSongTitle = song.title
-        settingsManager.lastSongArtist = song.artist
+        settingsManager.lastSongArtist = song.artist ?: "Unknown Artist"
         settingsManager.lastSongUri = song.uri.toString()
-        settingsManager.lastSongArtwork = song.artworkUri.toString()
+        settingsManager.lastSongArtwork = _currentAlbumArt.value ?: ""
         settingsManager.lastSongDuration = song.duration
         settingsManager.lastPosition = pos
-    }
-
-    @OptIn(UnstableApi::class)
-    private fun restoreLastPlaybackState() {
-        if (settingsManager.saveLastPlayback && settingsManager.lastSongId != -1L) {
-            val savedSong = Song(
-                id = settingsManager.lastSongId,
-                title = settingsManager.lastSongTitle ?: "Unknown Title",
-                artist = settingsManager.lastSongArtist ?: "Unknown Artist",
-                data = "",
-                duration = settingsManager.lastSongDuration,
-                albumId = 0L,
-                uri = Uri.parse(settingsManager.lastSongUri ?: ""),
-                artworkUri = Uri.parse(settingsManager.lastSongArtwork ?: "")
-            )
-
-            _currentSong.value = savedSong
-            _currentPosition.value = settingsManager.lastPosition
-            _duration.value = settingsManager.lastSongDuration
-            _currentAlbumArt.value = settingsManager.lastSongArtwork
-
-            exoPlayer = createExoPlayer().apply {
-                val uriString = settingsManager.lastSongUri
-                if (!uriString.isNullOrBlank()) {
-                    setMediaItem(MediaItem.fromUri(Uri.parse(uriString)))
-                    prepare()
-                    seekTo(settingsManager.lastPosition)
-                }
-
-                addListener(object : Player.Listener {
-                    override fun onIsPlayingChanged(isPlaying: Boolean) {
-                        _isPlaying.value = isPlaying
-                        if (isPlaying) startProgressUpdate() else stopProgressUpdate()
-                        updateNotification(savedSong, isPlaying)
-                    }
-                    override fun onPlaybackStateChanged(state: Int) {
-                        if (state == Player.STATE_READY) {
-                            _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
-                        }
-                        if (state == Player.STATE_ENDED) {
-                            _currentPosition.value = 0L
-                            skipToNext()
-                        }
-                    }
-                })
-            }
-        }
     }
 
     fun loadSongs() {
@@ -405,11 +412,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private fun ensureFavoritesPlaylistExists() {
         viewModelScope.launch(Dispatchers.IO) {
-            val favoritesName = getApplication<Application>().getString(R.string.favorites_playlist_name)
-            val favoritesDesc = getApplication<Application>().getString(R.string.favorites_playlist_description)
             val allPlaylists = playlistDao.getAllPlaylistsOnce()
-            if (allPlaylists.none { it.name == favoritesName }) {
-                createPlaylist(favoritesName, favoritesDesc)
+            if (allPlaylists.none { it.name == "Me gusta" }) {
+                createPlaylist("Me gusta", "Tus canciones favoritas")
             }
         }
     }
@@ -417,12 +422,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun createPlaylist(name: String, description: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             playlistDao.insertPlaylist(
-                PlaylistEntity(
-                    name = name,
-                    description = description ?: "",
-                    songIds = "",
-                    createdAt = System.currentTimeMillis()
-                )
+                PlaylistEntity(name = name, description = description ?: "", songIds = "", createdAt = System.currentTimeMillis())
             )
         }
     }
@@ -430,41 +430,76 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun addSongToPlaylist(playlist: Playlist, songId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val newIds = (playlist.songIds + songId).distinct().joinToString(",")
-            playlistDao.updatePlaylist(PlaylistEntity(id = playlist.id, name = playlist.name, description = playlist.description, songIds = newIds, createdAt = playlist.createdAt))
+            playlistDao.updatePlaylist(PlaylistEntity(id = playlist.id, name = playlist.name, description = playlist.description ?: "", songIds = newIds, createdAt = playlist.createdAt))
         }
     }
 
     fun removeSongFromPlaylist(playlist: Playlist, songId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val newIds = playlist.songIds.filter { it != songId }.joinToString(",")
-            playlistDao.updatePlaylist(PlaylistEntity(id = playlist.id, name = playlist.name, description = playlist.description, songIds = newIds, createdAt = playlist.createdAt))
+            playlistDao.updatePlaylist(PlaylistEntity(id = playlist.id, name = playlist.name, description = playlist.description ?: "", songIds = newIds, createdAt = playlist.createdAt))
+        }
+    }
+
+    fun deletePlaylist(playlist: Playlist) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val entityToDelete = PlaylistEntity(
+                id = playlist.id,
+                name = playlist.name,
+                description = playlist.description ?: "",
+                songIds = playlist.songIds.joinToString(","),
+                createdAt = playlist.createdAt
+            )
+
+            playlistDao.deletePlaylist(entityToDelete)
         }
     }
 
     fun toggleLike(song: Song) {
         viewModelScope.launch(Dispatchers.IO) {
-            val favoritesName = getApplication<Application>().getString(R.string.favorites_playlist_name)
-            val currentPlaylists = playlists.first()
-            var likePlaylist = currentPlaylists.find { it.name == favoritesName }
+            val allPlaylists = playlistDao.getAllPlaylistsOnce()
+            var likePlaylistEntity = allPlaylists.find { it.name == "Me gusta" }
 
-            if (likePlaylist == null) {
-                createPlaylist(favoritesName)
-                delay(300)
-                likePlaylist = playlists.first().find { it.name == favoritesName }
+            if (likePlaylistEntity == null) {
+                playlistDao.insertPlaylist(
+                    PlaylistEntity(
+                        name = "Me gusta",
+                        description = "Tus canciones favoritas",
+                        songIds = "",
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
+                delay(200)
+                val updatedPlaylists = playlistDao.getAllPlaylistsOnce()
+                likePlaylistEntity = updatedPlaylists.find { it.name == "Me gusta" }
             }
 
-            likePlaylist?.let { playlist ->
-                if (playlist.songIds.contains(song.id)) {
-                    removeSongFromPlaylist(playlist, song.id)
+            likePlaylistEntity?.let { entity ->
+                val currentIds = entity.songIds.split(",").filter { it.isNotBlank() }.map { it.toLong() }
+
+                val newIdsString = if (currentIds.contains(song.id)) {
+                    currentIds.filter { it != song.id }.joinToString(",")
                 } else {
-                    addSongToPlaylist(playlist, song.id)
+                    (currentIds + song.id).distinct().joinToString(",")
                 }
+
+                playlistDao.updatePlaylist(
+                    PlaylistEntity(
+                        id = entity.id,
+                        name = entity.name,
+                        description = entity.description,
+                        songIds = newIdsString,
+                        createdAt = entity.createdAt
+                    )
+                )
             }
         }
     }
 
     fun searchYouTube(query: String) {
         if (query.isBlank()) return
+        addToSearchHistory(query)
+
         viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             try {
@@ -475,28 +510,6 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 _isSearching.value = false
             }
         }
-    }
-
-    fun addToSearchHistory(query: String) {
-        if (query.isBlank()) return
-        val currentHistory = _searchHistory.value.toMutableList()
-        currentHistory.remove(query)
-        currentHistory.add(0, query)
-        val newHistory = currentHistory.take(15) // Keep last 15
-        _searchHistory.value = newHistory
-        settingsManager.searchHistory = newHistory.joinToString("|")
-    }
-
-    fun removeFromSearchHistory(query: String) {
-        val currentHistory = _searchHistory.value.toMutableList()
-        currentHistory.remove(query)
-        _searchHistory.value = currentHistory
-        settingsManager.searchHistory = currentHistory.joinToString("|")
-    }
-
-    fun clearSearchHistory() {
-        _searchHistory.value = emptyList()
-        settingsManager.searchHistory = ""
     }
 
     fun setShuffleMode(enabled: Boolean) { isShuffleMode.value = enabled }
@@ -589,7 +602,6 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             putExtra("CURRENT_POSITION", exoPlayer?.currentPosition ?: _currentPosition.value)
             putExtra("DURATION", exoPlayer?.duration?.takeIf { it > 0 } ?: song.duration)
         }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getApplication<Application>().startForegroundService(intent)
         } else {
