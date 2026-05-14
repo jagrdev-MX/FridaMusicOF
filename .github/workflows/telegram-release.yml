@@ -14,4 +14,5 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
           -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
           -d "message_thread_id=24" \
-          -d "text=🚀 New FridaMusic Release: ${{ github.event.release.tag_name }}"
+          -d "parse_mode=HTML" \
+          -d "text=🚀 <b>New FridaMusic Release</b>%0A%0A🏷 Version: <b>${{ github.event.release.tag_name }}</b>%0A📦 Download / Descargar:%0A${{ github.event.release.html_url }}%0A%0A👨‍💻 Lead: JAGR Developer%0A🏢 Organization: Frida Labs%0A🎵 Project: FridaMusic"
