@@ -114,6 +114,19 @@
       margin-bottom: 24px;
     }
 
+    .badge-download {
+      text-decoration: none;
+      transition: all .25s ease;
+      cursor: pointer;
+    }
+
+    .badge-download:hover {
+      color: #fff;
+      border-color: rgba(255, 255, 255, .35);
+      background: rgba(255, 255, 255, .08);
+      transform: translateY(-2px);
+    }
+
     /* ── LOGO CIRCLE (hero) ── */
     .logo-hero-wrap {
       width: 108px;
@@ -464,7 +477,8 @@
 
     <!-- ══ HERO CARD ══ -->
     <div class="glass-card hero-card">
-      <div class="badge">Official Launch</div>
+      <!-- Botón de lanzamiento: placeholder de Play Store, reemplazar cuando exista el enlace oficial. -->
+      <a href="https://play.google.com/store/apps/details?id=com.fridamusic.app" target="_blank" class="badge badge-download" rel="noopener">Official Launch Download</a>
 
       <div class="logo-hero-wrap">
         <img
@@ -484,6 +498,7 @@
           </svg>
           Repositorio
         </a>
+        <!-- Botón social: perfil oficial de Frida Labs. -->
         <a href="https://www.instagram.com/fridalabs_mx/" target="_blank" class="btn" rel="noopener">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="2" width="20" height="20" rx="5" />
