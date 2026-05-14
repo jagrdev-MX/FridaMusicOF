@@ -291,7 +291,7 @@
 
     .interface-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 16px;
     }
 
@@ -305,7 +305,6 @@
       background: rgba(255, 255, 255, .03);
       transition: transform .35s cubic-bezier(.22, 1.4, .36, 1), box-shadow .35s ease, border-color .35s ease;
       isolation: isolate;
-      min-height: 260px;
     }
 
     .interface-item::before {
@@ -335,8 +334,8 @@
       position: relative;
       z-index: 1;
       width: 100%;
-      height: 220px;
-      object-fit: cover;
+      height: auto;
+      object-fit: contain;
       display: block;
     }
 
@@ -556,12 +555,8 @@
         grid-template-columns: 1fr;
       }
 
-      .interface-item {
-        min-height: 220px;
-      }
-
       .interface-item img {
-        height: 210px;
+        height: auto;
       }
     }
   </style>
@@ -659,19 +654,19 @@
 
             <div class="interface-grid">
         <figure class="interface-item i-home">
-          <img src="app/src/main/res/drawable/inicio inteligente.jpg" alt="Screen oficial Home de FridaMusic">
+          <img src="capturas%20web/inicio%20inteligente.jpg" alt="Screen oficial Home de FridaMusic">
           <figcaption class="interface-caption">Home — bienvenida dinámica</figcaption>
         </figure>
         <figure class="interface-item i-player">
-          <img src="app/src/main/res/drawable/reproductor inmersivo.jpg" alt="Screen oficial Now Playing de FridaMusic">
+          <img src="capturas%20web/reproductor%20inmersivo.jpg" alt="Screen oficial Now Playing de FridaMusic">
           <figcaption class="interface-caption">Now Playing — control inmersivo</figcaption>
         </figure>
         <figure class="interface-item i-library">
-          <img src="app/src/main/res/drawable/bibliotecadinamica.jpg" alt="Screen oficial Library de FridaMusic">
+          <img src="capturas%20web/bibliotecadinamica.jpg" alt="Screen oficial Library de FridaMusic">
           <figcaption class="interface-caption">Library — mosaico musical</figcaption>
         </figure>
         <figure class="interface-item i-settings">
-          <img src="app/src/main/res/drawable/ajustes minimalistas.jpg" alt="Screen oficial Settings de FridaMusic">
+          <img src="capturas%20web/ajustes%20minimalistas.jpg" alt="Screen oficial Settings de FridaMusic">
           <figcaption class="interface-caption">Settings — ajustes precisos</figcaption>
         </figure>
       </div>
