@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaylistEntity
@@ -80,6 +81,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         _searchHistory.value = emptyList()
         settingsManager.searchHistory = ""
     }
+
     private val _isExtracting = MutableStateFlow(false)
     val isExtracting = _isExtracting.asStateFlow()
 
@@ -137,6 +139,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var exoPlayer: ExoPlayer? = null
     private var progressJob: Job? = null
     private var extractionJob: Job? = null
+    private var searchJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
 
     private val notificationReceiver = object : BroadcastReceiver() {
@@ -164,24 +167,36 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     @OptIn(UnstableApi::class)
     private fun restoreLastPlaybackState() {
-        exoPlayer = ExoPlayer.Builder(getApplication()).build().apply {
-            addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    _isPlaying.value = isPlaying
-                    if (isPlaying) startProgressUpdate() else stopProgressUpdate()
-                    _currentSong.value?.let { updateNotification(it, isPlaying) }
-                }
-                override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY) {
-                        _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
+        val fastLoadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                500,
+                50000,
+                500,
+                500
+            )
+            .build()
+
+        exoPlayer = ExoPlayer.Builder(getApplication())
+            .setLoadControl(fastLoadControl)
+            .build()
+            .apply {
+                addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        _isPlaying.value = isPlaying
+                        if (isPlaying) startProgressUpdate() else stopProgressUpdate()
+                        _currentSong.value?.let { updateNotification(it, isPlaying) }
                     }
-                    if (state == Player.STATE_ENDED) {
-                        _currentPosition.value = 0L
-                        skipToNext()
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == Player.STATE_READY) {
+                            _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
+                        }
+                        if (state == Player.STATE_ENDED) {
+                            _currentPosition.value = 0L
+                            skipToNext()
+                        }
                     }
-                }
-            })
-        }
+                })
+            }
 
         viewModelScope.launch {
             delay(150)
@@ -498,16 +513,30 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     fun searchYouTube(query: String) {
         if (query.isBlank()) return
-        addToSearchHistory(query)
 
-        viewModelScope.launch(Dispatchers.IO) {
+        searchJob?.cancel()
+
+        searchJob = viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             try {
-                _youtubeSearchResults.value = YouTube.search(query)
+                delay(300)
+
+                if (!isActive) return@launch
+
+                val results = YouTube.search(query)
+
+                if (isActive) {
+                    _youtubeSearchResults.value = results
+                    addToSearchHistory(query)
+                }
             } catch (e: Exception) {
-                _youtubeSearchResults.value = emptyList()
+                if (e !is CancellationException) {
+                    _youtubeSearchResults.value = emptyList()
+                }
             } finally {
-                _isSearching.value = false
+                if (isActive) {
+                    withContext(Dispatchers.Main) { _isSearching.value = false }
+                }
             }
         }
     }
