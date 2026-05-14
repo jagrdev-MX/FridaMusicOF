@@ -114,6 +114,24 @@
       margin-bottom: 24px;
     }
 
+    .badge-download {
+      text-decoration: none;
+      transition: all .25s ease;
+      cursor: pointer;
+      color: rgba(220, 180, 50, .82);
+      border-color: rgba(200, 160, 40, .38);
+      background: rgba(180, 130, 20, .10);
+      box-shadow: 0 0 18px rgba(200, 160, 40, .18);
+    }
+
+    .badge-download:hover {
+      color: #fff4c2;
+      border-color: rgba(220, 180, 50, .65);
+      background: rgba(200, 160, 40, .22);
+      transform: translateY(-2px);
+      box-shadow: 0 0 26px rgba(220, 180, 50, .35), 0 6px 20px rgba(0, 0, 0, .3);
+    }
+
     /* ── LOGO CIRCLE (hero) ── */
     .logo-hero-wrap {
       width: 108px;
@@ -248,6 +266,96 @@
       font-size: 14px;
       line-height: 1.7;
       font-weight: 300;
+    }
+
+
+    /* ── INTERFAZ SECTION ── */
+    .interface-card {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .interface-kicker {
+      font-size: 11px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, .45);
+      margin-bottom: 8px;
+    }
+
+    .interface-subtitle {
+      color: rgba(255, 255, 255, .55);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+
+    .interface-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .interface-item {
+      --aura1: rgba(224, 64, 251, .35);
+      --aura2: rgba(64, 196, 255, .32);
+      position: relative;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, .11);
+      overflow: hidden;
+      background: rgba(255, 255, 255, .03);
+      transition: transform .35s cubic-bezier(.22, 1.4, .36, 1), box-shadow .35s ease, border-color .35s ease;
+      isolation: isolate;
+    }
+
+    .interface-item::before {
+      content: '';
+      position: absolute;
+      inset: -24%;
+      background:
+        radial-gradient(circle at 20% 20%, var(--aura1), transparent 58%),
+        radial-gradient(circle at 80% 78%, var(--aura2), transparent 62%);
+      filter: blur(14px);
+      z-index: 0;
+      animation: auraFloat 8s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .interface-item:nth-child(2)::before { animation-duration: 9.5s; }
+    .interface-item:nth-child(3)::before { animation-duration: 10.2s; }
+    .interface-item:nth-child(4)::before { animation-duration: 11s; }
+
+    .interface-item:hover {
+      transform: translateY(-8px) scale(1.02);
+      border-color: rgba(255, 255, 255, .3);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, .38), 0 0 28px rgba(160, 80, 255, .25);
+    }
+
+    .interface-item img {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+
+    .interface-caption {
+      position: relative;
+      z-index: 1;
+      padding: 12px 14px 14px;
+      color: rgba(255, 255, 255, .85);
+      font-size: 12px;
+      letter-spacing: .02em;
+    }
+
+    .interface-item.i-home { --aura1: rgba(120, 80, 255, .35); --aura2: rgba(64, 196, 255, .33); }
+    .interface-item.i-player { --aura1: rgba(255, 120, 70, .35); --aura2: rgba(224, 64, 251, .31); }
+    .interface-item.i-settings { --aura1: rgba(224, 64, 251, .34); --aura2: rgba(190, 120, 255, .30); }
+    .interface-item.i-library { --aura1: rgba(64, 196, 255, .33); --aura2: rgba(124, 77, 255, .30); }
+
+    @keyframes auraFloat {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      50% { transform: translate3d(3%, -2%, 0) scale(1.05); }
     }
 
     /* ── TEAM SECTION ── */
@@ -442,6 +550,14 @@
       .dev-card {
         width: 160px;
       }
+
+      .interface-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .interface-item img {
+        height: auto;
+      }
     }
   </style>
   <script type="module">
@@ -464,7 +580,8 @@
 
     <!-- ══ HERO CARD ══ -->
     <div class="glass-card hero-card">
-      <div class="badge">Official Launch</div>
+      <!-- Botón de lanzamiento: placeholder de Play Store, reemplazar cuando exista el enlace oficial. -->
+      <a href="https://play.google.com/store/apps/details?id=com.fridamusic.app" target="_blank" class="badge badge-download" rel="noopener">Official Launch Download</a>
 
       <div class="logo-hero-wrap">
         <img
@@ -484,6 +601,7 @@
           </svg>
           Repositorio
         </a>
+        <!-- Botón social: perfil oficial de Frida Labs. -->
         <a href="https://www.instagram.com/fridalabs_mx/" target="_blank" class="btn" rel="noopener">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="2" width="20" height="20" rx="5" />
@@ -524,6 +642,33 @@
             un ecosistema visual único para tu música.</p>
         </div>
         
+      </div>
+    </div>
+
+
+    <!-- ══ INTERFAZ CARD ══ -->
+    <div class="glass-card interface-card">
+      <div class="interface-kicker">Interfaz</div>
+      <h2 class="section-title">Un vistazo a FridaMusic</h2>
+      <p class="interface-subtitle">Pantallas reales del flujo visual con microdetalles pensados para una experiencia inmersiva.</p>
+
+            <div class="interface-grid">
+        <figure class="interface-item i-home">
+          <img src="carpetas%20web/inicio%20inteligente.jpg" alt="Screen oficial Home de FridaMusic" onerror="this.onerror=null;this.src='logo1.png'">
+          <figcaption class="interface-caption">Home — bienvenida dinámica</figcaption>
+        </figure>
+        <figure class="interface-item i-player">
+          <img src="carpetas%20web/reproductor%20inmersivo.jpg" alt="Screen oficial Now Playing de FridaMusic" onerror="this.onerror=null;this.src='logo1.png'">
+          <figcaption class="interface-caption">Now Playing — control inmersivo</figcaption>
+        </figure>
+        <figure class="interface-item i-library">
+          <img src="carpetas%20web/bibliotecadinamica.jpg" alt="Screen oficial Library de FridaMusic" onerror="this.onerror=null;this.src='logo1.png'">
+          <figcaption class="interface-caption">Library — mosaico musical</figcaption>
+        </figure>
+        <figure class="interface-item i-settings">
+          <img src="carpetas%20web/ajustes%20minimalistas.jpg" alt="Screen oficial Settings de FridaMusic" onerror="this.onerror=null;this.src='logo1.png'">
+          <figcaption class="interface-caption">Settings — ajustes precisos</figcaption>
+        </figure>
       </div>
     </div>
 
