@@ -169,40 +169,42 @@ jobs:
               ;;
           esac
 
-          CAPTION="🎵 <b>FridaMusic Smart Update</b>%0A"
-          CAPTION+="━━━━━━━━━━━━━━%0A%0A"
+          CAPTION="🎵 <b>FridaMusic Smart Update</b>\n"
+          CAPTION+="━━━━━━━━━━━━\n\n"
 
-          CAPTION+="🇺🇸 <b>English</b>%0A"
-          CAPTION+="📦 <b>Type:</b> ${{ steps.local.outputs.type_en }}%0A"
-          CAPTION+="🎯 <b>Target:</b> ${{ steps.local.outputs.target_en }}%0A"
-          CAPTION+="🏷 <b>Version:</b> ${{ steps.ctx.outputs.tag }}%0A"
-          CAPTION+="${LEVEL_ICON} <b>Level:</b> ${{ steps.local.outputs.level_en }}%0A"
-          CAPTION+="👤 <b>Contributor:</b> ${{ steps.ctx.outputs.author }}%0A"
-          CAPTION+="🧠 <b>Summary:</b> ${{ steps.local.outputs.summary_en }}%0A%0A"
+          CAPTION+="🇺🇸 <b>English</b>\n"
+          CAPTION+="📦 <b>Type:</b> ${{ steps.local.outputs.type_en }}\n"
+          CAPTION+="🎯 <b>Target:</b> ${{ steps.local.outputs.target_en }}\n"
+          CAPTION+="🏷 <b>Version:</b> ${{ steps.ctx.outputs.tag }}\n"
+          CAPTION+="${LEVEL_ICON} <b>Level:</b> ${{ steps.local.outputs.level_en }}\n"
+          CAPTION+="👤 <b>Contributor:</b> ${{ steps.ctx.outputs.author }}\n"
+          CAPTION+="🧠 <b>Summary:</b> ${{ steps.local.outputs.summary_en }}\n\n"
 
-          CAPTION+="🇲🇽 <b>Español</b>%0A"
-          CAPTION+="📦 <b>Tipo:</b> ${{ steps.local.outputs.type_es }}%0A"
-          CAPTION+="🎯 <b>Objetivo:</b> ${{ steps.local.outputs.target_es }}%0A"
-          CAPTION+="🏷 <b>Versión:</b> ${{ steps.ctx.outputs.tag }}%0A"
-          CAPTION+="${LEVEL_ICON} <b>Nivel:</b> ${{ steps.local.outputs.level_es }}%0A"
-          CAPTION+="👤 <b>Colaborador:</b> ${{ steps.ctx.outputs.author }}%0A"
-          CAPTION+="🧠 <b>Resumen:</b> ${{ steps.local.outputs.summary_es }}%0A%0A"
+          CAPTION+="🇲🇽 <b>Español</b>\n"
+          CAPTION+="📦 <b>Tipo:</b> ${{ steps.local.outputs.type_es }}\n"
+          CAPTION+="🎯 <b>Objetivo:</b> ${{ steps.local.outputs.target_es }}\n"
+          CAPTION+="🏷 <b>Versión:</b> ${{ steps.ctx.outputs.tag }}\n"
+          CAPTION+="${LEVEL_ICON} <b>Nivel:</b> ${{ steps.local.outputs.level_es }}\n"
+          CAPTION+="👤 <b>Colaborador:</b> ${{ steps.ctx.outputs.author }}\n"
+          CAPTION+="🧠 <b>Resumen:</b> ${{ steps.local.outputs.summary_es }}\n\n"
 
-          CAPTION+="📋 <b>Changes / Cambios:</b>%0A"
+          CAPTION+="📋 <b>Changes / Cambios:</b>\n"
           while IFS= read -r line; do
             if [ -n "$line" ]; then
               CLEAN_LINE="${line#- }"
-              CAPTION+="• ${CLEAN_LINE}%0A"
+              CAPTION+="• ${CLEAN_LINE}\n"
             fi
           done <<< "$CHANGES"
 
-          CAPTION+="%0A📥 <b>Download / Descargar:</b>%0A${{ steps.ctx.outputs.url }}%0A%0A"
-          CAPTION+="━━━━━━━━━━━━━━%0A"
-          CAPTION+="👨‍💻 <b>Lead:</b> JAGR Developer%0A"
-          CAPTION+="🏢 <b>Organization:</b> Frida Labs%0A"
+          CAPTION+="\n📥 <b>Download / Descargar:</b>\n${{ steps.ctx.outputs.url }}\n\n"
+          CAPTION+="━━━━━━━━━━━━\n"
+          CAPTION+="👨‍💻 <b>Lead:</b> JAGR Developer\n"
+          CAPTION+="🏢 <b>Organization:</b> Frida Labs\n"
           CAPTION+="🎵 <b>Project:</b> FridaMusic"
 
-          echo "caption=$CAPTION" >> "$GITHUB_OUTPUT"
+          echo "caption<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$CAPTION" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
           echo "media_url=$MEDIA_URL" >> "$GITHUB_OUTPUT"
 
       - name: Send Telegram notification
@@ -238,8 +240,6 @@ jobs:
             exit 1
           fi
 
-          echo "Sending Telegram request..."
-
           RESPONSE=$(curl -s -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/sendAnimation" \
             -d "chat_id=${CHAT_ID}" \
@@ -248,10 +248,8 @@ jobs:
             -d "parse_mode=HTML" \
             --data-urlencode "caption=${CAPTION}")
 
-          echo "========================================"
           echo "Telegram API response:"
           echo "$RESPONSE"
-          echo "========================================"
 
           if echo "$RESPONSE" | grep -q '"ok":false'; then
             echo "Telegram notification failed."
