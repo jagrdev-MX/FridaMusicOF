@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Build Telegram message
+      - name: Build FridaMusic Telegram release
         id: msg
         shell: bash
         run: |
@@ -17,12 +17,7 @@ jobs:
           AUTHOR="${{ github.event.release.author.login }}"
           URL="${{ github.event.release.html_url }}"
           IS_PRERELEASE="${{ github.event.release.prerelease }}"
-
-          if [ "$IS_PRERELEASE" = "true" ]; then
-            RELEASE_TYPE="🧪 Beta"
-          else
-            RELEASE_TYPE="🚀 Release"
-          fi
+          LOGO_URL="https://raw.githubusercontent.com/jagrdev-MX/FridaMusicOF/master/logo1.png"
 
           VERSION="${TAG#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
@@ -31,30 +26,58 @@ jobs:
           MINOR="${MINOR:-0}"
           PATCH="${PATCH:-0}"
 
-          if [ "$MAJOR" -gt 0 ] && [ "$MINOR" = "0" ] && [ "$PATCH" = "0" ]; then
-            UPDATE_LEVEL="🔴 Major / Mayor"
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            TYPE="🧪 BETA BUILD"
+            MOOD="Experimental access"
+            MEDIA_URL="https://media.giphy.com/media/l0HlNaQ6gWfllcjDO/giphy.gif"
+          elif [ "$MAJOR" -gt 0 ] && [ "$MINOR" = "0" ] && [ "$PATCH" = "0" ]; then
+            TYPE="🔥 MAJOR RELEASE"
+            MOOD="Big update"
+            MEDIA_URL="https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif"
           elif [ "$MINOR" -gt 0 ] && [ "$PATCH" = "0" ]; then
-            UPDATE_LEVEL="🟡 Medium / Medio"
+            TYPE="🚀 OFFICIAL RELEASE"
+            MOOD="Feature update"
+            MEDIA_URL="https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif"
           else
-            UPDATE_LEVEL="🟢 Minor Fix / Fix menor"
+            TYPE="🛠 MINOR FIX"
+            MOOD="Stability patch"
+            MEDIA_URL="https://media.giphy.com/media/xUPGcguWZHRC2HyBRS/giphy.gif"
           fi
 
-          TEXT="🎵 <b>FridaMusic Update</b>%0A%0A"
-          TEXT+="📦 Type / Tipo: <b>${RELEASE_TYPE}</b>%0A"
-          TEXT+="🏷 Version / Versión: <b>${TAG}</b>%0A"
-          TEXT+="🛠 Update Level / Nivel: <b>${UPDATE_LEVEL}</b>%0A"
-          TEXT+="👤 Contributor / Colaborador: <b>${AUTHOR}</b>%0A%0A"
-          TEXT+="🔗 Download / Descargar:%0A${URL}%0A%0A"
-          TEXT+="👨‍💻 Lead Developer: JAGR Developer%0A"
-          TEXT+="🏢 Organization: Frida Labs%0A"
-          TEXT+="🎵 Project: FridaMusic"
+          CAPTION="🎵 <b>FridaMusic Update</b>%0A"
+          CAPTION+="━━━━━━━━━━━━━━%0A%0A"
+          CAPTION+="📦 <b>Type:</b> ${TYPE}%0A"
+          CAPTION+="🏷 <b>Version:</b> ${TAG}%0A"
+          CAPTION+="🧠 <b>Update:</b> ${MOOD}%0A"
+          CAPTION+="👤 <b>Contributor:</b> ${AUTHOR}%0A%0A"
+          CAPTION+="📥 <b>Download / Descargar:</b>%0A${URL}%0A%0A"
+          CAPTION+="━━━━━━━━━━━━━━%0A"
+          CAPTION+="👨‍💻 <b>Lead:</b> JAGR Developer%0A"
+          CAPTION+="🏢 <b>Organization:</b> Frida Labs%0A"
+          CAPTION+="🎵 <b>Project:</b> FridaMusic"
 
-          echo "text=$TEXT" >> "$GITHUB_OUTPUT"
+          echo "caption=$CAPTION" >> "$GITHUB_OUTPUT"
+          echo "media_url=$MEDIA_URL" >> "$GITHUB_OUTPUT"
+          echo "logo_url=$LOGO_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Send Telegram Message
+      - name: Send animated Telegram release
+        shell: bash
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-          -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-          -d "message_thread_id=24" \
-          -d "parse_mode=HTML" \
-          -d "text=${{ steps.msg.outputs.text }}"
+          MEDIA_URL="${{ steps.msg.outputs.media_url }}"
+          LOGO_URL="${{ steps.msg.outputs.logo_url }}"
+
+          if curl --output /dev/null --silent --head --fail "$MEDIA_URL"; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendAnimation" \
+              -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -d "message_thread_id=24" \
+              -d "animation=$MEDIA_URL" \
+              -d "parse_mode=HTML" \
+              -d "caption=${{ steps.msg.outputs.caption }}"
+          else
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendPhoto" \
+              -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -d "message_thread_id=24" \
+              -d "photo=$LOGO_URL" \
+              -d "parse_mode=HTML" \
+              -d "caption=${{ steps.msg.outputs.caption }}"
+          fi
