@@ -7,6 +7,7 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
+
     steps:
       - name: Send Telegram notification
         shell: bash
@@ -19,18 +20,21 @@ jobs:
 
           CONTEXT="$(echo "$TAG $BODY" | tr '[:upper:]' '[:lower:]')"
 
+          # TYPE
           if [[ "$IS_PRERELEASE" == "true" || "$CONTEXT" =~ beta|alpha|test ]]; then
             TYPE="🧪 Beta Build"
           else
             TYPE="🚀 Official Release"
           fi
 
+          # TARGET
           if [[ "$CONTEXT" =~ web|website|vercel ]]; then
             TARGET="🌐 Website"
           else
             TARGET="📱 Android APK"
           fi
 
+          # LEVEL
           if [[ "$CONTEXT" =~ major ]]; then
             LEVEL="🔥 Major Update"
           elif [[ "$CONTEXT" =~ minor|fix|patch ]]; then
@@ -39,14 +43,28 @@ jobs:
             LEVEL="⚡ Medium Update"
           fi
 
+          # SUMMARY
           SUMMARY_EN="$(echo "$BODY" | awk '/SUMMARY_EN:/{getline; print; exit}')"
           SUMMARY_ES="$(echo "$BODY" | awk '/SUMMARY_ES:/{getline; print; exit}')"
 
           [ -z "$SUMMARY_EN" ] && SUMMARY_EN="New FridaMusic TM release available."
           [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Nueva release de FridaMusic TM disponible."
 
-          MESSAGE=$(printf "🎵 FridaMusic TM Release\n\n%s\n%s\n%s\n🏷 %s\n\n🇺🇸 %s\n🇲🇽 %s\n\n📥 Download / Descargar:\n%s\n\n👨‍💻 %s\n🏢 Frida Labs TM" "$TYPE" "$TARGET" "$LEVEL" "$TAG" "$SUMMARY_EN" "$SUMMARY_ES" "$URL" "$AUTHOR")
+          # CHANGES
+          CHANGES="$(echo "$BODY" | awk '
+          /CHANGES:/ {flag=1; next}
+          flag && NF {
+            print "• " $0
+            count++
+            if(count==4) exit
+          }')"
 
+          [ -z "$CHANGES" ] && CHANGES="• No changes listed"
+
+          # MESSAGE
+          MESSAGE=$(printf "🎵 FridaMusic TM Release\n\n%s\n%s\n%s\n🏷 %s\n\n🇺🇸 %s\n🇲🇽 %s\n\n📋 Changes:\n%s\n\n📥 Download / Descargar:\n%s\n\n👨‍💻 %s\n🏢 Frida Labs TM" "$TYPE" "$TARGET" "$LEVEL" "$TAG" "$SUMMARY_EN" "$SUMMARY_ES" "$CHANGES" "$URL" "$AUTHOR")
+
+          # TELEGRAM SEND
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d "message_thread_id=24" \
