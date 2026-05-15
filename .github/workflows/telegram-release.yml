@@ -1,4 +1,4 @@
-name: Telegram Release Notify
+name: FridaMusic TM Release Notify
 
 on:
   release:
@@ -12,13 +12,75 @@ jobs:
       - name: Send Telegram notification
         shell: bash
         run: |
-          MESSAGE="🚀 FridaMusic TM v1.0.0 released
+          TAG="${{ github.event.release.tag_name }}"
+          AUTHOR="${{ github.event.release.author.login }}"
+          URL="${{ github.event.release.html_url }}"
+          BODY="${{ github.event.release.body }}"
+          TITLE="${{ github.event.release.name }}"
+          IS_PRERELEASE="${{ github.event.release.prerelease }}"
 
-          📥 Download:
-          ${{ github.event.release.html_url }}
+          CONTEXT="$(printf "%s %s %s" "$TAG" "$TITLE" "$BODY" | tr '[:upper:]' '[:lower:]')"
 
-          👨‍💻 JAGR Developer
-          🏢 Frida Labs TM"
+          # TYPE
+          if [ "$IS_PRERELEASE" = "true" ] || echo "$CONTEXT" | grep -Eiq "beta|test|alpha"; then
+            TYPE_EN="Beta Build"
+            TYPE_ES="Versión Beta"
+            ICON="🧪"
+          else
+            TYPE_EN="Official Release"
+            TYPE_ES="Release Oficial"
+            ICON="🚀"
+          fi
+
+          # TARGET
+          if echo "$CONTEXT" | grep -Eiq "web|website|vercel"; then
+            TARGET_EN="Official Website"
+            TARGET_ES="Website Oficial"
+            TARGET_ICON="🌐"
+          else
+            TARGET_EN="Android APK"
+            TARGET_ES="APK Android"
+            TARGET_ICON="📱"
+          fi
+
+          # LEVEL
+          if echo "$CONTEXT" | grep -Eiq "major"; then
+            LEVEL_EN="Major Update"
+            LEVEL_ES="Actualización Mayor"
+            LEVEL_ICON="🔥"
+          elif echo "$CONTEXT" | grep -Eiq "minor|fix|patch"; then
+            LEVEL_EN="Minor Fix"
+            LEVEL_ES="Fix Menor"
+            LEVEL_ICON="🛠"
+          else
+            LEVEL_EN="Medium Update"
+            LEVEL_ES="Actualización Media"
+            LEVEL_ICON="⚡"
+          fi
+
+          # SUMMARY
+          SUMMARY_EN="$(echo "$BODY" | sed -n '/SUMMARY_EN:/,/SUMMARY_ES:/p' | sed '1d;$d' | head -1)"
+          SUMMARY_ES="$(echo "$BODY" | sed -n '/SUMMARY_ES:/,/CHANGES:/p' | sed '1d;$d' | head -1)"
+
+          [ -z "$SUMMARY_EN" ] && SUMMARY_EN="New FridaMusic TM update released."
+          [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Nueva actualización de FridaMusic TM publicada."
+
+          MESSAGE="🎵 FridaMusic TM Update
+
+${ICON} ${TYPE_EN}
+${TARGET_ICON} ${TARGET_EN}
+${LEVEL_ICON} ${LEVEL_EN}
+🏷 ${TAG}
+
+🇺🇸 ${SUMMARY_EN}
+
+🇲🇽 ${SUMMARY_ES}
+
+📥 Download:
+${URL}
+
+👨‍💻 ${AUTHOR}
+🏢 Frida Labs TM"
 
           curl -s -X POST \
             "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
