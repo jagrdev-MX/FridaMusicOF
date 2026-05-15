@@ -7,9 +7,9 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-
     steps:
       - name: Send Telegram notification
+        shell: bash
         run: |
           TAG="${{ github.event.release.tag_name }}"
           AUTHOR="${{ github.event.release.author.login }}"
@@ -17,53 +17,22 @@ jobs:
           BODY="${{ github.event.release.body }}"
           IS_PRERELEASE="${{ github.event.release.prerelease }}"
 
-          CONTEXT=$(echo "$TAG $BODY" | tr '[:upper:]' '[:lower:]')
+          CONTEXT="$(echo "$TAG $BODY" | tr '[:upper:]' '[:lower:]')"
 
-          if [[ "$IS_PRERELEASE" == "true" || "$CONTEXT" =~ beta|test|alpha ]]; then
-            TYPE="🧪 Beta Build / Versión Beta"
-          else
-            TYPE="🚀 Official Release / Release Oficial"
-          fi
+          if [[ "$IS_PRERELEASE" == "true" || "$CONTEXT" =~ beta|test|alpha ]]; then TYPE="🧪 Beta Build / Versión Beta"; else TYPE="🚀 Official Release / Release Oficial"; fi
+          if [[ "$CONTEXT" =~ web|website|vercel ]]; then TARGET="🌐 Website / Sitio Web"; else TARGET="📱 Android APK"; fi
+          if [[ "$CONTEXT" =~ major ]]; then LEVEL="🔥 Major Update / Actualización Mayor"; elif [[ "$CONTEXT" =~ minor|fix|patch ]]; then LEVEL="🛠 Minor Fix / Fix Menor"; else LEVEL="⚡ Medium Update / Actualización Media"; fi
 
-          if [[ "$CONTEXT" =~ web|website|vercel ]]; then
-            TARGET="🌐 Website / Sitio Web"
-          else
-            TARGET="📱 Android APK"
-          fi
-
-          if [[ "$CONTEXT" =~ major ]]; then
-            LEVEL="🔥 Major Update / Actualización Mayor"
-          elif [[ "$CONTEXT" =~ minor|fix|patch ]]; then
-            LEVEL="🛠 Minor Fix / Fix Menor"
-          else
-            LEVEL="⚡ Medium Update / Actualización Media"
-          fi
-
-          SUMMARY_EN=$(echo "$BODY" | grep "SUMMARY_EN:" | sed 's/SUMMARY_EN://')
-          SUMMARY_ES=$(echo "$BODY" | grep "SUMMARY_ES:" | sed 's/SUMMARY_ES://')
+          SUMMARY_EN="$(echo "$BODY" | grep 'SUMMARY_EN:' | sed 's/SUMMARY_EN://')"
+          SUMMARY_ES="$(echo "$BODY" | grep 'SUMMARY_ES:' | sed 's/SUMMARY_ES://')"
 
           [ -z "$SUMMARY_EN" ] && SUMMARY_EN="New FridaMusic TM update released."
           [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Nueva actualización de FridaMusic TM publicada."
 
-          MESSAGE="🎵 FridaMusic TM Update
-
-$TYPE
-$TARGET
-$LEVEL
-🏷 $TAG
-
-🇺🇸 $SUMMARY_EN
-
-🇲🇽 $SUMMARY_ES
-
-📥 Download:
-$URL
-
-👨‍💻 $AUTHOR
-🏢 Frida Labs TM"
+          MESSAGE=$(printf "🎵 FridaMusic TM Update\n\n%s\n%s\n%s\n🏷 %s\n\n🇺🇸 %s\n\n🇲🇽 %s\n\n📥 Download:\n%s\n\n👨‍💻 %s\n🏢 Frida Labs TM\n🎵 FridaMusic TM" "$TYPE" "$TARGET" "$LEVEL" "$TAG" "$SUMMARY_EN" "$SUMMARY_ES" "$URL" "$AUTHOR")
 
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-          -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-          -d "message_thread_id=24" \
-          -d "disable_web_page_preview=true" \
-          --data-urlencode "text=$MESSAGE"
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "message_thread_id=24" \
+            -d "disable_web_page_preview=true" \
+            --data-urlencode "text=${MESSAGE}"
