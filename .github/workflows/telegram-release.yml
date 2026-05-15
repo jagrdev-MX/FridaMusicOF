@@ -21,7 +21,6 @@ jobs:
 
           CONTEXT="$(printf "%s %s %s" "$TAG" "$TITLE" "$BODY" | tr '[:upper:]' '[:lower:]')"
 
-          # TYPE DETECTION
           if [ "$IS_PRERELEASE" = "true" ] || echo "$CONTEXT" | grep -Eiq "beta|test|alpha"; then
             TYPE_EN="Beta Build"
             TYPE_ES="Versión Beta"
@@ -32,7 +31,6 @@ jobs:
             ICON="🚀"
           fi
 
-          # TARGET DETECTION
           if echo "$CONTEXT" | grep -Eiq "web|website|vercel"; then
             TARGET_EN="Official Website"
             TARGET_ES="Website Oficial"
@@ -43,7 +41,6 @@ jobs:
             TARGET_ICON="📱"
           fi
 
-          # LEVEL DETECTION
           if echo "$CONTEXT" | grep -Eiq "major"; then
             LEVEL_EN="Major Update"
             LEVEL_ES="Actualización Mayor"
@@ -58,14 +55,15 @@ jobs:
             LEVEL_ICON="⚡"
           fi
 
-          # SUMMARY DETECTION
           SUMMARY_EN="$(echo "$BODY" | sed -n '/SUMMARY_EN:/,/SUMMARY_ES:/p' | sed '1d;$d' | head -1)"
           SUMMARY_ES="$(echo "$BODY" | sed -n '/SUMMARY_ES:/,/CHANGES:/p' | sed '1d;$d' | head -1)"
 
           [ -z "$SUMMARY_EN" ] && SUMMARY_EN="New FridaMusic TM update released."
           [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Nueva actualización de FridaMusic TM publicada."
 
-          MESSAGE="🎵 FridaMusic TM Update
+          MESSAGE=$(cat <<EOF
+🎵 FridaMusic TM Update
+━━━━━━━━━━━━
 
 ${ICON} ${TYPE_EN} / ${TYPE_ES}
 ${TARGET_ICON} ${TARGET_EN} / ${TARGET_ES}
@@ -79,9 +77,12 @@ ${LEVEL_ICON} ${LEVEL_EN} / ${LEVEL_ES}
 📥 Download:
 ${URL}
 
+━━━━━━━━━━━━
 👨‍💻 ${AUTHOR}
 🏢 Frida Labs TM
-🎵 FridaMusic TM"
+🎵 FridaMusic TM
+EOF
+)
 
           curl -s -X POST \
             "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
