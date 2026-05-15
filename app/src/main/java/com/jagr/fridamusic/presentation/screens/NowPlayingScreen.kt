@@ -212,6 +212,7 @@ fun NowPlayingScreen(
                 currentSong = currentSong,
                 albumArtUrl = albumArtUrl,
                 sheetState = sheetState,
+                viewModel = viewModel,
                 onDismiss = { showQueueSheet = false }
             )
         }
@@ -468,9 +469,10 @@ private fun QueueBottomSheet(
     currentSong: Song?,
     albumArtUrl: String?,
     sheetState: SheetState,
+    viewModel: LibraryViewModels,
     onDismiss: () -> Unit
 ) {
-    var isInfiniteQueueEnabled by remember { mutableStateOf(false) }
+    val isInfiniteQueueEnabled by viewModel.isAutoPlayEnabled.collectAsState()
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
@@ -487,7 +489,7 @@ private fun QueueBottomSheet(
                     Spacer(modifier = Modifier.width(8.dp))
                     Switch(
                         checked = isInfiniteQueueEnabled,
-                        onCheckedChange = { isInfiniteQueueEnabled = it },
+                        onCheckedChange = { viewModel.toggleAutoplay(it) },
                         modifier = Modifier.scale(0.8f)
                     )
                 }

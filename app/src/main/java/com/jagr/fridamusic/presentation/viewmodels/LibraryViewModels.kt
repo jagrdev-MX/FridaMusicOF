@@ -51,13 +51,18 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private val _currentTheme = MutableStateFlow(AppTheme.SYSTEM)
     val currentTheme = _currentTheme.asStateFlow()
-
     val sleepTimerMinutes = MutableStateFlow(0)
     private var sleepTimerJob: Job? = null
     private val _searchHistory = MutableStateFlow<List<String>>(
         settingsManager.searchHistory.split("||").filter { it.isNotBlank() }
     )
     val searchHistory = _searchHistory.asStateFlow()
+
+    val isAutoPlayEnabled = MutableStateFlow(false)
+
+    fun toggleAutoplay(enabled: Boolean) {
+        isAutoPlayEnabled.value = enabled
+    }
 
     fun addToSearchHistory(query: String) {
         if (query.isBlank()) return
@@ -192,7 +197,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         }
                         if (state == Player.STATE_ENDED) {
                             _currentPosition.value = 0L
-                            skipToNext()
+
+                            if (isAutoPlayEnabled.value) {
+                                skipToNext()
+                            } else {
+                                _isPlaying.value = false
+                                exoPlayer?.seekTo(0)
+                                exoPlayer?.pause()
+                                _currentSong.value?.let { updateNotification(it, false) }
+                            }
                         }
                     }
                 })
