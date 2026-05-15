@@ -120,8 +120,8 @@ jobs:
             LEVEL_KEY="fix"
           fi
 
-          SUMMARY_EN="$(echo "$BODY" | sed -n '/SUMMARY_EN:/,/SUMMARY_ES:/p' | sed '1d;$d' | head -3 | tr '\n' ' ')"
-          SUMMARY_ES="$(echo "$BODY" | sed -n '/SUMMARY_ES:/,/CHANGES:/p' | sed '1d;$d' | head -3 | tr '\n' ' ')"
+          SUMMARY_EN="$(echo "$BODY" | sed -n '/SUMMARY_EN:/,/SUMMARY_ES:/p' | sed '1d;$d' | head -2 | tr '\n' ' ' | cut -c1-280)"
+          SUMMARY_ES="$(echo "$BODY" | sed -n '/SUMMARY_ES:/,/CHANGES:/p' | sed '1d;$d' | head -2 | tr '\n' ' ' | cut -c1-280)"
 
           [ -z "$SUMMARY_EN" ] && SUMMARY_EN="A FridaMusic TM update was published based on the release notes."
           [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Se publicó una actualización de FridaMusic TM basada en las notas de release."
@@ -144,7 +144,7 @@ jobs:
         run: |
           BODY="${{ steps.ctx.outputs.body }}"
 
-          CHANGES="$(echo "$BODY" | sed -n '/CHANGES:/,$p' | sed '1d' | sed '/^[[:space:]]*$/q' | head -20)"
+          CHANGES="$(echo "$BODY" | sed -n '/CHANGES:/,$p' | sed '1d' | sed '/^[[:space:]]*$/q' | head -8)"
 
           if [ -z "$CHANGES" ]; then
             CHANGES="No detailed changes were provided."
@@ -189,10 +189,18 @@ jobs:
           MESSAGE+="🧠 <b>Resumen:</b> ${{ steps.local.outputs.summary_es }}\n\n"
 
           MESSAGE+="📋 <b>Changes / Cambios:</b>\n"
+          CHANGE_COUNT=0
+
           while IFS= read -r line; do
             if [ -n "$line" ]; then
               CLEAN_LINE="${line#- }"
+              CLEAN_LINE="$(echo "$CLEAN_LINE" | cut -c1-120)"
               MESSAGE+="• ${CLEAN_LINE}\n"
+              CHANGE_COUNT=$((CHANGE_COUNT + 1))
+
+              if [ "$CHANGE_COUNT" -ge 6 ]; then
+                break
+              fi
             fi
           done <<< "$CHANGES"
 
