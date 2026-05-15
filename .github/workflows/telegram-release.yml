@@ -10,83 +10,60 @@ jobs:
 
     steps:
       - name: Send Telegram notification
-        shell: bash
         run: |
           TAG="${{ github.event.release.tag_name }}"
           AUTHOR="${{ github.event.release.author.login }}"
           URL="${{ github.event.release.html_url }}"
           BODY="${{ github.event.release.body }}"
-          TITLE="${{ github.event.release.name }}"
           IS_PRERELEASE="${{ github.event.release.prerelease }}"
 
-          CONTEXT="$(printf "%s %s %s" "$TAG" "$TITLE" "$BODY" | tr '[:upper:]' '[:lower:]')"
+          CONTEXT=$(echo "$TAG $BODY" | tr '[:upper:]' '[:lower:]')
 
-          if [ "$IS_PRERELEASE" = "true" ] || echo "$CONTEXT" | grep -Eiq "beta|test|alpha"; then
-            TYPE_EN="Beta Build"
-            TYPE_ES="Versión Beta"
-            ICON="🧪"
+          if [[ "$IS_PRERELEASE" == "true" || "$CONTEXT" =~ beta|test|alpha ]]; then
+            TYPE="🧪 Beta Build / Versión Beta"
           else
-            TYPE_EN="Official Release"
-            TYPE_ES="Release Oficial"
-            ICON="🚀"
+            TYPE="🚀 Official Release / Release Oficial"
           fi
 
-          if echo "$CONTEXT" | grep -Eiq "web|website|vercel"; then
-            TARGET_EN="Official Website"
-            TARGET_ES="Website Oficial"
-            TARGET_ICON="🌐"
+          if [[ "$CONTEXT" =~ web|website|vercel ]]; then
+            TARGET="🌐 Website / Sitio Web"
           else
-            TARGET_EN="Android APK"
-            TARGET_ES="APK Android"
-            TARGET_ICON="📱"
+            TARGET="📱 Android APK"
           fi
 
-          if echo "$CONTEXT" | grep -Eiq "major"; then
-            LEVEL_EN="Major Update"
-            LEVEL_ES="Actualización Mayor"
-            LEVEL_ICON="🔥"
-          elif echo "$CONTEXT" | grep -Eiq "minor|fix|patch"; then
-            LEVEL_EN="Minor Fix"
-            LEVEL_ES="Fix Menor"
-            LEVEL_ICON="🛠"
+          if [[ "$CONTEXT" =~ major ]]; then
+            LEVEL="🔥 Major Update / Actualización Mayor"
+          elif [[ "$CONTEXT" =~ minor|fix|patch ]]; then
+            LEVEL="🛠 Minor Fix / Fix Menor"
           else
-            LEVEL_EN="Medium Update"
-            LEVEL_ES="Actualización Media"
-            LEVEL_ICON="⚡"
+            LEVEL="⚡ Medium Update / Actualización Media"
           fi
 
-          SUMMARY_EN="$(echo "$BODY" | sed -n '/SUMMARY_EN:/,/SUMMARY_ES:/p' | sed '1d;$d' | head -1)"
-          SUMMARY_ES="$(echo "$BODY" | sed -n '/SUMMARY_ES:/,/CHANGES:/p' | sed '1d;$d' | head -1)"
+          SUMMARY_EN=$(echo "$BODY" | grep "SUMMARY_EN:" | sed 's/SUMMARY_EN://')
+          SUMMARY_ES=$(echo "$BODY" | grep "SUMMARY_ES:" | sed 's/SUMMARY_ES://')
 
           [ -z "$SUMMARY_EN" ] && SUMMARY_EN="New FridaMusic TM update released."
           [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Nueva actualización de FridaMusic TM publicada."
 
-          MESSAGE=$(cat <<EOF
-🎵 FridaMusic TM Update
-━━━━━━━━━━━━
+          MESSAGE="🎵 FridaMusic TM Update
 
-${ICON} ${TYPE_EN} / ${TYPE_ES}
-${TARGET_ICON} ${TARGET_EN} / ${TARGET_ES}
-${LEVEL_ICON} ${LEVEL_EN} / ${LEVEL_ES}
-🏷 Version: ${TAG}
+$TYPE
+$TARGET
+$LEVEL
+🏷 $TAG
 
-🇺🇸 ${SUMMARY_EN}
+🇺🇸 $SUMMARY_EN
 
-🇲🇽 ${SUMMARY_ES}
+🇲🇽 $SUMMARY_ES
 
 📥 Download:
-${URL}
+$URL
 
-━━━━━━━━━━━━
-👨‍💻 ${AUTHOR}
-🏢 Frida Labs TM
-🎵 FridaMusic TM
-EOF
-)
+👨‍💻 $AUTHOR
+🏢 Frida Labs TM"
 
-          curl -s -X POST \
-            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "message_thread_id=24" \
-            -d "disable_web_page_preview=true" \
-            --data-urlencode "text=${MESSAGE}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+          -d "message_thread_id=24" \
+          -d "disable_web_page_preview=true" \
+          --data-urlencode "text=$MESSAGE"
