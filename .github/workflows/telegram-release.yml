@@ -123,8 +123,8 @@ jobs:
           SUMMARY_EN="$(echo "$BODY" | sed -n '/SUMMARY_EN:/,/SUMMARY_ES:/p' | sed '1d;$d' | head -3 | tr '\n' ' ')"
           SUMMARY_ES="$(echo "$BODY" | sed -n '/SUMMARY_ES:/,/CHANGES:/p' | sed '1d;$d' | head -3 | tr '\n' ' ')"
 
-          [ -z "$SUMMARY_EN" ] && SUMMARY_EN="A FridaMusic update was published based on the release notes."
-          [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Se publicó una actualización de FridaMusic basada en las notas de release."
+          [ -z "$SUMMARY_EN" ] && SUMMARY_EN="A FridaMusic TM update was published based on the release notes."
+          [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Se publicó una actualización de FridaMusic TM basada en las notas de release."
 
           {
             echo "type_en=$TYPE_EN"
@@ -144,7 +144,7 @@ jobs:
         run: |
           BODY="${{ steps.ctx.outputs.body }}"
 
-          CHANGES="$(echo "$BODY" | sed -n '/CHANGES:/,$p' | sed '1d' | sed '/^[[:space:]]*$/q' | head -10)"
+          CHANGES="$(echo "$BODY" | sed -n '/CHANGES:/,$p' | sed '1d' | sed '/^[[:space:]]*$/q' | head -20)"
 
           if [ -z "$CHANGES" ]; then
             CHANGES="No detailed changes were provided."
@@ -169,61 +169,55 @@ jobs:
               ;;
           esac
 
-          CAPTION="🎵 <b>FridaMusic Smart Update</b>\n"
-          CAPTION+="━━━━━━━━━━━━\n\n"
+          MESSAGE="🎵 <b>FridaMusic TM Smart Update</b>\n"
+          MESSAGE+="━━━━━━━━━━━━\n\n"
 
-          CAPTION+="🇺🇸 <b>English</b>\n"
-          CAPTION+="📦 <b>Type:</b> ${{ steps.local.outputs.type_en }}\n"
-          CAPTION+="🎯 <b>Target:</b> ${{ steps.local.outputs.target_en }}\n"
-          CAPTION+="🏷 <b>Version:</b> ${{ steps.ctx.outputs.tag }}\n"
-          CAPTION+="${LEVEL_ICON} <b>Level:</b> ${{ steps.local.outputs.level_en }}\n"
-          CAPTION+="👤 <b>Contributor:</b> ${{ steps.ctx.outputs.author }}\n"
-          CAPTION+="🧠 <b>Summary:</b> ${{ steps.local.outputs.summary_en }}\n\n"
+          MESSAGE+="🇺🇸 <b>English</b>\n"
+          MESSAGE+="📦 <b>Type:</b> ${{ steps.local.outputs.type_en }}\n"
+          MESSAGE+="🎯 <b>Target:</b> ${{ steps.local.outputs.target_en }}\n"
+          MESSAGE+="🏷 <b>Version:</b> ${{ steps.ctx.outputs.tag }}\n"
+          MESSAGE+="${LEVEL_ICON} <b>Level:</b> ${{ steps.local.outputs.level_en }}\n"
+          MESSAGE+="👤 <b>Contributor:</b> ${{ steps.ctx.outputs.author }}\n"
+          MESSAGE+="🧠 <b>Summary:</b> ${{ steps.local.outputs.summary_en }}\n\n"
 
-          CAPTION+="🇲🇽 <b>Español</b>\n"
-          CAPTION+="📦 <b>Tipo:</b> ${{ steps.local.outputs.type_es }}\n"
-          CAPTION+="🎯 <b>Objetivo:</b> ${{ steps.local.outputs.target_es }}\n"
-          CAPTION+="🏷 <b>Versión:</b> ${{ steps.ctx.outputs.tag }}\n"
-          CAPTION+="${LEVEL_ICON} <b>Nivel:</b> ${{ steps.local.outputs.level_es }}\n"
-          CAPTION+="👤 <b>Colaborador:</b> ${{ steps.ctx.outputs.author }}\n"
-          CAPTION+="🧠 <b>Resumen:</b> ${{ steps.local.outputs.summary_es }}\n\n"
+          MESSAGE+="🇲🇽 <b>Español</b>\n"
+          MESSAGE+="📦 <b>Tipo:</b> ${{ steps.local.outputs.type_es }}\n"
+          MESSAGE+="🎯 <b>Objetivo:</b> ${{ steps.local.outputs.target_es }}\n"
+          MESSAGE+="🏷 <b>Versión:</b> ${{ steps.ctx.outputs.tag }}\n"
+          MESSAGE+="${LEVEL_ICON} <b>Nivel:</b> ${{ steps.local.outputs.level_es }}\n"
+          MESSAGE+="👤 <b>Colaborador:</b> ${{ steps.ctx.outputs.author }}\n"
+          MESSAGE+="🧠 <b>Resumen:</b> ${{ steps.local.outputs.summary_es }}\n\n"
 
-          CAPTION+="📋 <b>Changes / Cambios:</b>\n"
+          MESSAGE+="📋 <b>Changes / Cambios:</b>\n"
           while IFS= read -r line; do
             if [ -n "$line" ]; then
               CLEAN_LINE="${line#- }"
-              CAPTION+="• ${CLEAN_LINE}\n"
+              MESSAGE+="• ${CLEAN_LINE}\n"
             fi
           done <<< "$CHANGES"
 
-          CAPTION+="\n📥 <b>Download / Descargar:</b>\n${{ steps.ctx.outputs.url }}\n\n"
-          CAPTION+="━━━━━━━━━━━━\n"
-          CAPTION+="👨‍💻 <b>Lead:</b> JAGR Developer\n"
-          CAPTION+="🏢 <b>Organization:</b> Frida Labs\n"
-          CAPTION+="🎵 <b>Project:</b> FridaMusic"
+          MESSAGE+="\n📥 <b>Download / Descargar:</b>\n${{ steps.ctx.outputs.url }}\n\n"
+          MESSAGE+="━━━━━━━━━━━━\n"
+          MESSAGE+="👨‍💻 <b>Lead:</b> JAGR Developer\n"
+          MESSAGE+="🏢 <b>Organization:</b> Frida Labs TM\n"
+          MESSAGE+="🎵 <b>Project:</b> FridaMusic TM"
 
-          echo "caption<<EOF" >> "$GITHUB_OUTPUT"
-          echo -e "$CAPTION" >> "$GITHUB_OUTPUT"
+          echo "message<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$MESSAGE" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
           echo "media_url=$MEDIA_URL" >> "$GITHUB_OUTPUT"
 
       - name: Send Telegram notification
         shell: bash
         run: |
-          echo "========================================"
           echo "Starting Telegram notification..."
-          echo "========================================"
 
           CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
           BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
           THREAD_ID="24"
 
           MEDIA_URL="${{ steps.final.outputs.media_url }}"
-          CAPTION="${{ steps.final.outputs.caption }}"
-
-          echo "Chat ID loaded"
-          echo "Thread ID: $THREAD_ID"
-          echo "Media URL: $MEDIA_URL"
+          MESSAGE="${{ steps.final.outputs.message }}"
 
           if [ -z "$BOT_TOKEN" ]; then
             echo "ERROR: TELEGRAM_BOT_TOKEN is empty"
@@ -235,25 +229,35 @@ jobs:
             exit 1
           fi
 
-          if [ -z "$CAPTION" ]; then
-            echo "ERROR: Caption is empty"
+          if [ -z "$MESSAGE" ]; then
+            echo "ERROR: Message is empty"
             exit 1
           fi
 
-          RESPONSE=$(curl -s -X POST \
+          echo "Sending GIF..."
+          GIF_RESPONSE=$(curl -s -X POST \
             "https://api.telegram.org/bot${BOT_TOKEN}/sendAnimation" \
             -d "chat_id=${CHAT_ID}" \
             -d "message_thread_id=${THREAD_ID}" \
-            -d "animation=${MEDIA_URL}" \
+            -d "animation=${MEDIA_URL}")
+
+          echo "GIF response:"
+          echo "$GIF_RESPONSE"
+
+          echo "Sending text message..."
+          MSG_RESPONSE=$(curl -s -X POST \
+            "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${CHAT_ID}" \
+            -d "message_thread_id=${THREAD_ID}" \
             -d "parse_mode=HTML" \
-            --data-urlencode "caption=${CAPTION}")
+            --data-urlencode "text=${MESSAGE}")
 
-          echo "Telegram API response:"
-          echo "$RESPONSE"
+          echo "Message response:"
+          echo "$MSG_RESPONSE"
 
-          if echo "$RESPONSE" | grep -q '"ok":false'; then
-            echo "Telegram notification failed."
+          if echo "$MSG_RESPONSE" | grep -q '"ok":false'; then
+            echo "Telegram message failed"
             exit 1
           fi
 
-          echo "Telegram notification sent successfully."
+          echo "Telegram notification sent successfully"
