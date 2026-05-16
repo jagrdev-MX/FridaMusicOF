@@ -16,6 +16,7 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.jagr.fridamusic.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -154,7 +155,7 @@ class MusicService : Service() {
         val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
 
         val builder = NotificationCompat.Builder(this, "FRIDA_MUSIC_CHANNEL")
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.drawable.ic_frida_notification)
             .setContentTitle(title)
             .setContentText(artist)
             .setContentIntent(contentIntent)
