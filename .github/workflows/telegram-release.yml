@@ -20,27 +20,34 @@ jobs:
 
           CONTEXT="$(echo "$TAG $BODY" | tr '[:upper:]' '[:lower:]')"
 
+          RELEASE_KIND="$(echo "$BODY" | awk -F': ' '/^TYPE:/{print $2; exit}')"
+          RELEASE_LEVEL="$(echo "$BODY" | awk -F': ' '/^LEVEL:/{print $2; exit}')"
+
           # TYPE
           if [[ "$IS_PRERELEASE" == "true" || "$CONTEXT" =~ beta|alpha|test ]]; then
-            TYPE="🧪 Beta Build"
+            TYPE="Beta Build"
           else
-            TYPE="🚀 Official Release"
+            TYPE="Official Release"
           fi
 
           # TARGET
-          if [[ "$CONTEXT" =~ web|website|vercel ]]; then
-            TARGET="🌐 Website"
+          if [[ "$RELEASE_KIND" == "WEB" || "$CONTEXT" =~ web|website|vercel ]]; then
+            TARGET="Website"
+          elif [[ "$RELEASE_KIND" == "TELEGRAM BOT" || "$CONTEXT" =~ telegram ]]; then
+            TARGET="Telegram Bot"
           else
-            TARGET="📱 Android APK"
+            TARGET="Android APK"
           fi
 
           # LEVEL
-          if [[ "$CONTEXT" =~ major ]]; then
-            LEVEL="🔥 Major Update"
-          elif [[ "$CONTEXT" =~ minor|fix|patch ]]; then
-            LEVEL="🛠 Minor Fix"
+          if [[ "$RELEASE_LEVEL" == "MAJOR" || "$CONTEXT" =~ major ]]; then
+            LEVEL="Major Update"
+          elif [[ "$RELEASE_LEVEL" == "MINOR" || "$CONTEXT" =~ minor ]]; then
+            LEVEL="Medium Update"
+          elif [[ "$RELEASE_LEVEL" == "PATCH" || "$CONTEXT" =~ fix|patch ]]; then
+            LEVEL="Minor Fix"
           else
-            LEVEL="⚡ Medium Update"
+            LEVEL="Medium Update"
           fi
 
           # SUMMARY

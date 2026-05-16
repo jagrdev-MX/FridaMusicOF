@@ -124,7 +124,7 @@ Las contribuciones son bienvenidas. Puedes abrir un **issue** para reportes/mejo
 
 1. Haz fork del repositorio
 2. Crea una rama (`feature/mi-mejora`)
-3. Realiza commits claros
+3. Realiza commits con Conventional Commits y, cuando aplique, usa scopes claros por track (`feat(web):`, `fix(android):`, `refactor(telegram-bot):`)
 4. Abre tu pull request
 
 ---

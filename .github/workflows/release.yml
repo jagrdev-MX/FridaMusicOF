@@ -3,7 +3,7 @@ name: Release Pipeline
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   test:
@@ -33,16 +33,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
 
-      - name: Install semantic-release
-        run: npm install -g semantic-release @semantic-release/git @semantic-release/changelog @semantic-release/github @semantic-release/commit-analyzer @semantic-release/release-notes-generator
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Run semantic release
+      - name: Release Web track
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: npm run release:web
+
+      - name: Release Android track
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:android
+
+      - name: Release Telegram Bot track
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:telegram-bot

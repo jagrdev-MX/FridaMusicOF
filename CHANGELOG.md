@@ -1,3 +1,18 @@
+# CHANGELOG
+
+## Canonical automatic changelogs
+
+From this point forward, each product track has its own automatic changelog and canonical tag family:
+
+- Android APK: [`CHANGELOG.android.md`](CHANGELOG.android.md) - `vX.Y.Z-release-apk`
+- Web: [`CHANGELOG.web.md`](CHANGELOG.web.md) - `vX.Y.Z-web`
+- Telegram Bot: [`CHANGELOG.telegram-bot.md`](CHANGELOG.telegram-bot.md) - `vX.Y.Z-telegram-bot`
+
+New release entries are generated from real Conventional Commits, Git tags, and published releases.
+Las entradas nuevas se generan automaticamente desde commits reales, tags reales y releases reales.
+
+## Historial legado / Legacy history
+
 # [0.4.0](https://github.com/jagrdev-MX/FridaMusicOF/compare/v0.3.0...v0.4.0) (2026-04-29)
 
 
@@ -35,7 +50,7 @@
 * implement project site with landing page, styling, and crashlytics configuration ([66550c9](https://github.com/jagrdev-MX/FridaMusicOF/commit/66550c956b315b54056f95b14de5d8b31dce3e2a))
 * trigger release pipeline ([82235cd](https://github.com/jagrdev-MX/FridaMusicOF/commit/82235cdc282f440669659d79a1668d12a481f9f1))
 
-# CHANGELOG
+### Legacy manual changelog
 
 All notable changes in this repository are documented here, based strictly on commit history.
 
