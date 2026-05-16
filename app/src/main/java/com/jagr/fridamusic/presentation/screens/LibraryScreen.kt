@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import android.net.Uri
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,7 @@ fun LibraryScreen(
 ) {
     val songs by viewModel.songs.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
+    val recentHistory by viewModel.recentHistory.collectAsState()
 
     val tabs = listOf(
         stringResource(R.string.songs_tab),
@@ -147,10 +149,58 @@ fun LibraryScreen(
         when (selectedTab) {
             tabs[0] -> {
                 item {
-                    Text(stringResource(R.string.recent_songs), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(start = 20.dp, bottom = 8.dp))
+                    Text(
+                        text = "Recent Songs",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
-                items(songs, key = { it.id }) { song ->
-                    LibrarySongItem(song, viewModel) { viewModel.playSong(song) }
+
+                if (recentHistory.isNotEmpty()) {
+                    items(
+                        recentHistory,
+                        key = { "recent_${it.id}" }
+                    ) { history ->
+                        val parsedUri = Uri.parse(history.songId)
+
+                        val song = Song(
+                            id = history.songId.hashCode().toLong(),
+                            title = history.title,
+                            artist = history.artist,
+                            data = history.songId,
+                            duration = 0L,
+                            albumId = 0L,
+                            uri = parsedUri,
+                            artworkUri = history.artworkUrl?.let { Uri.parse(it) } ?: Uri.EMPTY
+                        )
+
+                        LibrarySongItem(song, viewModel) {
+                            viewModel.playSong(song)
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "Local Songs",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                items(
+                    songs,
+                    key = { "local_${it.id}" }
+                ) { song ->
+                    LibrarySongItem(song, viewModel) {
+                        viewModel.playSong(song)
+                    }
                 }
             }
             tabs[1] -> {

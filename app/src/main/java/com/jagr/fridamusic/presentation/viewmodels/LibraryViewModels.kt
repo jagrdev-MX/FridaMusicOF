@@ -18,6 +18,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.jagr.fridamusic.data.local.MusicDatabase
+import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
+import com.jagr.fridamusic.data.repository.PlaybackHistoryRepository
 import com.jagr.fridamusic.data.local.PlaylistEntity
 import com.jagr.fridamusic.data.remote.innertube.DeezerApi
 import com.jagr.fridamusic.data.remote.innertube.ResultType
@@ -60,6 +62,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _searchHistory = MutableStateFlow<List<String>>(
         settingsManager.searchHistory.split("||").filter { it.isNotBlank() }
     )
+    private val _recentHistory =
+        MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
+
+    val recentHistory = _recentHistory.asStateFlow()
     val searchHistory = _searchHistory.asStateFlow()
 
     val isAutoPlayEnabled = MutableStateFlow(false)
@@ -147,6 +153,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     private var exoPlayer: ExoPlayer? = null
+    private val playbackHistoryRepository =
+        PlaybackHistoryRepository(
+            MusicDatabase.getDatabase(application).playbackHistoryDao()
+        )
     private var progressJob: Job? = null
     private var extractionJob: Job? = null
     private var searchJob: Job? = null
@@ -175,6 +185,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         ContextCompat.registerReceiver(getApplication(), notificationReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
         ensureFavoritesPlaylistExists()
         restoreLastPlaybackState()
+        loadRecentHistory()
     }
 
     @OptIn(UnstableApi::class)
@@ -278,6 +289,16 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
 
         _currentSong.value = song
+        viewModelScope.launch {
+            playbackHistoryRepository.addToHistory(
+                PlaybackHistoryEntity(
+                    songId = song.uri.toString(),
+                    title = song.title,
+                    artist = song.artist,
+                    artworkUrl = song.artworkUri.toString()
+                )
+            )
+        }
         _isPlaying.value = true
         startProgressUpdate()
         updateNotification(song, true)
@@ -295,6 +316,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 _lyricsLines.value = lyrics?.let { LyricsParser.parseLrc(it) } ?: emptyList()
                 updateNotification(song, true)
             }
+        }
+    }
+
+    fun loadRecentHistory() {
+        viewModelScope.launch {
+            _recentHistory.value =
+                playbackHistoryRepository.getRecentHistory(10)
         }
     }
 

@@ -3,6 +3,7 @@ package com.jagr.fridamusic.domain.model
 import android.net.Uri
 import androidx.compose.runtime.Immutable
 
+
 @Immutable
 data class Song(
     val id: Long,
@@ -15,4 +16,5 @@ data class Song(
     val artworkUri: Uri,
     val lyrics: String? = null,
     val isFavorite: Boolean = false
+
 )
