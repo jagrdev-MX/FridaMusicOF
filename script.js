@@ -1,6 +1,6 @@
-const RELEASE_ENDPOINT = 'https://api.github.com/repos/jagrdev-MX/FridaMusicOF/releases/latest';
+const RELEASE_ENDPOINT = 'https://api.github.com/repos/jagrdev-MX/FridaMusicOF/releases?per_page=30';
 const RELEASES_URL = 'https://github.com/jagrdev-MX/FridaMusicOF/releases';
-const CHANGELOG_URL = 'https://github.com/jagrdev-MX/FridaMusicOF/blob/main/CHANGELOG.md';
+const CHANGELOG_URL = 'https://github.com/jagrdev-MX/FridaMusicOF/blob/master/CHANGELOG.android.md';
 
 const translations = {
   es: {
@@ -48,7 +48,7 @@ const translations = {
     'interface.settings': 'Settings - ajustes precisos',
     'downloads.kicker': 'Descargas',
     'downloads.title': 'Instala FridaMusic',
-    'downloads.copy': 'La disponibilidad se obtiene desde las releases públicas del repositorio para evitar versiones inventadas o enlaces obsoletos.',
+    'downloads.copy': 'La disponibilidad se obtiene desde las releases Android públicas del repositorio para evitar versiones inventadas o enlaces obsoletos.',
     'downloads.platform': 'Plataforma',
     'downloads.android': 'Android',
     'downloads.available': 'Disponible',
@@ -57,10 +57,10 @@ const translations = {
     'downloads.distribution': 'Distribución',
     'downloads.distributionValue': 'APK de release',
     'downloads.versionLabel': 'Versión actual',
-    'downloads.loading': 'Consultando la última release pública...',
-    'downloads.readyWithApk': 'APK detectada en la última release pública.',
-    'downloads.readyWithoutApk': 'La última release pública existe, pero no expone un APK descargable.',
-    'downloads.empty': 'Todavía no hay una release pública disponible.',
+    'downloads.loading': 'Consultando la última release Android pública...',
+    'downloads.readyWithApk': 'APK detectada en la última release Android pública.',
+    'downloads.readyWithoutApk': 'La última release Android pública existe, pero no expone un APK descargable.',
+    'downloads.empty': 'Todavía no hay una release Android pública disponible.',
     'downloads.error': 'No se pudo consultar GitHub en este momento. Usa el enlace de releases para revisar la descarga manualmente.',
     'downloads.downloadApk': 'Descargar APK',
     'downloads.unavailable': 'APK no disponible',
@@ -129,7 +129,7 @@ const translations = {
     'interface.settings': 'Settings - precise controls',
     'downloads.kicker': 'Downloads',
     'downloads.title': 'Install FridaMusic',
-    'downloads.copy': 'Availability is pulled from the repository public releases so versions and links are not invented or stale.',
+    'downloads.copy': 'Availability is pulled from the repository public Android releases so versions and links are not invented or stale.',
     'downloads.platform': 'Platform',
     'downloads.android': 'Android',
     'downloads.available': 'Available',
@@ -138,10 +138,10 @@ const translations = {
     'downloads.distribution': 'Distribution',
     'downloads.distributionValue': 'Release APK',
     'downloads.versionLabel': 'Current version',
-    'downloads.loading': 'Checking the latest public release...',
-    'downloads.readyWithApk': 'APK detected in the latest public release.',
-    'downloads.readyWithoutApk': 'The latest public release exists, but it does not expose a downloadable APK.',
-    'downloads.empty': 'There is no public release available yet.',
+    'downloads.loading': 'Checking the latest public Android release...',
+    'downloads.readyWithApk': 'APK detected in the latest public Android release.',
+    'downloads.readyWithoutApk': 'The latest public Android release exists, but it does not expose a downloadable APK.',
+    'downloads.empty': 'There is no public Android release available yet.',
     'downloads.error': 'GitHub could not be queried right now. Use the releases link to check the download manually.',
     'downloads.downloadApk': 'Download APK',
     'downloads.unavailable': 'APK unavailable',
@@ -210,7 +210,7 @@ const translations = {
     'interface.settings': 'Settings - ajustes precisos',
     'downloads.kicker': 'Downloads',
     'downloads.title': 'Instale FridaMusic',
-    'downloads.copy': 'A disponibilidade é obtida das releases públicas do repositório para evitar versões inventadas ou links desatualizados.',
+    'downloads.copy': 'A disponibilidade é obtida das releases Android públicas do repositório para evitar versões inventadas ou links desatualizados.',
     'downloads.platform': 'Plataforma',
     'downloads.android': 'Android',
     'downloads.available': 'Disponível',
@@ -219,10 +219,10 @@ const translations = {
     'downloads.distribution': 'Distribuição',
     'downloads.distributionValue': 'APK de release',
     'downloads.versionLabel': 'Versão atual',
-    'downloads.loading': 'Consultando a release pública mais recente...',
-    'downloads.readyWithApk': 'APK detectado na release pública mais recente.',
-    'downloads.readyWithoutApk': 'A release pública mais recente existe, mas não expõe um APK para download.',
-    'downloads.empty': 'Ainda não há uma release pública disponível.',
+    'downloads.loading': 'Consultando a release Android pública mais recente...',
+    'downloads.readyWithApk': 'APK detectado na release Android pública mais recente.',
+    'downloads.readyWithoutApk': 'A release Android pública mais recente existe, mas não expõe um APK para download.',
+    'downloads.empty': 'Ainda não há uma release Android pública disponível.',
     'downloads.error': 'Não foi possível consultar o GitHub agora. Use o link de releases para revisar o download manualmente.',
     'downloads.downloadApk': 'Baixar APK',
     'downloads.unavailable': 'APK indisponível',
@@ -291,15 +291,17 @@ function renderReleaseState() {
   const versionValue = document.querySelector('[data-release-version]');
   const statusValue = document.querySelector('[data-release-status]');
   const releaseLink = document.querySelector('[data-release-link]');
+  const changelogLink = document.querySelector('[data-changelog-link]');
   const previousLink = document.querySelector('[data-previous-link]');
   const downloadButton = document.querySelector('[data-download-button]');
   const releaseDate = document.querySelector('[data-release-date]');
 
-  if (!versionValue || !statusValue || !releaseLink || !previousLink || !downloadButton || !releaseDate) {
+  if (!versionValue || !statusValue || !releaseLink || !changelogLink || !previousLink || !downloadButton || !releaseDate) {
     return;
   }
 
   releaseLink.href = releaseState.htmlUrl || RELEASES_URL;
+  changelogLink.href = CHANGELOG_URL;
   previousLink.href = RELEASES_URL;
 
   if (releaseState.status === 'ready') {
@@ -358,17 +360,21 @@ async function loadLatestRelease() {
       headers: { Accept: 'application/vnd.github+json' },
     });
 
-    if (response.status === 404) {
+    if (!response.ok) {
+      throw new Error(`GitHub responded with ${response.status}`);
+    }
+
+    const releases = await response.json();
+    const release = Array.isArray(releases)
+      ? releases.find((candidate) => !candidate.draft && /-release-apk$/i.test(candidate.tag_name || ''))
+      : null;
+
+    if (!release) {
       releaseState = { ...releaseState, status: 'empty' };
       renderReleaseState();
       return;
     }
 
-    if (!response.ok) {
-      throw new Error(`GitHub responded with ${response.status}`);
-    }
-
-    const release = await response.json();
     const apkAsset = Array.isArray(release.assets)
       ? release.assets.find((asset) => /\.apk$/i.test(asset.name || ''))
       : null;
