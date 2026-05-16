@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -82,6 +83,7 @@ fun NowPlayingScreen(
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
     val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
+    val totalDuration by viewModel.duration.collectAsState()
 
     val isLiked = remember(playlists, currentSong) {
         playlists.find { it.name == "Me gusta" }?.songIds?.contains(currentSong?.id) == true
@@ -138,7 +140,7 @@ fun NowPlayingScreen(
                     onDragCancel = {
                         coroutineScope.launch { dragOffsetY.animateTo(0f) }
                     }
-                ) { change, dragAmount ->
+                ) { _, dragAmount ->
                     val newY = (dragOffsetY.value + dragAmount).coerceAtLeast(0f)
                     coroutineScope.launch { dragOffsetY.snapTo(newY) }
                 }
@@ -188,7 +190,7 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            SeekBarSection(currentSong = currentSong, currentPosition = currentPosition, onSeek = onSeek)
+            SeekBarSection(totalDuration = totalDuration, currentPosition = currentPosition, onSeek = onSeek)
 
             PlayerControlsSection(
                 isPlaying = isPlaying,
@@ -362,8 +364,7 @@ private fun SongInfoSection(currentSong: Song?, isLiked: Boolean, onToggleLike: 
 }
 
 @Composable
-private fun SeekBarSection(currentSong: Song?, currentPosition: () -> Long, onSeek: (Long) -> Unit) {
-    val totalDuration = currentSong?.duration ?: 0L
+private fun SeekBarSection(totalDuration: Long, currentPosition: () -> Long, onSeek: (Long) -> Unit) {
     var sliderPosition by remember { mutableStateOf<Float?>(null) }
     val currentProgress by remember(totalDuration) {
         derivedStateOf { if (totalDuration > 0) currentPosition().toFloat() / totalDuration.toFloat() else 0f }
@@ -374,7 +375,7 @@ private fun SeekBarSection(currentSong: Song?, currentPosition: () -> Long, onSe
         val totalSeconds = ms / 1000
         val minutes = totalSeconds / 60
         val seconds = totalSeconds % 60
-        return String.format("%d:%02d", minutes, seconds)
+        return String.format(java.util.Locale.getDefault(), "%d:%02d", minutes, seconds)
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -457,7 +458,7 @@ private fun BottomActionsSection(hasAnyLyrics: Boolean, onOpenQueue: () -> Unit,
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onOpenQueue) { Icon(Icons.Default.QueueMusic, null, tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)) }
+        IconButton(onClick = onOpenQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)) }
         IconButton(onClick = onOpenLyrics) { Icon(Icons.Default.Lyrics, null, tint = if (hasAnyLyrics) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)) }
         IconButton(onClick = onOpenInfo) { Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)) }
     }
@@ -496,16 +497,16 @@ private fun QueueBottomSheet(
             }
 
             Text(stringResource(R.string.now_playing), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    AsyncImage(model = albumArtUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
-                    Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.background.copy(0.4f)))
-                    Icon(Icons.Default.VolumeUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                }
-                Spacer(modifier = Modifier.width(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        AsyncImage(model = albumArtUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                        Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.background.copy(0.4f)))
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(currentSong?.title ?: stringResource(R.string.unknown), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(currentSong?.artist ?: stringResource(R.string.unknown), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -557,7 +558,7 @@ private fun LyricsBottomSheet(
 
             if (lyricsLines.isNotEmpty()) {
                 val listState = rememberLazyListState()
-                val activeLineIndex by remember(lyricsLines) {
+                val activeLineIndex by remember(lyricsLines, currentPosition) {
                     derivedStateOf {
                         val pos = currentPosition()
                         val index = lyricsLines.indexOfLast { it.startTime <= pos }
@@ -603,7 +604,7 @@ private fun LyricsBottomSheet(
                     }
                 }
             } else if (!currentSong?.lyrics.isNullOrBlank()) {
-                currentSong?.lyrics?.let { lyricsText ->
+                currentSong.lyrics.let { lyricsText ->
                     val scrollState = rememberScrollState()
                     Column(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scrollState)
@@ -647,7 +648,7 @@ private fun InfoBottomSheet(
             InfoRow(label = stringResource(R.string.source_label), value = if (isYouTube) stringResource(R.string.source_youtube) else stringResource(R.string.source_local))
             val durationMin = (currentSong?.duration ?: 0) / 1000 / 60
             val durationSec = ((currentSong?.duration ?: 0) / 1000) % 60
-            InfoRow(label = stringResource(R.string.duration_label), value = String.format("%d:%02d", durationMin, durationSec))
+            InfoRow(label = stringResource(R.string.duration_label), value = String.format(java.util.Locale.getDefault(), "%d:%02d", durationMin, durationSec))
             Spacer(modifier = Modifier.height(40.dp))
         }
     }

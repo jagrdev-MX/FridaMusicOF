@@ -19,6 +19,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaylistEntity
+import com.jagr.fridamusic.data.remote.innertube.DeezerApi
 import com.jagr.fridamusic.data.remote.innertube.ResultType
 import com.jagr.fridamusic.data.remote.innertube.YouTube
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
@@ -38,6 +39,9 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 
+enum class RepeatMode { OFF, ALL, ONE }
+enum class AppTheme(val displayName: String) { SYSTEM("System Default"), LIGHT("Light"), DARK("Dark") }
+
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
     private val repository = AudioRepository(application)
@@ -49,7 +53,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     val crossfadeDuration = MutableStateFlow(settingsManager.crossfadeDuration)
     val saveLastPlayback = MutableStateFlow(settingsManager.saveLastPlayback)
 
-    private val _currentTheme = MutableStateFlow(AppTheme.SYSTEM)
+    private val _currentTheme = MutableStateFlow<AppTheme>(AppTheme.SYSTEM)
     val currentTheme = _currentTheme.asStateFlow()
     val sleepTimerMinutes = MutableStateFlow(0)
     private var sleepTimerJob: Job? = null
@@ -117,7 +121,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _lyricsLines = MutableStateFlow<List<LyricsLine>>(emptyList())
     val lyricsLines = _lyricsLines.asStateFlow()
 
-    val repeatMode = MutableStateFlow(RepeatMode.OFF)
+    private val _repeatMode = MutableStateFlow<RepeatMode>(RepeatMode.OFF)
+    val repeatMode = _repeatMode.asStateFlow()
     val isShuffleMode = MutableStateFlow(false)
 
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
@@ -146,6 +151,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var extractionJob: Job? = null
     private var searchJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
+    private val audioStreamCache = ConcurrentHashMap<String, String>()
+    private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
 
     private val notificationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -261,7 +268,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         exoPlayer?.apply {
             setMediaItem(MediaItem.fromUri(song.uri))
-            repeatMode = when (this@LibraryViewModels.repeatMode.value) {
+            repeatMode = when (_repeatMode.value) {
                 RepeatMode.OFF -> Player.REPEAT_MODE_OFF
                 RepeatMode.ALL -> Player.REPEAT_MODE_ALL
                 RepeatMode.ONE -> Player.REPEAT_MODE_ONE
@@ -280,7 +287,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch(Dispatchers.IO) {
             val url = if (hasPreloadedArt) song.artworkUri.toString() else getSongImageUrl(song)
-            val lyrics = fetchLyrics(song.artist ?: "Unknown Artist", song.title ?: "Unknown Title")
+            val lyrics = fetchLyrics(song.artist, song.title)
 
             withContext(Dispatchers.Main) {
                 _currentAlbumArt.value = url
@@ -299,7 +306,42 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             _errorMessage.value = null
 
             try {
-                val videoUrl = "https://www.youtube.com/watch?v=" + result.videoId
+                var realYtId = deezerToYoutubeMap[result.videoId]
+
+                if (realYtId == null) {
+                    val ytMatch = YouTube.search("${result.title} ${result.artist} audio").firstOrNull { it.type == ResultType.SONG }
+                    realYtId = ytMatch?.videoId ?: throw Exception("No se encontró versión en YouTube")
+                    deezerToYoutubeMap[result.videoId] = realYtId
+                }
+
+                val cachedUrl = audioStreamCache[realYtId]
+                if (cachedUrl != null) {
+                    val virtualSong = Song(
+                        id = result.videoId.hashCode().toLong(),
+                        title = result.title,
+                        artist = result.artist,
+                        data = cachedUrl,
+                        duration = 1000L,
+                        albumId = 0L,
+                        uri = Uri.parse(cachedUrl),
+                        artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
+                    )
+
+                    withContext(Dispatchers.Main) {
+                        _currentAlbumArt.value = result.thumbnailUrl
+                        playSong(virtualSong)
+
+                        launch {
+                            delay(800)
+                            _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
+                        }
+                    }
+
+                    prefetchNextSongInList(result.videoId)
+                    return@launch
+                }
+
+                val videoUrl = "https://www.youtube.com/watch?v=$realYtId"
                 val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
 
                 if (!isActive) return@launch
@@ -310,10 +352,12 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
 
                 if (audioStream != null) {
+                    audioStreamCache[realYtId] = audioStream.url ?: ""
+
                     val virtualSong = Song(
                         id = result.videoId.hashCode().toLong(),
                         title = result.title,
-                        artist = result.artist ?: "Unknown Artist",
+                        artist = result.artist,
                         data = audioStream.url ?: "",
                         duration = streamInfo.duration * 1000L,
                         albumId = 0L,
@@ -324,6 +368,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     withContext(Dispatchers.Main) {
                         _currentAlbumArt.value = result.thumbnailUrl
                         playSong(virtualSong)
+                        prefetchNextSongInList(result.videoId)
                     }
                 } else {
                     _errorMessage.value = "No compatible audio streams found"
@@ -424,7 +469,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         settingsManager.lastSongId = song.id
         settingsManager.lastSongTitle = song.title
-        settingsManager.lastSongArtist = song.artist ?: "Unknown Artist"
+        settingsManager.lastSongArtist = song.artist
         settingsManager.lastSongUri = song.uri.toString()
         settingsManager.lastSongArtwork = _currentAlbumArt.value ?: ""
         settingsManager.lastSongDuration = song.duration
@@ -526,21 +571,33 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     fun searchYouTube(query: String) {
         if (query.isBlank()) return
-
         searchJob?.cancel()
 
         searchJob = viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             try {
                 delay(300)
-
                 if (!isActive) return@launch
 
-                val results = YouTube.search(query)
+                val results = DeezerApi.search(query)
 
-                if (isActive) {
+                if (isActive && results.isNotEmpty()) {
                     _youtubeSearchResults.value = results
                     addToSearchHistory(query)
+
+                    launch(Dispatchers.IO) {
+                        results.take(5).forEach { deezerResult ->
+                            try {
+                                val ytSearchQuery = "${deezerResult.title} ${deezerResult.artist} audio"
+                                val ytMatch = YouTube.search(ytSearchQuery).firstOrNull { it.type == ResultType.SONG }
+
+                                if (ytMatch != null) {
+                                    deezerToYoutubeMap[deezerResult.videoId] = ytMatch.videoId
+                                    prefetchYouTubeAudio(ytMatch.videoId)
+                                }
+                            } catch (e: Exception) {}
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 if (e !is CancellationException) {
@@ -558,12 +615,12 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun toggleShuffleMode() { isShuffleMode.value = !isShuffleMode.value }
 
     fun toggleRepeatMode() {
-        repeatMode.value = when (repeatMode.value) {
+        _repeatMode.value = when (_repeatMode.value) {
             RepeatMode.OFF -> RepeatMode.ALL
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
-        exoPlayer?.repeatMode = when (repeatMode.value) {
+        exoPlayer?.repeatMode = when (_repeatMode.value) {
             RepeatMode.OFF -> Player.REPEAT_MODE_OFF
             RepeatMode.ALL -> Player.REPEAT_MODE_ALL
             RepeatMode.ONE -> Player.REPEAT_MODE_ONE
@@ -626,9 +683,19 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (isActive) {
-                _currentPosition.value = exoPlayer?.currentPosition ?: 0L
-                _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
-                delay(500)
+                val currentPos = exoPlayer?.currentPosition ?: 0L
+                val currentDur = exoPlayer?.duration ?: 0L
+
+                _currentPosition.value = currentPos
+
+                if (currentDur > 0) {
+                    _duration.value = currentDur
+                    if (_currentSong.value?.duration != currentDur) {
+                        _currentSong.value = _currentSong.value?.copy(duration = currentDur)
+                    }
+                }
+
+                delay(250)
             }
         }
     }
@@ -669,7 +736,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private fun fetchAlbumArt(title: String, artist: String?): String? {
         return try {
-            val cleanQuery = title.lowercase().replace(".mp3", "").replace(".m4a", "").replace(".wav", "").replace("_", " ").replace("-", " ").replace(Regex("\\(.*?\\)"), "").replace(Regex("\\[.*?\\]"), "").replace("official", "", ignoreCase = true).replace("video", "", ignoreCase = true).replace("audio", "", ignoreCase = true).replace("lyrics", "", ignoreCase = true).trim()
+            val cleanQuery = title.lowercase().replace(".mp3", "").replace(".m4a", "").replace(".wav", "").replace("_", " ").replace("-", " ").replace(Regex("\\(.*?\\)"), "").replace(Regex("\\[.*?]"), "").replace("official", "", ignoreCase = true).replace("video", "", ignoreCase = true).replace("audio", "", ignoreCase = true).replace("lyrics", "", ignoreCase = true).trim()
             val cleanArtist = if (artist.isNullOrBlank() || artist.contains("unknown", ignoreCase = true)) "" else artist
             val finalQueryText = "$cleanQuery $cleanArtist".trim().replace(Regex("\\s+"), " ")
             val encodedQuery = URLEncoder.encode(finalQueryText, "UTF-8")
@@ -684,7 +751,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     private suspend fun fetchLyrics(artist: String, title: String): String? = withContext(Dispatchers.IO) {
-        val cleanTitle = title.replace(Regex("\\(.*?\\)|\\[.*?\\]"), "").trim()
+        val cleanTitle = title.replace(Regex("\\(.*?\\)|\\[.*?]"), "").trim()
         val encodedTitle = URLEncoder.encode(cleanTitle, "UTF-8")
         val encodedArtist = URLEncoder.encode(artist, "UTF-8")
 
@@ -710,6 +777,37 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         } catch (e: Exception) { return@withContext null }
     }
 
+    private fun prefetchYouTubeAudio(videoId: String) {
+        if (audioStreamCache.containsKey(videoId)) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val videoUrl = "https://www.youtube.com/watch?v=$videoId"
+                val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+                val audioStream = streamInfo.audioStreams
+                    .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
+                    .maxByOrNull { it.bitrate }
+                    ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+
+                if (audioStream?.url != null) {
+                    audioStreamCache[videoId] = audioStream.url ?: ""
+                }
+            } catch (e: Exception) {
+
+            }
+        }
+    }
+
+    private fun prefetchNextSongInList(currentVideoId: String) {
+        val ytList = _youtubeSearchResults.value
+        val currentIndex = ytList.indexOfFirst { it.videoId == currentVideoId }
+
+        if (currentIndex != -1 && currentIndex < ytList.size -1) {
+            val nextVideoId = ytList[currentIndex + 1].videoId
+            prefetchYouTubeAudio(nextVideoId)
+        }
+    }
+
     override fun onCleared() {
         saveCurrentPlaybackState()
         super.onCleared()
@@ -718,6 +816,3 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         getApplication<Application>().startService(Intent(getApplication(), MusicService::class.java).apply { action = "STOP_SERVICE" })
     }
 }
-
-enum class RepeatMode { OFF, ALL, ONE }
-enum class AppTheme(val displayName: String) { SYSTEM("System Default"), LIGHT("Light"), DARK("Dark") }
