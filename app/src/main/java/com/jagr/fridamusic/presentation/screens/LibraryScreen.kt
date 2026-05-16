@@ -149,12 +149,16 @@ fun LibraryScreen(
         when (selectedTab) {
             tabs[0] -> {
                 item {
-                    Text(
-                        text = "Recent Songs",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Row {
+                        Spacer(modifier = Modifier.width(24.dp))
+
+                        Text(
+                            text = "Recent Songs",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
                 }
 
                 if (recentHistory.isNotEmpty()) {
@@ -186,12 +190,16 @@ fun LibraryScreen(
                 }
 
                 item {
-                    Text(
-                        text = "Local Songs",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Row {
+                        Spacer(modifier = Modifier.width(24.dp))
+
+                        Text(
+                            text = "Local Songs",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
                 }
 
                 items(
