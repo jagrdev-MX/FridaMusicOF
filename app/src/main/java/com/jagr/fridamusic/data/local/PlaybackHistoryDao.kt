@@ -11,6 +11,9 @@ interface PlaybackHistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistory(history: PlaybackHistoryEntity)
 
+    @Query("DELETE FROM playback_history WHERE songId = :songId")
+    suspend fun deleteBySongId(songId: String)
+
     @Query("""
         SELECT * FROM playback_history
         ORDER BY playedAt DESC

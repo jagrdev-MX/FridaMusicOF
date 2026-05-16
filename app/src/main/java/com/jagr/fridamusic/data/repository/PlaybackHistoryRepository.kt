@@ -8,6 +8,7 @@ class PlaybackHistoryRepository(
 ) {
 
     suspend fun addToHistory(history: PlaybackHistoryEntity) {
+        dao.deleteBySongId(history.songId)
         dao.insertHistory(history)
         dao.trimHistory()
     }
