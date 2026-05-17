@@ -3,43 +3,43 @@ package com.jagr.fridamusic.presentation.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
+import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeChild
 
 @Composable
 fun VitreaBottomNavigation(
@@ -48,6 +48,12 @@ fun VitreaBottomNavigation(
     currentSong: Song?,
     isPlaying: Boolean,
     albumArtUrl: String?,
+    playbackState: Int,
+    isLoading: Boolean,
+    errorMessage: String?,
+    currentPosition: Long,
+    duration: Long,
+    hazeState: HazeState,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -58,101 +64,31 @@ fun VitreaBottomNavigation(
         modifier = Modifier.fillMaxWidth()
     ) {
         AnimatedVisibility(
-            visible = currentSong != null,
-            enter = slideInVertically(
-                initialOffsetY = { it },
+            visible = currentSong != null || isLoading || !errorMessage.isNullOrBlank(),
+            enter = fadeIn() + slideInVertically(
+                initialOffsetY = { it / 2 },
                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
             ),
-            exit = slideOutVertically(
-                targetOffsetY = { it },
+            exit = fadeOut() + slideOutVertically(
+                targetOffsetY = { it / 2 },
                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
             )
         ) {
-            if (currentSong != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable(onClick = onExpandPlayer)
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (albumArtUrl != null) {
-                                AsyncImage(
-                                    model = albumArtUrl,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = currentSong.title,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = currentSong.artist ?: stringResource(R.string.unknown_artist),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        IconButton(onClick = onPrevious) {
-                            Icon(Icons.Default.SkipPrevious, null, tint = MaterialTheme.colorScheme.onSurface)
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                                .clickable { onPlayPause() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        IconButton(onClick = onNext) {
-                            Icon(Icons.Default.SkipNext, null, tint = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
-            }
+            MiniPlayer(
+                modifier = Modifier.padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
+                currentSong = currentSong,
+                isPlaying = isPlaying,
+                albumArtUrl = albumArtUrl,
+                playbackState = playbackState,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                currentPosition = currentPosition,
+                duration = duration,
+                onPlayPause = onPlayPause,
+                onNext = onNext,
+                onPrevious = onPrevious,
+                onExpand = onExpandPlayer
+            )
         }
 
         AnimatedVisibility(
@@ -166,81 +102,141 @@ fun VitreaBottomNavigation(
                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
             )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .navigationBarsPadding()
-            ) {
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                    thickness = 1.dp
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    NavItem(
-                        icon = Icons.Default.Home,
-                        label = stringResource(R.string.nav_home),
-                        isSelected = currentRoute == "home",
-                        modifier = Modifier.weight(1f),
-                        onClick = { onNavigate("home") }
-                    )
-                    NavItem(
-                        icon = Icons.Default.Search,
-                        label = stringResource(R.string.nav_search),
-                        isSelected = currentRoute == "search",
-                        modifier = Modifier.weight(1f),
-                        onClick = { onNavigate("search") }
-                    )
-                    NavItem(
-                        icon = Icons.Default.LibraryMusic,
-                        label = stringResource(R.string.nav_library),
-                        isSelected = currentRoute == "library",
-                        modifier = Modifier.weight(1f),
-                        onClick = { onNavigate("library") }
-                    )
-                }
-            }
+            NativeBottomNavigationBar(
+                currentRoute = currentRoute,
+                hazeState = hazeState,
+                onNavigate = onNavigate
+            )
         }
     }
 }
 
 @Composable
-fun NavItem(
-    icon: ImageVector,
+private fun NativeBottomNavigationBar(
+    currentRoute: String,
+    hazeState: HazeState,
+    onNavigate: (String) -> Unit
+) {
+    val isDark = isSystemInDarkTheme()
+    val tint = if (isDark) {
+        Color(0xFF090A12).copy(alpha = 0.38f)
+    } else {
+        Color.White.copy(alpha = 0.42f)
+    }
+    val dividerColor = if (isDark) {
+        Color.White.copy(alpha = 0.07f)
+    } else {
+        Color.Black.copy(alpha = 0.06f)
+    }
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomBlurExtension = bottomInset + 8.dp
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .hazeChild(
+                state = hazeState,
+                style = HazeDefaults.style(
+                    tint = tint,
+                    blurRadius = 22.dp,
+                    noiseFactor = 0.05f
+                )
+            )
+            .drawBehind {
+                drawLine(
+                    color = dividerColor,
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NavItem(
+                activeIcon = Icons.Default.Home,
+                inactiveIcon = Icons.Outlined.Home,
+                label = stringResource(R.string.nav_home),
+                isSelected = currentRoute == "home",
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigate("home") }
+            )
+            NavItem(
+                activeIcon = Icons.Default.Search,
+                inactiveIcon = Icons.Outlined.Search,
+                label = stringResource(R.string.nav_search),
+                isSelected = currentRoute == "search",
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigate("search") }
+            )
+            NavItem(
+                activeIcon = Icons.Default.LibraryMusic,
+                inactiveIcon = Icons.Outlined.LibraryMusic,
+                label = stringResource(R.string.nav_library),
+                isSelected = currentRoute == "library",
+                modifier = Modifier.weight(1f),
+                onClick = { onNavigate("library") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(bottomBlurExtension))
+    }
+}
+
+@Composable
+private fun NavItem(
+    activeIcon: ImageVector,
+    inactiveIcon: ImageVector,
     label: String,
     isSelected: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-    val fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val isDark = isSystemInDarkTheme()
+    val navBaseColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val iconColor = if (isSelected) {
+        navBaseColor
+    } else {
+        navBaseColor.copy(alpha = 0.72f)
+    }
+    val labelColor = if (isSelected) {
+        navBaseColor
+    } else {
+        navBaseColor.copy(alpha = 0.68f)
+    }
 
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
         modifier = modifier
-            .fillMaxHeight()
-            .clickable(onClick = onClick)
+            .height(64.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = color,
+        ExpressiveIcon(
+            imageVector = if (isSelected) activeIcon else inactiveIcon,
+            contentDescription = label,
+            tint = iconColor,
+            active = isSelected,
+            pressed = isPressed,
             modifier = Modifier.size(24.dp)
         )
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(5.dp))
         Text(
             text = label,
-            fontSize = 10.sp,
-            fontWeight = fontWeight,
-            color = color
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+            color = labelColor
         )
     }
 }

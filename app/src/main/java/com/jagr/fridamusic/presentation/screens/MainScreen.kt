@@ -37,6 +37,9 @@ import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -48,21 +51,27 @@ fun MainScreen() {
     val repeatMode by libraryViewModel.repeatMode.collectAsState()
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
+    val playbackState by libraryViewModel.playbackState.collectAsState()
     val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
     val lyricsLines by libraryViewModel.lyricsLines.collectAsState()
     val currentPositionState = libraryViewModel.currentPosition.collectAsState()
+    val durationState = libraryViewModel.duration.collectAsState()
+    val isExtracting by libraryViewModel.isExtracting.collectAsState()
+    val errorMessage by libraryViewModel.errorMessage.collectAsState()
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
+    var selectedTopLevelRoute by remember { mutableStateOf("home") }
 
     val homeListState = rememberLazyListState()
     val searchListState = rememberLazyListState()
     val libraryListState = rememberLazyListState()
     val settingsListState = rememberLazyListState()
+    val hazeState = remember { HazeState() }
 
     val bgPrimary = MaterialTheme.colorScheme.background
     val bgSurface = MaterialTheme.colorScheme.surface
@@ -97,16 +106,28 @@ fun MainScreen() {
         }
     }
 
+    LaunchedEffect(currentRoute) {
+        if (currentRoute in setOf("home", "search", "library")) {
+            selectedTopLevelRoute = currentRoute
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
                 if (currentRoute != "settings") {
                     VitreaBottomNavigation(
                         isCollapsed = false,
-                        currentRoute = currentRoute,
+                        currentRoute = selectedTopLevelRoute,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
                         albumArtUrl = currentAlbumArt,
+                        playbackState = playbackState,
+                        isLoading = isExtracting,
+                        errorMessage = errorMessage,
+                        currentPosition = currentPositionState.value,
+                        duration = durationState.value,
+                        hazeState = hazeState,
                         onPlayPause = { libraryViewModel.togglePlayback() },
                         onNext = { libraryViewModel.skipToNext() },
                         onPrevious = { libraryViewModel.skipToPrevious() },
@@ -128,7 +149,14 @@ fun MainScreen() {
             NavHost(
                 navController = navController,
                 startDestination = "home",
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .haze(
+                        state = hazeState,
+                        style = HazeDefaults.style(
+                            backgroundColor = MaterialTheme.colorScheme.background
+                        )
+                    )
             ) {
                 composable("home") {
                     val songs by libraryViewModel.songs.collectAsState()

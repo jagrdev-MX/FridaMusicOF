@@ -115,6 +115,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
 
+    private val _playbackState = MutableStateFlow(Player.STATE_IDLE)
+    val playbackState = _playbackState.asStateFlow()
+
     private val _currentPosition = MutableStateFlow(0L)
     val currentPosition = _currentPosition.asStateFlow()
 
@@ -210,6 +213,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         _currentSong.value?.let { updateNotification(it, isPlaying) }
                     }
                     override fun onPlaybackStateChanged(state: Int) {
+                        _playbackState.value = state
                         if (state == Player.STATE_READY) {
                             _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
                         }
@@ -275,6 +279,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             return
         }
 
+        _errorMessage.value = null
         saveCurrentPlaybackState()
 
         exoPlayer?.apply {
