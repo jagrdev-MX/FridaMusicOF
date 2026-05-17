@@ -129,16 +129,17 @@ private fun NativeBottomNavigationBar(
         Color.Black.copy(alpha = 0.06f)
     }
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomBlurExtension = bottomInset + 8.dp
+    val contentHeight = 56.dp
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .height(contentHeight + bottomInset)
             .hazeChild(
                 state = hazeState,
                 style = HazeDefaults.style(
                     tint = tint,
-                    blurRadius = 22.dp,
+                    blurRadius = 24.dp,
                     noiseFactor = 0.05f
                 )
             )
@@ -154,7 +155,7 @@ private fun NativeBottomNavigationBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp),
+                .height(contentHeight),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -184,7 +185,7 @@ private fun NativeBottomNavigationBar(
             )
         }
 
-        Spacer(modifier = Modifier.height(bottomBlurExtension))
+        Spacer(modifier = Modifier.height(bottomInset))
     }
 }
 
@@ -214,7 +215,7 @@ private fun NavItem(
 
     Column(
         modifier = modifier
-            .height(64.dp)
+            .height(52.dp)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -229,12 +230,12 @@ private fun NavItem(
             tint = iconColor,
             active = isSelected,
             pressed = isPressed,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(22.dp)
         )
-        Spacer(modifier = Modifier.height(5.dp))
+        Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             color = labelColor
         )
