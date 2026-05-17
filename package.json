@@ -13,7 +13,8 @@
     "release:dry-run:android": "semantic-release --dry-run --extends ./.releaserc.android.json",
     "release:dry-run:telegram-bot": "semantic-release --dry-run --extends ./.releaserc.telegram-bot.json",
     "release:preview": "node .github/scripts/semantic-release-track.cjs preview",
-    "changelog:validate": "node .github/scripts/semantic-release-track.cjs validate"
+    "changelog:validate": "node .github/scripts/semantic-release-track.cjs validate",
+    "contributors:update": "node .github/scripts/update-contributors.cjs"
   },
   "repository": {
     "type": "git",

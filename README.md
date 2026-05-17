@@ -25,6 +25,7 @@
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Instalación y ejecución](#instalación-y-ejecución)
 - [Compilar APK](#compilar-apk)
+- [Contribuciones automáticas](#contribuciones-automáticas)
 - [Contribuciones](#contribuciones)
 
 ---
@@ -115,6 +116,35 @@ cd FridaMusicOF
 ```
 
 Los APKs se generan en `app/build/outputs/apk/`.
+
+---
+
+## Contribuciones automáticas
+
+<!-- CONTRIBUTOR-STATS:START -->
+_Esta sección se actualiza automáticamente con GitHub Actions._
+
+### Repositorio oficial
+
+**Commits humanos visibles:** 228 · **Commits de automatización:** 5
+
+| Colaborador | Commits | % de contribución humana |
+| --- | ---: | ---: |
+| [@jagrdev-MX](https://github.com/jagrdev-MX) | 192 | 84.2% |
+| [@juliocps25](https://github.com/juliocps25) | 36 | 15.8% |
+
+### Forks con trabajo independiente
+
+**Forks inspeccionados:** 0 · **Forks activos:** 0
+
+| Fork | Rama | Commits por delante | % de actividad independiente | Último push |
+| --- | --- | ---: | ---: | --- |
+| Sin forks activos detectados | — | 0 | 0.0% | — |
+
+> Los porcentajes del repositorio oficial se calculan con commits humanos visibles. Los bots se separan para no distorsionar la métrica. Los forks muestran trabajo independiente que aún no necesariamente fue integrado al proyecto principal.
+
+Última actualización automática (UTC): `2026-05-17`
+<!-- CONTRIBUTOR-STATS:END -->
 
 ---
 
