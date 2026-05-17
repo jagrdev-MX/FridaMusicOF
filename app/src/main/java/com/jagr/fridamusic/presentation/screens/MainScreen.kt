@@ -151,12 +151,7 @@ fun MainScreen() {
                 startDestination = "home",
                 modifier = Modifier
                     .fillMaxSize()
-                    .haze(
-                        state = hazeState,
-                        style = HazeDefaults.style(
-                            backgroundColor = MaterialTheme.colorScheme.background
-                        )
-                    )
+                    .haze(state = hazeState)
             ) {
                 composable("home") {
                     val songs by libraryViewModel.songs.collectAsState()

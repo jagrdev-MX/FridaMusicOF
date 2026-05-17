@@ -224,10 +224,6 @@ fun SearchScreen(
                 }
             }
         }
-
-        if (isExtracting) {
-            ExtractionOverlay()
-        }
     }
 }
 @Composable
@@ -398,27 +394,6 @@ private fun SpotifyStyleSongItem(
                 IconButton(onClick = { }) { Icon(Icons.Default.AddCircleOutline, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp)) }
             }
             IconButton(onClick = { }) { Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp)) }
-        }
-    }
-}
-
-@Composable
-private fun ExtractionOverlay() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f))
-            .clickable(enabled = false) {},
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp)
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = "Cargando pista...",
-                style = LiquidTypography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
         }
     }
 }

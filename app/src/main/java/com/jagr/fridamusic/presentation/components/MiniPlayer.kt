@@ -3,7 +3,6 @@ package com.jagr.fridamusic.presentation.components
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -102,30 +101,18 @@ fun MiniPlayer(
         targetValue = artworkPalette.glowEnd,
         label = "mini-player-glow-end"
     )
-    val contentColor by animateColorAsState(
-        targetValue = artworkPalette.onContainer,
-        label = "mini-player-content-color"
-    )
-    val mutedContentColor by animateColorAsState(
-        targetValue = artworkPalette.onContainerMuted,
-        label = "mini-player-muted-content-color"
-    )
-    val containerBorder by animateColorAsState(
-        targetValue = artworkPalette.border,
-        label = "mini-player-border-color"
-    )
-    val accentColor by animateColorAsState(
-        targetValue = artworkPalette.accent,
-        label = "mini-player-accent-color"
-    )
+
+    // Forzamos el texto a blanco para que contraste bien con los fondos de Palette
+    val contentColor = Color.White
+    val mutedContentColor = Color.White.copy(alpha = 0.7f)
+    val accentColor = Color.White
     val interactionSource = remember { MutableInteractionSource() }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, containerBorder, RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(
                 enabled = hasSong,
                 interactionSource = interactionSource,
@@ -158,7 +145,7 @@ fun MiniPlayer(
                     .height(2.dp)
                     .align(Alignment.BottomCenter),
                 color = accentColor,
-                trackColor = contentColor.copy(alpha = 0.10f)
+                trackColor = contentColor.copy(alpha = 0.30f)
             )
         }
 
@@ -202,6 +189,7 @@ fun MiniPlayer(
                 }
             }
 
+            // BOTONES RESTAURADOS
             MiniPlayerControlButton(
                 icon = Icons.Default.SkipPrevious,
                 contentDescription = stringResource(R.string.previous),
@@ -209,6 +197,7 @@ fun MiniPlayer(
                 contentColor = contentColor,
                 onClick = onPrevious
             )
+
             MiniPlayerPlayPauseButton(
                 isPlaying = isPlaying,
                 enabled = hasSong,
@@ -217,6 +206,7 @@ fun MiniPlayer(
                 contentColor = contentColor,
                 onClick = onPlayPause
             )
+
             MiniPlayerControlButton(
                 icon = Icons.Default.SkipNext,
                 contentDescription = stringResource(R.string.next),
@@ -239,7 +229,7 @@ private fun MiniPlayerBackdrop(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(containerColor)
+            .background(Color.Transparent)
     ) {
         if (showArtworkGlow) {
             if (albumArtUrl != null) {
@@ -250,7 +240,7 @@ private fun MiniPlayerBackdrop(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            alpha = 0.24f
+                            alpha = 0.15f
                             scaleX = 1.18f
                             scaleY = 1.18f
                         }
@@ -298,7 +288,7 @@ private fun AlbumArtThumb(
     Box(
         modifier = Modifier
             .size(48.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
@@ -408,7 +398,7 @@ private fun MiniPlayerPlayPauseButton(
                     } else {
                         contentColor.copy(alpha = 0.24f)
                     },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }

@@ -1,8 +1,11 @@
 package com.jagr.fridamusic.presentation.components
 
+import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -13,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -23,18 +27,27 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.palette.graphics.Palette
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import dev.chrisbanes.haze.HazeDefaults
@@ -60,6 +73,49 @@ fun VitreaBottomNavigation(
     onNavigate: (String) -> Unit,
     onExpandPlayer: () -> Unit
 ) {
+    val context = LocalContext.current
+
+    // ==========================================
+    // MAGIA DE COLOR: Extracción de la portada
+    // ==========================================
+    val defaultColor = if (isSystemInDarkTheme()) Color(0xFF1E1E1E) else Color(0xFFE0E0E0)
+    var extractedColor by remember { mutableStateOf(defaultColor) }
+
+    val animatedColor by animateColorAsState(
+        targetValue = extractedColor,
+        animationSpec = tween(durationMillis = 600), // Transición suave al cambiar de canción
+        label = "miniplayer_color"
+    )
+
+    LaunchedEffect(albumArtUrl) {
+        if (albumArtUrl != null) {
+            val request = ImageRequest.Builder(context)
+                .data(albumArtUrl)
+                .allowHardware(false) // Obligatorio para que Palette pueda leer los píxeles
+                .build()
+
+            val result = context.imageLoader.execute(request)
+            if (result is SuccessResult) {
+                val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
+                bitmap?.let {
+                    Palette.from(it).generate { palette ->
+                        // Priorizamos el color oscuro vibrante, ideal para el miniplayer
+                        val swatch = palette?.darkVibrantSwatch
+                            ?: palette?.mutedSwatch
+                            ?: palette?.dominantSwatch
+
+                        swatch?.rgb?.let { colorInt ->
+                            extractedColor = Color(colorInt)
+                        }
+                    }
+                }
+            }
+        } else {
+            extractedColor = defaultColor
+        }
+    }
+    // ==========================================
+
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -75,7 +131,11 @@ fun VitreaBottomNavigation(
             )
         ) {
             MiniPlayer(
-                modifier = Modifier.padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(animatedColor)
+                    .padding(horizontal = 4.dp),
                 currentSong = currentSong,
                 isPlaying = isPlaying,
                 albumArtUrl = albumArtUrl,
@@ -140,7 +200,8 @@ private fun NativeBottomNavigationBar(
                 style = HazeDefaults.style(
                     tint = tint,
                     blurRadius = 24.dp,
-                    noiseFactor = 0.05f
+                    noiseFactor = 0.05f,
+                    backgroundColor = MaterialTheme.colorScheme.background
                 )
             )
             .drawBehind {
