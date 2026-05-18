@@ -69,4 +69,21 @@ class SettingsManager(context: Context) {
     var saveLibrarySort: Boolean
         get() = prefs.getBoolean("save_library_sort", false)
         set(value) = prefs.edit().putBoolean("save_library_sort", value).apply()
+
+    fun playlistCoverUri(playlistId: Long): String? =
+        prefs.getString("playlist_cover_$playlistId", null)
+
+    fun setPlaylistCoverUri(playlistId: Long, uri: String?) {
+        val editor = prefs.edit()
+        if (uri.isNullOrBlank()) {
+            editor.remove("playlist_cover_$playlistId")
+        } else {
+            editor.putString("playlist_cover_$playlistId", uri)
+        }
+        editor.apply()
+    }
+
+    var followedArtists: Set<String>
+        get() = prefs.getStringSet("followed_artists", emptySet())?.toSet().orEmpty()
+        set(value) = prefs.edit().putStringSet("followed_artists", value).apply()
 }

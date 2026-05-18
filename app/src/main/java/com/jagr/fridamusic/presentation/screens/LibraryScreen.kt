@@ -1,7 +1,13 @@
 package com.jagr.fridamusic.presentation.screens
 
+import android.content.ClipData
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
@@ -32,19 +39,25 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -82,6 +95,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -104,6 +118,7 @@ import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
+import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.util.Calendar
 import kotlinx.coroutines.launch
@@ -129,7 +144,8 @@ private data class LibraryAlbum(
     val artist: String,
     val representativeSong: Song,
     val newestDateAdded: Long,
-    val songCount: Int
+    val songCount: Int,
+    val songs: List<Song>
 )
 
 private data class LibraryArtist(
@@ -151,6 +167,12 @@ private data class ActionSpec(
     val onClick: () -> Unit
 )
 
+private sealed interface LibraryDetail {
+    data class PlaylistDetail(val playlist: Playlist) : LibraryDetail
+    data class AlbumDetail(val album: LibraryAlbum) : LibraryDetail
+    data class ArtistDetail(val artist: LibraryArtist) : LibraryDetail
+}
+
 private const val LIBRARY_PAGER_WINDOW = 10_000
 private val LibraryCardRadius = 18.dp
 private val LibraryArtworkRadius = 12.dp
@@ -165,6 +187,8 @@ fun LibraryScreen(
     val songs by viewModel.songs.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
     val fullHistory by viewModel.fullHistory.collectAsState()
+    val playlistCoverUris by viewModel.playlistCoverUris.collectAsState()
+    val followedArtists by viewModel.followedArtists.collectAsState()
 
     val tabs = listOf(
         LibraryTab.ALL to stringResource(R.string.all_tab),
@@ -200,6 +224,7 @@ fun LibraryScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showSortSheet by rememberSaveable { mutableStateOf(false) }
     var showCreateSheet by rememberSaveable { mutableStateOf(false) }
+    var detail by remember { mutableStateOf<LibraryDetail?>(null) }
     var headerHeightPx by remember { mutableIntStateOf(0) }
     val currentLogicalPage = pagerState.currentPage.floorMod(tabs.size)
     val currentListState = pageStates[currentLogicalPage]
@@ -259,8 +284,16 @@ fun LibraryScreen(
 
     LaunchedEffect(reselectSignal) {
         if (reselectSignal > 0) {
-            currentListState.animateScrollToItem(0)
+            if (detail != null) {
+                detail = null
+            } else {
+                currentListState.animateScrollToItem(0)
+            }
         }
+    }
+
+    BackHandler(enabled = detail != null) {
+        detail = null
     }
 
     val normalizedQuery = searchQuery.trim()
@@ -308,7 +341,8 @@ fun LibraryScreen(
                     artist = representative.artist,
                     representativeSong = representative,
                     newestDateAdded = albumSongs.maxOfOrNull { it.dateAdded } ?: 0L,
-                    songCount = albumSongs.size
+                    songCount = albumSongs.size,
+                    songs = albumSongs.sortedBy { it.title.lowercase() }
                 )
             }
             .filter { album ->
@@ -414,6 +448,41 @@ fun LibraryScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        if (detail != null) {
+            when (val currentDetail = detail) {
+                is LibraryDetail.PlaylistDetail -> PlaylistDetailPage(
+                    playlist = currentDetail.playlist,
+                    songs = songs.filter { it.id in currentDetail.playlist.songIds },
+                    playlists = playlists,
+                    customCoverUri = playlistCoverUris[currentDetail.playlist.id],
+                    paddingValues = paddingValues,
+                    viewModel = viewModel,
+                    onBack = { detail = null }
+                )
+
+                is LibraryDetail.AlbumDetail -> AlbumDetailPage(
+                    album = currentDetail.album,
+                    playlists = playlists,
+                    paddingValues = paddingValues,
+                    viewModel = viewModel,
+                    onBack = { detail = null }
+                )
+
+                is LibraryDetail.ArtistDetail -> ArtistDetailPage(
+                    artist = currentDetail.artist,
+                    allArtists = visibleArtists,
+                    playlists = playlists,
+                    isFollowed = currentDetail.artist.name in followedArtists,
+                    paddingValues = paddingValues,
+                    viewModel = viewModel,
+                    onBack = { detail = null },
+                    onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) },
+                    onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
+                )
+
+                null -> Unit
+            }
+        } else {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize()
@@ -423,6 +492,7 @@ fun LibraryScreen(
                     playlists = visiblePlaylists,
                     songs = visibleSongs,
                     artists = visibleArtists,
+                    playlistCoverUris = playlistCoverUris,
                     paddingValues = paddingValues,
                     listState = allListState,
                     headerSpacerHeight = headerSpacerHeight,
@@ -449,10 +519,13 @@ fun LibraryScreen(
 
                 LibraryTab.PLAYLISTS -> PlaylistsPage(
                     playlists = visiblePlaylists,
+                    songs = songs,
+                    playlistCoverUris = playlistCoverUris,
                     paddingValues = paddingValues,
                     listState = playlistsListState,
                     headerSpacerHeight = headerSpacerHeight,
                     viewModel = viewModel,
+                    onOpenPlaylist = { detail = LibraryDetail.PlaylistDetail(it) },
                     onDelete = { playlistToDelete = it }
                 )
 
@@ -470,7 +543,8 @@ fun LibraryScreen(
                     paddingValues = paddingValues,
                     listState = artistsListState,
                     headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
                 )
             }
         }
@@ -499,8 +573,9 @@ fun LibraryScreen(
                 .offset { IntOffset(0, -headerOffsetPx) }
                 .onGloballyPositioned { headerHeightPx = it.size.height }
         )
+        }
 
-        ExtendedFloatingActionButton(
+        if (detail == null) ExtendedFloatingActionButton(
             onClick = { showCreateSheet = true },
             icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) },
             text = { Text(stringResource(R.string.create)) },
@@ -685,6 +760,7 @@ private fun AllPage(
     playlists: List<Playlist>,
     songs: List<Song>,
     artists: List<LibraryArtist>,
+    playlistCoverUris: Map<Long, String>,
     paddingValues: PaddingValues,
     listState: LazyListState,
     headerSpacerHeight: Dp,
@@ -718,6 +794,11 @@ private fun AllPage(
                         title = stringResource(R.string.playlists_tab),
                         subtitle = stringResource(R.string.playlists_count, playlists.size),
                         icon = Icons.AutoMirrored.Filled.QueueMusic,
+                        viewModel = viewModel,
+                        coverSongs = playlists.flatMap { playlist ->
+                            songs.filter { song -> song.id in playlist.songIds }
+                        }.distinctBy { it.id }.take(4),
+                        customCoverUri = playlists.firstNotNullOfOrNull { playlistCoverUris[it.id] },
                         onOpen = { onOpenTab(LibraryTab.PLAYLISTS.ordinal) },
                         onPlay = { playlists.firstOrNull()?.let(viewModel::playPlaylist) },
                         onShuffle = {
@@ -735,9 +816,11 @@ private fun AllPage(
                         title = stringResource(R.string.local_songs),
                         subtitle = stringResource(R.string.songs_count, songs.size),
                         icon = Icons.Default.MusicNote,
+                        viewModel = viewModel,
+                        coverSongs = songs.take(4),
                         onOpen = { onOpenTab(LibraryTab.SONGS.ordinal) },
-                        onPlay = { songs.firstOrNull()?.let(viewModel::playSong) },
-                        onShuffle = { songs.randomOrNull()?.let(viewModel::playSong) }
+                        onPlay = { viewModel.playSongs(songs) },
+                        onShuffle = { viewModel.playSongs(songs, shuffle = true) }
                     )
                 }
             }
@@ -748,11 +831,11 @@ private fun AllPage(
                         title = stringResource(R.string.artists_tab),
                         subtitle = stringResource(R.string.artists_count, artists.size),
                         icon = Icons.Default.Person,
+                        viewModel = viewModel,
+                        coverSongs = artists.mapNotNull { it.songs.firstOrNull() }.take(4),
                         onOpen = { onOpenTab(LibraryTab.ARTISTS.ordinal) },
-                        onPlay = { artists.firstOrNull()?.songs?.firstOrNull()?.let(viewModel::playSong) },
-                        onShuffle = {
-                            artists.flatMap { it.songs }.randomOrNull()?.let(viewModel::playSong)
-                        }
+                        onPlay = { viewModel.playSongs(artists.flatMap { it.songs }) },
+                        onShuffle = { viewModel.playSongs(artists.flatMap { it.songs }, shuffle = true) }
                     )
                 }
             }
@@ -850,10 +933,13 @@ private fun HistoryPage(
 @Composable
 private fun PlaylistsPage(
     playlists: List<Playlist>,
+    songs: List<Song>,
+    playlistCoverUris: Map<Long, String>,
     paddingValues: PaddingValues,
     listState: LazyListState,
     headerSpacerHeight: Dp,
     viewModel: LibraryViewModels,
+    onOpenPlaylist: (Playlist) -> Unit,
     onDelete: (Playlist) -> Unit
 ) {
     LazyColumn(
@@ -880,6 +966,10 @@ private fun PlaylistsPage(
                 items(playlists, key = { "playlist_${it.id}" }) { playlist ->
                     PlaylistListItem(
                         playlist = playlist,
+                        songs = songs.filter { song -> song.id in playlist.songIds },
+                        customCoverUri = playlistCoverUris[playlist.id],
+                        viewModel = viewModel,
+                        onOpen = { onOpenPlaylist(playlist) },
                         onPlay = { viewModel.playPlaylist(playlist) },
                         onShuffle = { viewModel.playPlaylist(playlist, shuffle = true) },
                         onAddToQueue = { viewModel.addPlaylistToQueue(playlist) },
@@ -894,7 +984,8 @@ private fun PlaylistsPage(
 private fun AlbumsPage(
     albums: List<LibraryAlbum>,
     paddingValues: PaddingValues,
-    viewModel: LibraryViewModels
+    viewModel: LibraryViewModels,
+    onOpenAlbum: (LibraryAlbum) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -927,6 +1018,7 @@ private fun AlbumsPage(
                         LibraryAlbumCard(
                             album = album,
                             viewModel = viewModel,
+                            onOpen = { onOpenAlbum(album) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -943,7 +1035,8 @@ private fun ArtistsPage(
     paddingValues: PaddingValues,
     listState: LazyListState,
     headerSpacerHeight: Dp,
-    viewModel: LibraryViewModels
+    viewModel: LibraryViewModels,
+    onOpenArtist: (LibraryArtist) -> Unit
 ) {
     LazyColumn(
         state = listState,
@@ -969,7 +1062,9 @@ private fun ArtistsPage(
             items(artists, key = { "artist_${it.name}" }) { artist ->
                 ArtistListItem(
                     artist = artist,
-                    onPlay = { artist.songs.firstOrNull()?.let(viewModel::playSong) }
+                    viewModel = viewModel,
+                    onOpen = { onOpenArtist(artist) },
+                    onPlay = { viewModel.playSongs(artist.songs) }
                 )
             }
         }
@@ -1013,11 +1108,1072 @@ private fun EmptyLibraryState(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlaylistDetailPage(
+    playlist: Playlist,
+    songs: List<Song>,
+    playlists: List<Playlist>,
+    customCoverUri: String?,
+    paddingValues: PaddingValues,
+    viewModel: LibraryViewModels,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var showActions by rememberSaveable { mutableStateOf(false) }
+    val leadArtworkUrl by rememberLeadArtworkUrl(
+        songs = songs,
+        customCoverUri = customCoverUri,
+        viewModel = viewModel
+    )
+    val coverPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            viewModel.setPlaylistCoverUri(playlist.id, uri.toString())
+        }
+    }
+
+    DetailPageShell(
+        title = playlist.name,
+        subtitle = stringResource(R.string.playlist_label),
+        description = playlist.description.orEmpty(),
+        cover = {
+            SmartCollectionCover(
+                songs = songs,
+                customCoverUri = customCoverUri,
+                viewModel = viewModel,
+                shape = RoundedCornerShape(24.dp),
+                fallbackIcon = Icons.AutoMirrored.Filled.QueueMusic
+            )
+        },
+        countLabel = stringResource(R.string.songs_count, songs.size),
+        backgroundArtUrl = leadArtworkUrl,
+        onBack = onBack,
+        onMore = { showActions = true },
+        onPlay = { viewModel.playPlaylist(playlist) },
+        onShuffle = { viewModel.playPlaylist(playlist, shuffle = true) },
+        secondaryActions = {
+            DetailChipButton(
+                icon = Icons.Default.Radio,
+                label = stringResource(R.string.radio),
+                onClick = { viewModel.playSongs(songs, shuffle = true) }
+            )
+            DetailIconButton(
+                icon = Icons.Default.Share,
+                contentDescription = stringResource(R.string.share),
+                onClick = { sharePlaylist(context, playlist, songs) }
+            )
+        },
+        paddingValues = paddingValues
+    ) {
+        if (songs.isEmpty()) {
+            item {
+                EmptyLibraryState(
+                    icon = Icons.AutoMirrored.Filled.QueueMusic,
+                    title = stringResource(R.string.no_local_songs)
+                )
+            }
+        } else {
+            items(songs, key = { "playlist_detail_${it.id}" }) { song ->
+                LibrarySongItem(
+                    song = song,
+                    viewModel = viewModel,
+                    playlists = playlists,
+                    onClick = { viewModel.playSong(song) }
+                )
+            }
+        }
+    }
+
+    if (showActions) {
+        ModalBottomSheet(
+            onDismissRequest = { showActions = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            PlaylistActionsSheet(
+                playlist = playlist,
+                onDismiss = { showActions = false },
+                onPlay = {
+                    showActions = false
+                    viewModel.playPlaylist(playlist)
+                },
+                onShuffle = {
+                    showActions = false
+                    viewModel.playPlaylist(playlist, shuffle = true)
+                },
+                onAddToQueue = {
+                    showActions = false
+                    viewModel.addPlaylistToQueue(playlist)
+                },
+                onShare = {
+                    showActions = false
+                    sharePlaylist(context, playlist, songs)
+                },
+                onChangeCover = {
+                    showActions = false
+                    coverPicker.launch(arrayOf("image/*"))
+                },
+                onRemoveCover = if (customCoverUri != null) {
+                    {
+                        showActions = false
+                        viewModel.setPlaylistCoverUri(playlist.id, null)
+                    }
+                } else {
+                    null
+                },
+                onDelete = {
+                    showActions = false
+                    viewModel.deletePlaylist(playlist)
+                    onBack()
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlbumDetailPage(
+    album: LibraryAlbum,
+    playlists: List<Playlist>,
+    paddingValues: PaddingValues,
+    viewModel: LibraryViewModels,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var showActions by rememberSaveable { mutableStateOf(false) }
+    val leadArtworkUrl by rememberLeadArtworkUrl(
+        songs = listOf(album.representativeSong),
+        customCoverUri = null,
+        viewModel = viewModel
+    )
+
+    DetailPageShell(
+        title = album.title,
+        subtitle = album.artist,
+        description = "",
+        cover = {
+            DetailSongCover(
+                song = album.representativeSong,
+                viewModel = viewModel,
+                shape = RoundedCornerShape(24.dp)
+            )
+        },
+        countLabel = stringResource(R.string.songs_count, album.songCount),
+        backgroundArtUrl = leadArtworkUrl,
+        onBack = onBack,
+        onMore = { showActions = true },
+        onPlay = { viewModel.playSongs(album.songs) },
+        onShuffle = { viewModel.playSongs(album.songs, shuffle = true) },
+        secondaryActions = {
+            DetailChipButton(
+                icon = Icons.Default.Radio,
+                label = stringResource(R.string.radio),
+                onClick = { viewModel.playSongs(album.songs, shuffle = true) }
+            )
+            DetailIconButton(
+                icon = Icons.Default.Share,
+                contentDescription = stringResource(R.string.share),
+                onClick = { shareAlbum(context, album) }
+            )
+        },
+        paddingValues = paddingValues
+    ) {
+        items(album.songs, key = { "album_detail_${it.id}" }) { song ->
+            LibrarySongItem(
+                song = song,
+                viewModel = viewModel,
+                playlists = playlists,
+                onClick = { viewModel.playSong(song) }
+            )
+        }
+    }
+
+    if (showActions) {
+        ModalBottomSheet(
+            onDismissRequest = { showActions = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            CollectionActionsSheet(
+                title = album.title,
+                subtitle = album.artist,
+                onDismiss = { showActions = false },
+                onPlay = {
+                    showActions = false
+                    viewModel.playSongs(album.songs)
+                },
+                onShuffle = {
+                    showActions = false
+                    viewModel.playSongs(album.songs, shuffle = true)
+                },
+                onAddToQueue = {
+                    showActions = false
+                    viewModel.addSongsToQueue(album.songs)
+                },
+                onShare = {
+                    showActions = false
+                    shareAlbum(context, album)
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ArtistDetailPage(
+    artist: LibraryArtist,
+    allArtists: List<LibraryArtist>,
+    playlists: List<Playlist>,
+    isFollowed: Boolean,
+    paddingValues: PaddingValues,
+    viewModel: LibraryViewModels,
+    onBack: () -> Unit,
+    onOpenAlbum: (LibraryAlbum) -> Unit,
+    onOpenArtist: (LibraryArtist) -> Unit
+) {
+    val context = LocalContext.current
+    var showActions by rememberSaveable { mutableStateOf(false) }
+    val artistAlbums = remember(artist) {
+        artist.songs
+            .groupBy { song -> song.album.ifBlank { "${song.albumId}" } }
+            .map { (_, albumSongs) ->
+                val representative = albumSongs.maxByOrNull { it.dateAdded } ?: albumSongs.first()
+                LibraryAlbum(
+                    id = representative.albumId,
+                    title = representative.album.ifBlank { representative.title },
+                    artist = artist.name,
+                    representativeSong = representative,
+                    newestDateAdded = albumSongs.maxOfOrNull { it.dateAdded } ?: 0L,
+                    songCount = albumSongs.size,
+                    songs = albumSongs.sortedBy { it.title.lowercase() }
+                )
+            }
+            .sortedByDescending { it.newestDateAdded }
+    }
+    val leadArtworkUrl by rememberLeadArtworkUrl(
+        songs = artist.songs.take(1),
+        customCoverUri = null,
+        viewModel = viewModel
+    )
+    val topSongs = remember(artist) {
+        artist.songs.sortedByDescending { it.dateAdded }.take(8)
+    }
+    val singlesAndEps = remember(artistAlbums) {
+        artistAlbums.filter { it.songCount <= 4 }.ifEmpty { artistAlbums }.take(8)
+    }
+    val fromYourLibrary = remember(artist) {
+        artist.songs.take(8)
+    }
+    val fansMightAlsoLike = remember(allArtists, artist.name) {
+        allArtists
+            .filterNot { it.name == artist.name }
+            .sortedByDescending { it.newestDateAdded }
+            .take(8)
+    }
+
+    DetailPageShell(
+        title = artist.name,
+        subtitle = stringResource(R.string.artist),
+        description = "",
+        cover = {
+            DetailSongCover(
+                song = artist.songs.firstOrNull(),
+                viewModel = viewModel,
+                shape = CircleShape
+            )
+        },
+        countLabel = stringResource(R.string.songs_count, artist.songs.size),
+        backgroundArtUrl = leadArtworkUrl,
+        onBack = onBack,
+        onMore = { showActions = true },
+        onPlay = { viewModel.playSongs(artist.songs) },
+        onShuffle = { viewModel.playSongs(artist.songs, shuffle = true) },
+        secondaryActions = {
+            DetailChipButton(
+                icon = if (isFollowed) Icons.Default.CheckCircle else Icons.Default.PersonAdd,
+                label = if (isFollowed) stringResource(R.string.unfollow) else stringResource(R.string.follow),
+                onClick = { viewModel.toggleFollowArtist(artist.name) }
+            )
+            DetailIconButton(
+                icon = Icons.Default.Radio,
+                contentDescription = stringResource(R.string.radio),
+                onClick = { viewModel.playSongs(artist.songs, shuffle = true) }
+            )
+            DetailIconButton(
+                icon = Icons.Default.Share,
+                contentDescription = stringResource(R.string.share),
+                onClick = { shareArtist(context, artist) }
+            )
+        },
+        paddingValues = paddingValues
+    ) {
+        if (topSongs.isNotEmpty()) {
+            item {
+                AnimatedArtistShelf(order = 0) {
+                    ArtistSongShelf(
+                        title = stringResource(R.string.top_songs),
+                        songs = topSongs,
+                        viewModel = viewModel,
+                        playlists = playlists
+                    )
+                }
+            }
+        }
+
+        if (singlesAndEps.isNotEmpty()) {
+            item {
+                AnimatedArtistShelf(order = 1) {
+                    ArtistAlbumShelf(
+                        title = stringResource(R.string.singles_and_eps),
+                        albums = singlesAndEps,
+                        viewModel = viewModel,
+                        onOpenAlbum = onOpenAlbum
+                    )
+                }
+            }
+        }
+
+        if (fromYourLibrary.isNotEmpty()) {
+            item {
+                AnimatedArtistShelf(order = 2) {
+                    ArtistSongShelf(
+                        title = stringResource(R.string.from_your_library),
+                        songs = fromYourLibrary,
+                        viewModel = viewModel,
+                        playlists = playlists
+                    )
+                }
+            }
+        }
+
+        if (fansMightAlsoLike.isNotEmpty()) {
+            item {
+                AnimatedArtistShelf(order = 3) {
+                    RelatedArtistsShelf(
+                        artists = fansMightAlsoLike,
+                        viewModel = viewModel,
+                        onOpenArtist = onOpenArtist
+                    )
+                }
+            }
+        }
+    }
+
+    if (showActions) {
+        ModalBottomSheet(
+            onDismissRequest = { showActions = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            ArtistActionsSheet(
+                artist = artist,
+                isFollowed = isFollowed,
+                onDismiss = { showActions = false },
+                onPlay = {
+                    showActions = false
+                    viewModel.playSongs(artist.songs)
+                },
+                onRadio = {
+                    showActions = false
+                    viewModel.playSongs(artist.songs, shuffle = true)
+                },
+                onToggleFollow = {
+                    showActions = false
+                    viewModel.toggleFollowArtist(artist.name)
+                },
+                onShare = {
+                    showActions = false
+                    shareArtist(context, artist)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailPageShell(
+    title: String,
+    subtitle: String,
+    description: String,
+    cover: @Composable () -> Unit,
+    countLabel: String,
+    backgroundArtUrl: String?,
+    onBack: () -> Unit,
+    onMore: () -> Unit,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    secondaryActions: @Composable RowScope.() -> Unit,
+    paddingValues: PaddingValues,
+    content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit
+) {
+    val palette by rememberMiniPlayerArtworkPalette(backgroundArtUrl)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        palette.glowStart.copy(alpha = 0.22f),
+                        palette.glowEnd.copy(alpha = 0.12f),
+                        MaterialTheme.colorScheme.background
+                    )
+                )
+            )
+    ) {
+        if (!backgroundArtUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = backgroundArtUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(40.dp)
+                    .alpha(0.18f)
+            )
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                bottom = paddingValues.calculateBottomPadding() + 20.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                }
+                IconButton(onClick = onMore) {
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
+                }
+            }
+        }
+
+        item { cover() }
+
+        item {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                content = secondaryActions
+            )
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = title,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = countLabel,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (description.isNotBlank()) {
+                    Text(
+                        text = description,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onPlay,
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.play))
+                }
+                TextButton(onClick = onShuffle) {
+                    Icon(Icons.Default.Shuffle, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.shuffle))
+                }
+            }
+        }
+
+        content()
+    }
+    }
+}
+
+@Composable
+private fun DetailCoverPlaceholder(
+    icon: ImageVector
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(84.dp)
+        )
+    }
+}
+
+@Composable
+private fun rememberLeadArtworkUrl(
+    songs: List<Song>,
+    customCoverUri: String?,
+    viewModel: LibraryViewModels
+) = produceState<String?>(
+    initialValue = customCoverUri,
+    key1 = songs,
+    key2 = customCoverUri
+) {
+    value = customCoverUri ?: songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
+}
+
+@Composable
+private fun SmartCollectionCover(
+    songs: List<Song>,
+    customCoverUri: String?,
+    viewModel: LibraryViewModels,
+    shape: androidx.compose.ui.graphics.Shape,
+    fallbackIcon: ImageVector
+) {
+    val coverModels by produceState<List<String>>(
+        initialValue = emptyList(),
+        key1 = songs,
+        key2 = customCoverUri
+    ) {
+        value = if (!customCoverUri.isNullOrBlank()) {
+            listOf(customCoverUri)
+        } else {
+            songs.take(4).mapNotNull { song -> viewModel.getSongImageUrl(song) }
+        }
+    }
+
+    when {
+        coverModels.size == 1 -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(shape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                AsyncImage(
+                    model = coverModels.first(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        coverModels.size >= 2 -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(shape)
+            ) {
+                coverModels.chunked(2).take(2).forEach { row ->
+                    Row(Modifier.weight(1f)) {
+                        row.forEach { model ->
+                            AsyncImage(
+                                model = model,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxSize()
+                            )
+                        }
+                        if (row.size == 1) {
+                            DetailCoverPlaceholderCell(
+                                icon = fallbackIcon,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+                if (coverModels.size < 3) {
+                    Row(Modifier.weight(1f)) {
+                        repeat(2) {
+                            DetailCoverPlaceholderCell(
+                                icon = fallbackIcon,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        else -> DetailCoverPlaceholder(icon = fallbackIcon)
+    }
+}
+
+@Composable
+private fun DetailCoverPlaceholderCell(
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+            modifier = Modifier.size(34.dp)
+        )
+    }
+}
+
+@Composable
+private fun SmartCollectionThumbnail(
+    songs: List<Song>,
+    customCoverUri: String?,
+    viewModel: LibraryViewModels,
+    fallbackIcon: ImageVector
+) {
+    val coverModels by produceState<List<String>>(
+        initialValue = emptyList(),
+        key1 = songs,
+        key2 = customCoverUri
+    ) {
+        value = if (!customCoverUri.isNullOrBlank()) {
+            listOf(customCoverUri)
+        } else {
+            songs.take(4).mapNotNull { song -> viewModel.getSongImageUrl(song) }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(RoundedCornerShape(LibraryArtworkRadius))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            coverModels.size == 1 -> {
+                AsyncImage(
+                    model = coverModels.first(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            coverModels.size >= 2 -> {
+                Column(Modifier.fillMaxSize()) {
+                    coverModels.chunked(2).take(2).forEach { row ->
+                        Row(Modifier.weight(1f)) {
+                            row.forEach { model ->
+                                AsyncImage(
+                                    model = model,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxSize()
+                                )
+                            }
+                            if (row.size == 1) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                                )
+                            }
+                        }
+                    }
+                    if (coverModels.size < 3) {
+                        Row(Modifier.weight(1f)) {
+                            repeat(2) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            else -> {
+                Icon(
+                    fallbackIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSongCover(
+    song: Song?,
+    viewModel: LibraryViewModels,
+    shape: androidx.compose.ui.graphics.Shape
+) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = song) {
+        value = song?.let { viewModel.getSongImageUrl(it) }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        if (imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(84.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailChipButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Icon(icon, contentDescription = null)
+        Spacer(Modifier.width(6.dp))
+        Text(label)
+    }
+}
+
+@Composable
+private fun DetailIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = contentDescription)
+    }
+}
+
+@Composable
+private fun ArtistAlbumChip(
+    album: LibraryAlbum,
+    viewModel: LibraryViewModels,
+    onClick: () -> Unit
+) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = album.representativeSong) {
+        value = viewModel.getSongImageUrl(album.representativeSong)
+    }
+
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(140.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    Icons.Default.Album,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+        }
+        Text(
+            text = album.title,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun AnimatedArtistShelf(
+    order: Int,
+    content: @Composable () -> Unit
+) {
+    var visible by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(order * 70L)
+        visible = true
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 5 })
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun ArtistSongShelf(
+    title: String,
+    songs: List<Song>,
+    viewModel: LibraryViewModels,
+    playlists: List<Playlist>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = title,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(songs, key = { "artist_shelf_song_${it.id}_$title" }) { song ->
+                ArtistSongCard(
+                    song = song,
+                    viewModel = viewModel,
+                    playlists = playlists
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistSongCard(
+    song: Song,
+    viewModel: LibraryViewModels,
+    playlists: List<Playlist>
+) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = song) {
+        value = viewModel.getSongImageUrl(song)
+    }
+
+    Column(
+        modifier = Modifier
+            .width(150.dp)
+            .clickable { viewModel.playSong(song) },
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(150.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    Icons.Default.MusicNote,
+                    contentDescription = null,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+        }
+        Text(
+            text = song.title,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = song.artist.ifBlank { stringResource(R.string.unknown_artist) },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp
+        )
+    }
+}
+
+@Composable
+private fun ArtistAlbumShelf(
+    title: String,
+    albums: List<LibraryAlbum>,
+    viewModel: LibraryViewModels,
+    onOpenAlbum: (LibraryAlbum) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = title,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(albums, key = { "artist_shelf_album_${it.id}_${it.title}" }) { album ->
+                ArtistAlbumChip(
+                    album = album,
+                    viewModel = viewModel,
+                    onClick = { onOpenAlbum(album) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelatedArtistsShelf(
+    artists: List<LibraryArtist>,
+    viewModel: LibraryViewModels,
+    onOpenArtist: (LibraryArtist) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = stringResource(R.string.fans_might_also_like),
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            items(artists, key = { "related_artist_${it.name}" }) { relatedArtist ->
+                RelatedArtistCard(
+                    artist = relatedArtist,
+                    viewModel = viewModel,
+                    onOpen = { onOpenArtist(relatedArtist) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelatedArtistCard(
+    artist: LibraryArtist,
+    viewModel: LibraryViewModels,
+    onOpen: () -> Unit
+) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = artist.name) {
+        value = artist.songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
+    }
+
+    Column(
+        modifier = Modifier
+            .width(130.dp)
+            .clickable(onClick = onOpen),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(130.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.Person, contentDescription = null)
+            }
+        }
+        Text(
+            text = artist.name,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
 @Composable
 private fun LibraryCollectionCard(
     title: String,
     subtitle: String,
     icon: ImageVector,
+    viewModel: LibraryViewModels,
+    coverSongs: List<Song>,
+    customCoverUri: String? = null,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
     onShuffle: () -> Unit
@@ -1032,15 +2188,12 @@ private fun LibraryCollectionCard(
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(LibraryArtworkRadius))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        }
+        SmartCollectionThumbnail(
+            songs = coverSongs,
+            customCoverUri = customCoverUri,
+            viewModel = viewModel,
+            fallbackIcon = icon
+        )
 
         Spacer(Modifier.width(16.dp))
 
@@ -1096,41 +2249,45 @@ private fun LibraryCollectionCard(
 @Composable
 private fun PlaylistListItem(
     playlist: Playlist,
+    songs: List<Song>,
+    customCoverUri: String?,
+    viewModel: LibraryViewModels,
+    onOpen: () -> Unit,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onAddToQueue: () -> Unit,
     onDelete: () -> Unit
 ) {
     var showActions by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val coverPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            viewModel.setPlaylistCoverUri(playlist.id, uri.toString())
+        }
+    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .liquidGlassEffect(LibraryCardRadius)
-            .clickable(onClick = onPlay)
+            .clickable(onClick = onOpen)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(LibraryArtworkRadius))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.QueueMusic,
-                null,
-                tint = MaterialTheme.colorScheme.onPrimary
-            )
-        }
+        SmartCollectionThumbnail(
+            songs = songs,
+            customCoverUri = customCoverUri,
+            viewModel = viewModel,
+            fallbackIcon = Icons.AutoMirrored.Filled.QueueMusic
+        )
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
@@ -1171,6 +2328,22 @@ private fun PlaylistListItem(
                     showActions = false
                     onAddToQueue()
                 },
+                onShare = {
+                    showActions = false
+                    sharePlaylist(context, playlist, songs)
+                },
+                onChangeCover = {
+                    showActions = false
+                    coverPicker.launch(arrayOf("image/*"))
+                },
+                onRemoveCover = if (customCoverUri != null) {
+                    {
+                        showActions = false
+                        viewModel.setPlaylistCoverUri(playlist.id, null)
+                    }
+                } else {
+                    null
+                },
                 onDelete = {
                     showActions = false
                     onDelete()
@@ -1187,17 +2360,75 @@ private fun PlaylistActionsSheet(
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onAddToQueue: () -> Unit,
+    onShare: () -> Unit,
+    onChangeCover: () -> Unit,
+    onRemoveCover: (() -> Unit)?,
     onDelete: () -> Unit
 ) {
     ActionSheetFrame(
         title = playlist.name,
         subtitle = stringResource(R.string.playlist_label),
         onDismiss = onDismiss,
+        actions = buildList {
+            add(ActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play), onClick = onPlay))
+            add(ActionSpec(Icons.Default.Shuffle, stringResource(R.string.shuffle), onClick = onShuffle))
+            add(ActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue), onClick = onAddToQueue))
+            add(ActionSpec(Icons.Default.Share, stringResource(R.string.share), onClick = onShare))
+            add(ActionSpec(Icons.Default.Image, stringResource(R.string.change_cover), onClick = onChangeCover))
+            if (onRemoveCover != null) {
+                add(ActionSpec(Icons.Default.Delete, stringResource(R.string.remove_cover), onClick = onRemoveCover))
+            }
+            add(ActionSpec(Icons.Default.Delete, stringResource(R.string.delete_playlist), destructive = true, onClick = onDelete))
+        }
+    )
+}
+
+@Composable
+private fun CollectionActionsSheet(
+    title: String,
+    subtitle: String,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onShuffle: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onShare: () -> Unit
+) {
+    ActionSheetFrame(
+        title = title,
+        subtitle = subtitle,
+        onDismiss = onDismiss,
         actions = listOf(
             ActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play), onClick = onPlay),
             ActionSpec(Icons.Default.Shuffle, stringResource(R.string.shuffle), onClick = onShuffle),
             ActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue), onClick = onAddToQueue),
-            ActionSpec(Icons.Default.Delete, stringResource(R.string.delete_playlist), destructive = true, onClick = onDelete)
+            ActionSpec(Icons.Default.Share, stringResource(R.string.share), onClick = onShare)
+        )
+    )
+}
+
+@Composable
+private fun ArtistActionsSheet(
+    artist: LibraryArtist,
+    isFollowed: Boolean,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onRadio: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onShare: () -> Unit
+) {
+    ActionSheetFrame(
+        title = artist.name,
+        subtitle = stringResource(R.string.artist),
+        onDismiss = onDismiss,
+        actions = listOf(
+            ActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play), onClick = onPlay),
+            ActionSpec(Icons.Default.Radio, stringResource(R.string.radio), onClick = onRadio),
+            ActionSpec(
+                if (isFollowed) Icons.Default.CheckCircle else Icons.Default.PersonAdd,
+                if (isFollowed) stringResource(R.string.unfollow) else stringResource(R.string.follow),
+                onClick = onToggleFollow
+            ),
+            ActionSpec(Icons.Default.Share, stringResource(R.string.share), onClick = onShare)
         )
     )
 }
@@ -1421,6 +2652,7 @@ private fun SaveToPlaylistSheet(
 private fun LibraryAlbumCard(
     album: LibraryAlbum,
     viewModel: LibraryViewModels,
+    onOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val imageUrl by produceState<String?>(initialValue = null, key1 = album.representativeSong) {
@@ -1431,7 +2663,7 @@ private fun LibraryAlbumCard(
         modifier = modifier
             .aspectRatio(1f)
             .liquidGlassEffect(16.dp)
-            .clickable { viewModel.playSong(album.representativeSong) }
+            .clickable(onClick = onOpen)
     ) {
         if (imageUrl != null) {
             AsyncImage(
@@ -1491,6 +2723,7 @@ private fun LibrarySongItem(
     var showActions by rememberSaveable { mutableStateOf(false) }
     var showPlaylistPicker by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Row(
         modifier = Modifier
@@ -1586,7 +2819,13 @@ private fun LibrarySongItem(
                 },
                 onShare = {
                     showActions = false
-                    shareSong(context, song)
+                    scope.launch {
+                        shareSong(
+                            context = context,
+                            song = song,
+                            fallbackUrl = viewModel.resolveShareUrl(song)
+                        )
+                    }
                 }
             )
         }
@@ -1627,6 +2866,7 @@ private fun HistorySongItem(
     var showActions by rememberSaveable { mutableStateOf(false) }
     var showPlaylistPicker by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Row(
         modifier = Modifier
@@ -1722,7 +2962,13 @@ private fun HistorySongItem(
                 },
                 onShare = {
                     showActions = false
-                    shareSong(context, linkedSong)
+                    scope.launch {
+                        shareSong(
+                            context = context,
+                            song = linkedSong,
+                            fallbackUrl = viewModel.resolveShareUrl(linkedSong)
+                        )
+                    }
                 }
             )
         }
@@ -1740,7 +2986,23 @@ private fun HistorySongItem(
                 },
                 onShare = {
                     showActions = false
-                    shareHistoryItem(context, item)
+                    if (linkedSong != null) {
+                        scope.launch {
+                            shareSong(
+                                context = context,
+                                song = linkedSong,
+                                fallbackUrl = viewModel.resolveShareUrl(linkedSong)
+                            )
+                        }
+                    } else {
+                        scope.launch {
+                            shareHistoryItem(
+                                context = context,
+                                item = item,
+                                fallbackUrl = viewModel.resolveShareUrl(item.title, item.artist)
+                            )
+                        }
+                    }
                 }
             )
         }
@@ -1783,13 +3045,19 @@ private fun RestrictionBadge(text: String) {
 @Composable
 private fun ArtistListItem(
     artist: LibraryArtist,
+    viewModel: LibraryViewModels,
+    onOpen: () -> Unit,
     onPlay: () -> Unit
 ) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = artist.name) {
+        value = artist.songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .liquidGlassEffect(LibraryCardRadius)
-            .clickable(onClick = onPlay)
+            .clickable(onClick = onOpen)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1800,7 +3068,16 @@ private fun ArtistListItem(
                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
@@ -1818,7 +3095,9 @@ private fun ArtistListItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        IconButton(onClick = onPlay) {
+            Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -2038,21 +3317,125 @@ private fun Calendar.startOfDayMillis(): Long =
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
-private fun shareSong(context: android.content.Context, song: Song) {
-    val text = "${song.title} — ${song.artist}"
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
+private fun shareSong(
+    context: android.content.Context,
+    song: Song,
+    fallbackUrl: String?
+) {
+    val text = buildString {
+        append(song.title)
+        if (song.artist.isNotBlank()) append(" — ${song.artist}")
+        if (song.album.isNotBlank()) append("\n${song.album}")
+        if (!fallbackUrl.isNullOrBlank()) append("\n$fallbackUrl")
+    }
+    val canShareAudioFile = song.uri.scheme == "content" || song.uri.scheme == "file"
+    val intent = if (canShareAudioFile) {
+        Intent(Intent.ACTION_SEND).apply {
+            type = "audio/*"
+            clipData = ClipData.newUri(context.contentResolver, song.title, song.uri)
+            putExtra(Intent.EXTRA_STREAM, song.uri)
+            putExtra(Intent.EXTRA_TITLE, song.title)
+            putExtra(Intent.EXTRA_SUBJECT, song.title)
+            putExtra(Intent.EXTRA_TEXT, text)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    } else {
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, song.title)
+            putExtra(Intent.EXTRA_SUBJECT, song.title)
+            putExtra(Intent.EXTRA_TEXT, fallbackUrl ?: text)
+        }
     }
     context.startActivity(
         Intent.createChooser(intent, context.getString(R.string.share))
     )
 }
 
-private fun shareHistoryItem(context: android.content.Context, item: PlaybackHistoryEntity) {
-    val text = "${item.title} — ${item.artist}"
+private fun shareHistoryItem(
+    context: android.content.Context,
+    item: PlaybackHistoryEntity,
+    fallbackUrl: String?
+) {
+    val text = buildString {
+        append("${item.title} — ${item.artist}")
+        if (!fallbackUrl.isNullOrBlank()) append("\n$fallbackUrl")
+    }
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
+        putExtra(Intent.EXTRA_TITLE, item.title)
+        putExtra(Intent.EXTRA_SUBJECT, item.title)
+        putExtra(Intent.EXTRA_TEXT, fallbackUrl ?: text)
+    }
+    context.startActivity(
+        Intent.createChooser(intent, context.getString(R.string.share))
+    )
+}
+
+private fun sharePlaylist(
+    context: android.content.Context,
+    playlist: Playlist,
+    songs: List<Song>
+) {
+    val text = buildString {
+        append(playlist.name)
+        append("\n")
+        append(context.getString(R.string.songs_count, songs.size))
+        if (!playlist.description.isNullOrBlank()) {
+            append("\n")
+            append(playlist.description)
+        }
+        songs.take(12).forEachIndexed { index, song ->
+            append("\n${index + 1}. ${song.title}")
+            if (song.artist.isNotBlank()) append(" — ${song.artist}")
+        }
+        if (songs.size > 12) append("\n…")
+    }
+    shareText(context, playlist.name, text)
+}
+
+private fun shareAlbum(
+    context: android.content.Context,
+    album: LibraryAlbum
+) {
+    val text = buildString {
+        append(album.title)
+        if (album.artist.isNotBlank()) append(" — ${album.artist}")
+        append("\n")
+        append(context.getString(R.string.songs_count, album.songCount))
+        album.songs.take(12).forEachIndexed { index, song ->
+            append("\n${index + 1}. ${song.title}")
+        }
+        if (album.songs.size > 12) append("\n…")
+    }
+    shareText(context, album.title, text)
+}
+
+private fun shareArtist(
+    context: android.content.Context,
+    artist: LibraryArtist
+) {
+    val text = buildString {
+        append(artist.name)
+        append("\n")
+        append(context.getString(R.string.songs_count, artist.songs.size))
+        artist.songs.take(12).forEachIndexed { index, song ->
+            append("\n${index + 1}. ${song.title}")
+        }
+        if (artist.songs.size > 12) append("\n…")
+    }
+    shareText(context, artist.name, text)
+}
+
+private fun shareText(
+    context: android.content.Context,
+    title: String,
+    text: String
+) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TITLE, title)
+        putExtra(Intent.EXTRA_SUBJECT, title)
         putExtra(Intent.EXTRA_TEXT, text)
     }
     context.startActivity(

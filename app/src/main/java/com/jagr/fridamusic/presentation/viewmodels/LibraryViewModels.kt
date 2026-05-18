@@ -67,11 +67,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _fullHistory =
         MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
     private val _manualQueue = MutableStateFlow<List<Song>>(emptyList())
+    private val _playlistCoverUris = MutableStateFlow<Map<Long, String>>(emptyMap())
+    private val _followedArtists = MutableStateFlow(settingsManager.followedArtists)
 
     val recentHistory = _recentHistory.asStateFlow()
     val fullHistory = _fullHistory.asStateFlow()
     val searchHistory = _searchHistory.asStateFlow()
     val manualQueue = _manualQueue.asStateFlow()
+    val playlistCoverUris = _playlistCoverUris.asStateFlow()
+    val followedArtists = _followedArtists.asStateFlow()
 
     val isAutoPlayEnabled = MutableStateFlow(false)
 
@@ -192,6 +196,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
         ContextCompat.registerReceiver(getApplication(), notificationReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
         ensureFavoritesPlaylistExists()
+        refreshPlaylistCoverUris()
         restoreLastPlaybackState()
         loadRecentHistory()
     }
@@ -379,13 +384,19 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     fun playPlaylist(playlist: Playlist, shuffle: Boolean = false) {
         val localSongs = _songs.value.filter { it.id in playlist.songIds }
-        val nextSong = if (shuffle) localSongs.randomOrNull() else localSongs.firstOrNull()
+        playSongs(localSongs, shuffle)
+    }
+
+    fun playSongs(collection: List<Song>, shuffle: Boolean = false) {
+        val playableSongs = if (shuffle) collection.shuffled() else collection
+        val nextSong = playableSongs.firstOrNull()
 
         if (nextSong != null) {
             setShuffleMode(shuffle)
+            _manualQueue.value = playableSongs.drop(1)
             playSong(nextSong)
         } else {
-            _errorMessage.value = "La playlist no tiene canciones disponibles"
+            _errorMessage.value = "No hay canciones disponibles para reproducir"
         }
     }
 
@@ -400,6 +411,30 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun addPlaylistToQueue(playlist: Playlist) {
         val queuedSongs = _songs.value.filter { it.id in playlist.songIds }
         _manualQueue.value = _manualQueue.value + queuedSongs
+    }
+
+    fun addSongsToQueue(collection: List<Song>) {
+        _manualQueue.value = _manualQueue.value + collection
+    }
+
+    suspend fun resolveShareUrl(song: Song): String? = withContext(Dispatchers.IO) {
+        val videoId = song.data.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
+            ?: runCatching {
+                YouTube.search("${song.title} ${song.artist} audio")
+                    .firstOrNull { it.type == ResultType.SONG }
+                    ?.videoId
+            }.getOrNull()
+
+        videoId?.let { "https://music.youtube.com/watch?v=$it" }
+    }
+
+    suspend fun resolveShareUrl(title: String, artist: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            YouTube.search("$title $artist audio")
+                .firstOrNull { it.type == ResultType.SONG }
+                ?.videoId
+                ?.let { "https://music.youtube.com/watch?v=$it" }
+        }.getOrNull()
     }
 
     fun clearManualQueue() {
@@ -640,6 +675,39 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             )
 
             playlistDao.deletePlaylist(entityToDelete)
+            settingsManager.setPlaylistCoverUri(playlist.id, null)
+            refreshPlaylistCoverUris()
+        }
+    }
+
+    fun playlistCoverUri(playlistId: Long): String? =
+        _playlistCoverUris.value[playlistId] ?: settingsManager.playlistCoverUri(playlistId)
+
+    fun setPlaylistCoverUri(playlistId: Long, uri: String?) {
+        settingsManager.setPlaylistCoverUri(playlistId, uri)
+        _playlistCoverUris.value = _playlistCoverUris.value
+            .toMutableMap()
+            .apply {
+                if (uri.isNullOrBlank()) remove(playlistId) else put(playlistId, uri)
+            }
+    }
+
+    fun toggleFollowArtist(artistName: String) {
+        val updated = _followedArtists.value.toMutableSet().apply {
+            if (!add(artistName)) remove(artistName)
+        }
+        _followedArtists.value = updated
+        settingsManager.followedArtists = updated
+    }
+
+    private fun refreshPlaylistCoverUris() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val covers = playlistDao.getAllPlaylistsOnce()
+                .mapNotNull { entity ->
+                    settingsManager.playlistCoverUri(entity.id)?.let { uri -> entity.id to uri }
+                }
+                .toMap()
+            _playlistCoverUris.value = covers
         }
     }
 

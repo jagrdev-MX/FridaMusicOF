@@ -78,4 +78,12 @@
     <string name="unlike">Quitar me gusta</string>
     <string name="share">Compartir</string>
     <string name="explicit_badge">E</string>
+    <string name="radio">Radio</string>
+    <string name="unfollow">Dejar de seguir</string>
+    <string name="change_cover">Cambiar portada</string>
+    <string name="remove_cover">Quitar portada</string>
+    <string name="top_songs">Top songs</string>
+    <string name="singles_and_eps">Singles &amp; EPs</string>
+    <string name="from_your_library">De tu biblioteca</string>
+    <string name="fans_might_also_like">A los fans también les gusta</string>
 </resources>
