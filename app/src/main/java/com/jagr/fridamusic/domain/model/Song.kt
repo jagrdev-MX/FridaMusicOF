@@ -17,6 +17,7 @@ data class Song(
     val album: String = "",
     val dateAdded: Long = 0L,
     val lyrics: String? = null,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val isExplicit: Boolean = false
 
 )

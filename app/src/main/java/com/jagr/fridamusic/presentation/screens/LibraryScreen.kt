@@ -152,6 +152,8 @@ private data class ActionSpec(
 )
 
 private const val LIBRARY_PAGER_WINDOW = 10_000
+private val LibraryCardRadius = 18.dp
+private val LibraryArtworkRadius = 12.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -521,8 +523,8 @@ private fun LibraryActionButton(
 ) {
     Box(
         modifier = Modifier
-            .size(56.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .size(46.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(
                 if (selected) {
                     MaterialTheme.colorScheme.onSurface
@@ -567,7 +569,11 @@ private fun LibraryHeader(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp)
+            .padding(
+                start = 20.dp,
+                end = 20.dp,
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp
+            )
     ) {
         Text(
             text = stringResource(R.string.library),
@@ -575,51 +581,55 @@ private fun LibraryHeader(
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.02).em,
             color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 20.dp)
+            modifier = Modifier.padding(bottom = 18.dp)
         )
 
-        LazyRow(
-            state = tabsState,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                .padding(4.dp)
         ) {
-            items(tabs, key = { it.first.name }) { (tab, title) ->
-                val index = tabs.indexOfFirst { it.first == tab }
-                val selected = selectedPage == index
-                val selectedAlpha by animateFloatAsState(
-                    targetValue = if (selected) 1f else 0.08f,
-                    label = "tab-selection-alpha"
-                )
+            LazyRow(
+                state = tabsState,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(tabs, key = { it.first.name }) { (tab, title) ->
+                    val index = tabs.indexOfFirst { it.first == tab }
+                    val selected = selectedPage == index
+                    val selectedAlpha by animateFloatAsState(
+                        targetValue = if (selected) 1f else 0f,
+                        label = "tab-selection-alpha"
+                    )
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(
-                            if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = selectedAlpha)
+                            )
+                            .clickable { onTabSelected(index) }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = title,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.surface
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                                MaterialTheme.colorScheme.onSurfaceVariant
                             }
                         )
-                        .clickable { onTabSelected(index) }
-                        .padding(horizontal = 18.dp, vertical = 12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = title,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.surface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -634,7 +644,7 @@ private fun LibraryHeader(
                 onToggleSearch()
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
             LibraryActionButton(
                 icon = Icons.Default.FilterList,
@@ -651,7 +661,7 @@ private fun LibraryHeader(
                 onValueChange = onSearchQueryChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
+                    .padding(top = 12.dp),
                 singleLine = true,
                 label = { Text(stringResource(R.string.search)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
@@ -666,7 +676,7 @@ private fun LibraryHeader(
             )
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(14.dp))
     }
 }
 
@@ -1017,7 +1027,7 @@ private fun LibraryCollectionCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(14.dp)
+            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onOpen)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1025,7 +1035,7 @@ private fun LibraryCollectionCard(
         Box(
             modifier = Modifier
                 .size(52.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(LibraryArtworkRadius))
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
@@ -1096,15 +1106,15 @@ private fun PlaylistListItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(12.dp)
+            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onPlay)
-            .padding(12.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .size(52.dp)
+                .clip(RoundedCornerShape(LibraryArtworkRadius))
                 .background(
                     Brush.linearGradient(
                         listOf(
@@ -1485,15 +1495,15 @@ private fun LibrarySongItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(8.dp)
+            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onClick)
-            .padding(12.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .size(52.dp)
+                .clip(RoundedCornerShape(LibraryArtworkRadius))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             if (imageUrl != null) {
@@ -1519,16 +1529,26 @@ private fun LibrarySongItem(
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 2,
+                lineHeight = 21.sp,
+                overflow = TextOverflow.Clip
             )
-            Text(
-                song.artist.ifBlank { stringResource(R.string.unknown) },
-                fontSize = 15.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (song.isExplicit) {
+                    RestrictionBadge(text = stringResource(R.string.explicit_badge))
+                }
+                Text(
+                    song.artist.ifBlank { stringResource(R.string.unknown) },
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    lineHeight = 18.sp,
+                    overflow = TextOverflow.Clip
+                )
+            }
         }
         IconButton(onClick = { showActions = true }) {
             Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1611,15 +1631,15 @@ private fun HistorySongItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(8.dp)
+            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onClick)
-            .padding(12.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .size(52.dp)
+                .clip(RoundedCornerShape(LibraryArtworkRadius))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             if (!item.artworkUrl.isNullOrBlank()) {
@@ -1645,16 +1665,26 @@ private fun HistorySongItem(
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 2,
+                lineHeight = 21.sp,
+                overflow = TextOverflow.Clip
             )
-            Text(
-                item.artist.ifBlank { stringResource(R.string.unknown_artist) },
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (linkedSong?.isExplicit == true) {
+                    RestrictionBadge(text = stringResource(R.string.explicit_badge))
+                }
+                Text(
+                    item.artist.ifBlank { stringResource(R.string.unknown_artist) },
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    lineHeight = 18.sp,
+                    overflow = TextOverflow.Clip
+                )
+            }
         }
         IconButton(onClick = { showActions = true }) {
             Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1734,6 +1764,23 @@ private fun HistorySongItem(
 }
 
 @Composable
+private fun RestrictionBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun ArtistListItem(
     artist: LibraryArtist,
     onPlay: () -> Unit
@@ -1741,14 +1788,14 @@ private fun ArtistListItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(8.dp)
+            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onPlay)
-            .padding(12.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(52.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center

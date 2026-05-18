@@ -77,4 +77,5 @@
     <string name="save_to_playlist">Guardar en playlist</string>
     <string name="unlike">Quitar me gusta</string>
     <string name="share">Compartir</string>
+    <string name="explicit_badge">E</string>
 </resources>

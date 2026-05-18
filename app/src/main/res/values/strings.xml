@@ -159,4 +159,5 @@
     <string name="save_to_playlist">Save to playlist</string>
     <string name="unlike">Unlike</string>
     <string name="share">Share</string>
+    <string name="explicit_badge">E</string>
 </resources>

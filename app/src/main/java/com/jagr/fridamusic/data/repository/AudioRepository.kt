@@ -66,6 +66,7 @@ class AudioRepository(private val context: Context) {
                 val artworkUri = ContentUris.withAppendedId(artworkUriBase, albumId) // Creamos la Uri del artwork
 
                 val (cleanTitle, cleanArtist) = parseMetadataFromName(fileName, rawTitle, rawArtist)
+                val isExplicit = hasExplicitMarker(rawTitle, fileName)
 
                 audioList.add(
                     Song(
@@ -78,7 +79,8 @@ class AudioRepository(private val context: Context) {
                         albumId = albumId,
                         artworkUri = artworkUri,
                         album = album,
-                        dateAdded = dateAdded
+                        dateAdded = dateAdded,
+                        isExplicit = isExplicit
                     )
                 )
             }
@@ -87,25 +89,30 @@ class AudioRepository(private val context: Context) {
     }
 
     private fun parseMetadataFromName(fileName: String, defaultTitle: String, defaultArtist: String?): Pair<String, String> {
-        var cleanName = fileName.replace(Regex("(?i)\\.(mp3|m4a|wav|flac|ogg)$"), "")
-
-        cleanName = cleanName.replace("_", " ")
-
-        cleanName = cleanName.replace(Regex("\\(.*?\\)"), "")
-            .replace(Regex("\\[.*?\\]"), "")
+        val cleanName = fileName
+            .replace(Regex("(?i)\\.(mp3|m4a|wav|flac|ogg)$"), "")
+            .replace("_", " ")
             .trim()
 
         val parts = cleanName.split(Regex(" - |- "), limit = 2)
+        val inferredArtist = parts.getOrNull(0)?.trim().takeIf { parts.size == 2 && !it.isNullOrBlank() }
+        val inferredTitle = parts.getOrNull(1)?.trim().takeIf { parts.size == 2 && !it.isNullOrBlank() }
+        val usableDefaultTitle = defaultTitle.takeIf { it.isNotBlank() && !it.equals("<unknown>", ignoreCase = true) }
+        val isArtistUnknown = defaultArtist.isNullOrBlank() || defaultArtist.equals("<unknown>", ignoreCase = true)
 
-        return if (parts.size == 2) {
-            val artist = parts[0].trim()
-            val title = parts[1].trim()
-            Pair(title, artist)
+        val finalTitle = usableDefaultTitle ?: inferredTitle ?: cleanName
+        val finalArtist = if (isArtistUnknown) {
+            inferredArtist ?: "Unknown Artist"
         } else {
-            val isArtistUnknown = defaultArtist.isNullOrBlank() || defaultArtist.equals("<unknown>", ignoreCase = true)
-            val finalArtist = if (isArtistUnknown) "Unknown Artist" else defaultArtist!!
+            defaultArtist!!
+        }
 
-            Pair(cleanName.trim(), finalArtist)
+        return Pair(finalTitle.trim(), finalArtist.trim())
+    }
+
+    private fun hasExplicitMarker(vararg candidates: String?): Boolean {
+        return candidates.any { candidate ->
+            candidate?.contains(Regex("(?i)\\bexplicit\\b")) == true
         }
     }
 }
