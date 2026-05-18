@@ -64,9 +64,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     )
     private val _recentHistory =
         MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
+    private val _fullHistory =
+        MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
+    private val _manualQueue = MutableStateFlow<List<Song>>(emptyList())
 
     val recentHistory = _recentHistory.asStateFlow()
+    val fullHistory = _fullHistory.asStateFlow()
     val searchHistory = _searchHistory.asStateFlow()
+    val manualQueue = _manualQueue.asStateFlow()
 
     val isAutoPlayEnabled = MutableStateFlow(false)
 
@@ -303,6 +308,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     artworkUrl = song.artworkUri.toString()
                 )
             )
+            loadHistory()
         }
         _isPlaying.value = true
         startProgressUpdate()
@@ -325,10 +331,79 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun loadRecentHistory() {
-        viewModelScope.launch {
-            _recentHistory.value =
-                playbackHistoryRepository.getRecentHistory(10)
+        viewModelScope.launch { loadHistory() }
+    }
+
+    private suspend fun loadHistory() {
+        _recentHistory.value = playbackHistoryRepository.getRecentHistory(10)
+        _fullHistory.value = playbackHistoryRepository.getFullHistory()
+    }
+
+    fun playHistoryItem(history: PlaybackHistoryEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val isRemoteHistoryItem = history.songId.startsWith("http", ignoreCase = true)
+
+            if (isRemoteHistoryItem) {
+                val match = YouTube.search("${history.title} ${history.artist} audio")
+                    .firstOrNull { it.type == ResultType.SONG }
+
+                if (match != null) {
+                    withContext(Dispatchers.Main) {
+                        playYouTubeSong(
+                            YouTubeResult(
+                                videoId = match.videoId,
+                                title = history.title,
+                                artist = history.artist,
+                                thumbnailUrl = history.artworkUrl.orEmpty()
+                            )
+                        )
+                    }
+                } else {
+                    _errorMessage.value = "No se pudo volver a cargar esta cancion del historial"
+                }
+                return@launch
+            }
+
+            val localSong = _songs.value.firstOrNull { song ->
+                song.uri.toString() == history.songId ||
+                    (song.title == history.title && song.artist == history.artist)
+            }
+
+            if (localSong != null) {
+                withContext(Dispatchers.Main) { playSong(localSong) }
+            } else {
+                _errorMessage.value = "Esta cancion ya no esta disponible en el dispositivo"
+            }
         }
+    }
+
+    fun playPlaylist(playlist: Playlist, shuffle: Boolean = false) {
+        val localSongs = _songs.value.filter { it.id in playlist.songIds }
+        val nextSong = if (shuffle) localSongs.randomOrNull() else localSongs.firstOrNull()
+
+        if (nextSong != null) {
+            setShuffleMode(shuffle)
+            playSong(nextSong)
+        } else {
+            _errorMessage.value = "La playlist no tiene canciones disponibles"
+        }
+    }
+
+    fun addSongNext(song: Song) {
+        _manualQueue.value = listOf(song) + _manualQueue.value
+    }
+
+    fun addSongToQueue(song: Song) {
+        _manualQueue.value = _manualQueue.value + song
+    }
+
+    fun addPlaylistToQueue(playlist: Playlist) {
+        val queuedSongs = _songs.value.filter { it.id in playlist.songIds }
+        _manualQueue.value = _manualQueue.value + queuedSongs
+    }
+
+    fun clearManualQueue() {
+        _manualQueue.value = emptyList()
     }
 
     fun playYouTubeSong(result: YouTubeResult) {
@@ -353,7 +428,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         id = result.videoId.hashCode().toLong(),
                         title = result.title,
                         artist = result.artist,
-                        data = cachedUrl,
+                        data = result.videoId,
                         duration = 1000L,
                         albumId = 0L,
                         uri = Uri.parse(cachedUrl),
@@ -391,7 +466,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         id = result.videoId.hashCode().toLong(),
                         title = result.title,
                         artist = result.artist,
-                        data = audioStream.url ?: "",
+                        data = result.videoId,
                         duration = streamInfo.duration * 1000L,
                         albumId = 0L,
                         uri = Uri.parse(audioStream.url ?: ""),
@@ -434,6 +509,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun skipToNext() {
+        val queuedSong = _manualQueue.value.firstOrNull()
+        if (queuedSong != null) {
+            _manualQueue.value = _manualQueue.value.drop(1)
+            playSong(queuedSong)
+            return
+        }
+
         val currentId = _currentSong.value?.id ?: return
         val ytList = _youtubeSearchResults.value
         val ytIndex = ytList.indexOfFirst { it.videoId.hashCode().toLong() == currentId }

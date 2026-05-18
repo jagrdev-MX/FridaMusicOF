@@ -57,4 +57,16 @@ class SettingsManager(context: Context) {
     var searchHistory: String
         get() = prefs.getString("search_history", "") ?: ""
         set(value) = prefs.edit().putString("search_history", value).apply()
+
+    var librarySortOption: String
+        get() = prefs.getString("library_sort_option", "DATE") ?: "DATE"
+        set(value) = prefs.edit().putString("library_sort_option", value).apply()
+
+    var librarySortReversed: Boolean
+        get() = prefs.getBoolean("library_sort_reversed", false)
+        set(value) = prefs.edit().putBoolean("library_sort_reversed", value).apply()
+
+    var saveLibrarySort: Boolean
+        get() = prefs.getBoolean("save_library_sort", false)
+        set(value) = prefs.edit().putBoolean("save_library_sort", value).apply()
 }

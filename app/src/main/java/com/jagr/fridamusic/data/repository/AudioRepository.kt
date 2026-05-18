@@ -19,7 +19,9 @@ class AudioRepository(private val context: Context) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DATE_ADDED
         )
 
         val selection = if (filterVoiceNotes) {
@@ -44,6 +46,8 @@ class AudioRepository(private val context: Context) {
             val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA) // Usamos 'data' en lugar de 'path'
             val displayNameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
             val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID) // Columna del álbum
+            val albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
 
             val artworkUriBase = Uri.parse("content://media/external/audio/albumart")
 
@@ -55,6 +59,8 @@ class AudioRepository(private val context: Context) {
                 val dataPath = cursor.getString(dataColumn)
                 val fileName = cursor.getString(displayNameColumn) ?: ""
                 val albumId = cursor.getLong(albumIdColumn)
+                val album = cursor.getString(albumColumn) ?: ""
+                val dateAdded = cursor.getLong(dateAddedColumn)
 
                 val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
                 val artworkUri = ContentUris.withAppendedId(artworkUriBase, albumId) // Creamos la Uri del artwork
@@ -70,7 +76,9 @@ class AudioRepository(private val context: Context) {
                         data = dataPath,
                         uri = uri,
                         albumId = albumId,
-                        artworkUri = artworkUri
+                        artworkUri = artworkUri,
+                        album = album,
+                        dateAdded = dateAdded
                     )
                 )
             }

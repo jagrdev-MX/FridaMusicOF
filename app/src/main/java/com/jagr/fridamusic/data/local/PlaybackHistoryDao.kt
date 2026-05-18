@@ -14,6 +14,19 @@ interface PlaybackHistoryDao {
     @Query("DELETE FROM playback_history WHERE songId = :songId")
     suspend fun deleteBySongId(songId: String)
 
+    @Query(
+        """
+        DELETE FROM playback_history
+        WHERE songId = :songId
+           OR (
+                title = :title
+            AND artist = :artist
+            AND songId LIKE 'http%'
+           )
+        """
+    )
+    suspend fun deleteDuplicateEntries(songId: String, title: String, artist: String)
+
     @Query("""
         SELECT * FROM playback_history
         ORDER BY playedAt DESC

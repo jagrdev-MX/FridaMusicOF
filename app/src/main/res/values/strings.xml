@@ -65,19 +65,48 @@
 
     <!-- Library Screen -->
     <string name="library">Library</string>
+    <string name="all_tab">All</string>
     <string name="songs_tab">Songs</string>
+    <string name="history_tab">History</string>
     <string name="playlists_tab">Playlists</string>
     <string name="albums_tab">Albums</string>
     <string name="artists_tab">Artists</string>
     <string name="recent_songs">Recent Songs</string>
+    <string name="local_songs">Local Songs</string>
     <string name="new_playlist_format">New Playlist %1$d</string>
     <string name="coming_soon">Coming Soon</string>
     <string name="your_library">Your Library</string>
+    <string name="create_playlist_title">Create Playlist</string>
     <string name="create_new_playlist">Create new playlist</string>
     <string name="playlist_name">Playlist Name</string>
     <string name="playlist_description">Description (optional)</string>
     <string name="create">Create</string>
     <string name="songs_count">%1$d songs</string>
+    <string name="playlists_count">%1$d playlists</string>
+    <string name="artists_count">%1$d artists</string>
+    <string name="search">Search</string>
+    <string name="sort_and_filter">Sort and Filter</string>
+    <string name="reversed">Reversed</string>
+    <string name="sort">Sort</string>
+    <string name="date">Date</string>
+    <string name="save">Save</string>
+    <string name="apply">Apply</string>
+    <string name="reset">Reset</string>
+    <string name="delete">Delete</string>
+    <string name="delete_playlist">Delete playlist</string>
+    <string name="delete_playlist_title">Delete playlist?</string>
+    <string name="delete_playlist_message">Are you sure you want to delete \"%1$s\"? This action cannot be undone.</string>
+    <string name="no_local_songs">No local songs found</string>
+    <string name="no_history">No playback history yet</string>
+    <string name="no_playlists">No playlists yet</string>
+    <string name="no_albums">No albums found</string>
+    <string name="no_artists">No artists found</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="last_week">Last week</string>
+    <string name="older">Older</string>
+    <string name="unknown_album">Unknown album</string>
+    <string name="album_subtitle_format">%1$s • %2$d songs</string>
     <!-- Now Playing Screen -->
     <string name="minimize">Minimize</string>
     <string name="from_youtube_music">from YouTube Music</string>
@@ -123,4 +152,11 @@
     <!-- Playlist Management -->
     <string name="favorites_playlist_name">Favorites</string>
     <string name="favorites_playlist_description">Your favorite songs</string>
+    <string name="open">Open</string>
+    <string name="track">Track</string>
+    <string name="play_next">Play next</string>
+    <string name="add_to_queue">Add to queue</string>
+    <string name="save_to_playlist">Save to playlist</string>
+    <string name="unlike">Unlike</string>
+    <string name="share">Share</string>
 </resources>

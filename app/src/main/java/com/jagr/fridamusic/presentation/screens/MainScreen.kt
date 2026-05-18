@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +62,7 @@ fun MainScreen() {
     val errorMessage by libraryViewModel.errorMessage.collectAsState()
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
+    var libraryReselectSignal by remember { mutableIntStateOf(0) }
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -69,7 +71,6 @@ fun MainScreen() {
 
     val homeListState = rememberLazyListState()
     val searchListState = rememberLazyListState()
-    val libraryListState = rememberLazyListState()
     val settingsListState = rememberLazyListState()
     val hazeState = remember { HazeState() }
 
@@ -132,10 +133,14 @@ fun MainScreen() {
                         onNext = { libraryViewModel.skipToNext() },
                         onPrevious = { libraryViewModel.skipToPrevious() },
                         onNavigate = { route ->
-                            navController.navigate(route) {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+                            if (route == selectedTopLevelRoute && route == "library") {
+                                libraryReselectSignal++
+                            } else {
+                                navController.navigate(route) {
+                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
                         },
                         onExpandPlayer = { isPlayerExpanded = true }
@@ -208,7 +213,7 @@ fun MainScreen() {
                 composable("library") {
                     LibraryScreen(
                         paddingValues = paddingValues,
-                        listState = libraryListState,
+                        reselectSignal = libraryReselectSignal,
                         viewModel = libraryViewModel
                     )
                 }
