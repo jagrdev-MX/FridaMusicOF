@@ -96,6 +96,14 @@
     <string name="delete_playlist">Delete playlist</string>
     <string name="delete_playlist_title">Delete playlist?</string>
     <string name="delete_playlist_message">Are you sure you want to delete \"%1$s\"? This action cannot be undone.</string>
+    <string name="edit_playlist">Edit playlist</string>
+    <string name="save_changes">Save changes</string>
+    <string name="remove_from_playlist">Remove from playlist</string>
+    <string name="move_up">Move up</string>
+    <string name="move_down">Move down</string>
+    <string name="playlist_song_order">Song order</string>
+    <string name="default_order">Default</string>
+    <string name="custom_order">Custom</string>
     <string name="no_local_songs">No local songs found</string>
     <string name="no_history">No playback history yet</string>
     <string name="no_playlists">No playlists yet</string>

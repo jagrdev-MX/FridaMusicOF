@@ -383,8 +383,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun playPlaylist(playlist: Playlist, shuffle: Boolean = false) {
-        val localSongs = _songs.value.filter { it.id in playlist.songIds }
-        playSongs(localSongs, shuffle)
+        playSongs(songsForPlaylist(playlist), shuffle)
     }
 
     fun playSongs(collection: List<Song>, shuffle: Boolean = false) {
@@ -394,9 +393,25 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         if (nextSong != null) {
             setShuffleMode(shuffle)
             _manualQueue.value = playableSongs.drop(1)
-            playSong(nextSong)
+            playSongFromLibrary(nextSong)
         } else {
             _errorMessage.value = "No hay canciones disponibles para reproducir"
+        }
+    }
+
+    fun playSongFromLibrary(song: Song) {
+        if (song.requiresRemoteExtraction()) {
+            playYouTubeSong(
+                YouTubeResult(
+                    videoId = song.data,
+                    title = song.title,
+                    artist = song.artist,
+                    thumbnailUrl = song.artworkUri.toString(),
+                    type = ResultType.SONG
+                )
+            )
+        } else {
+            playSong(song)
         }
     }
 
@@ -409,7 +424,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun addPlaylistToQueue(playlist: Playlist) {
-        val queuedSongs = _songs.value.filter { it.id in playlist.songIds }
+        val queuedSongs = songsForPlaylist(playlist)
         _manualQueue.value = _manualQueue.value + queuedSongs
     }
 
@@ -469,6 +484,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         uri = Uri.parse(cachedUrl),
                         artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
                     )
+                    rememberPlaylistSong(virtualSong)
 
                     withContext(Dispatchers.Main) {
                         _currentAlbumArt.value = result.thumbnailUrl
@@ -507,6 +523,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         uri = Uri.parse(audioStream.url ?: ""),
                         artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
                     )
+                    rememberPlaylistSong(virtualSong)
 
                     withContext(Dispatchers.Main) {
                         _currentAlbumArt.value = result.thumbnailUrl
@@ -547,7 +564,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val queuedSong = _manualQueue.value.firstOrNull()
         if (queuedSong != null) {
             _manualQueue.value = _manualQueue.value.drop(1)
-            playSong(queuedSong)
+            playSongFromLibrary(queuedSong)
             return
         }
 
@@ -650,17 +667,58 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun updatePlaylistDetails(playlist: Playlist, name: String, description: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playlistDao.updatePlaylist(
+                playlist.toEntity(
+                    name = name.trim(),
+                    description = description?.trim().orEmpty()
+                )
+            )
+        }
+    }
+
+    fun addSongToPlaylist(playlist: Playlist, song: Song) {
+        rememberPlaylistSong(song)
+        addSongToPlaylist(playlist, song.id)
+    }
+
     fun addSongToPlaylist(playlist: Playlist, songId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val newIds = (playlist.songIds + songId).distinct().joinToString(",")
-            playlistDao.updatePlaylist(PlaylistEntity(id = playlist.id, name = playlist.name, description = playlist.description ?: "", songIds = newIds, createdAt = playlist.createdAt))
+            playlistDao.updatePlaylist(playlist.toEntity(songIds = newIds))
         }
     }
 
     fun removeSongFromPlaylist(playlist: Playlist, songId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val newIds = playlist.songIds.filter { it != songId }.joinToString(",")
-            playlistDao.updatePlaylist(PlaylistEntity(id = playlist.id, name = playlist.name, description = playlist.description ?: "", songIds = newIds, createdAt = playlist.createdAt))
+            playlistDao.updatePlaylist(playlist.toEntity(songIds = newIds))
+        }
+    }
+
+    fun moveSongInPlaylist(playlist: Playlist, songId: Long, direction: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ids = playlist.songIds.toMutableList()
+            val fromIndex = ids.indexOf(songId)
+            if (fromIndex == -1) return@launch
+
+            val toIndex = (fromIndex + direction).coerceIn(0, ids.lastIndex)
+            if (fromIndex == toIndex) return@launch
+
+            val movedId = ids.removeAt(fromIndex)
+            ids.add(toIndex, movedId)
+            playlistDao.updatePlaylist(playlist.toEntity(songIds = ids.joinToString(",")))
+        }
+    }
+
+    fun updatePlaylistSongOrder(playlist: Playlist, orderedSongIds: List<Long>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val knownIds = playlist.songIds.toSet()
+            val requestedIds = orderedSongIds.filter { it in knownIds }.distinct()
+            val remainingIds = playlist.songIds.filterNot { it in requestedIds }
+            val newIds = (requestedIds + remainingIds).joinToString(",")
+            playlistDao.updatePlaylist(playlist.toEntity(songIds = newIds))
         }
     }
 
@@ -677,6 +735,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             playlistDao.deletePlaylist(entityToDelete)
             settingsManager.setPlaylistCoverUri(playlist.id, null)
             refreshPlaylistCoverUris()
+        }
+    }
+
+    fun songsForPlaylist(playlist: Playlist): List<Song> {
+        val localSongsById = _songs.value.associateBy { it.id }
+        return playlist.songIds.mapNotNull { songId ->
+            localSongsById[songId] ?: restorePlaylistSong(songId)
         }
     }
 
@@ -711,7 +776,64 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
     }
 
+    private fun Playlist.toEntity(
+        name: String = this.name,
+        description: String = this.description.orEmpty(),
+        songIds: String = this.songIds.joinToString(",")
+    ): PlaylistEntity {
+        return PlaylistEntity(
+            id = id,
+            name = name,
+            description = description,
+            songIds = songIds,
+            createdAt = createdAt
+        )
+    }
+
+    private fun rememberPlaylistSong(song: Song) {
+        if (!song.requiresRemoteExtraction()) return
+
+        val payload = JSONObject().apply {
+            put("title", song.title)
+            put("artist", song.artist)
+            put("data", song.data)
+            put("duration", song.duration)
+            put("uri", song.uri.toString())
+            put("artworkUri", song.artworkUri.toString())
+            put("album", song.album)
+            put("dateAdded", song.dateAdded)
+            put("isExplicit", song.isExplicit)
+        }.toString()
+
+        settingsManager.setPlaylistSongMetadata(song.id, payload)
+    }
+
+    private fun restorePlaylistSong(songId: Long): Song? {
+        val payload = settingsManager.playlistSongMetadata(songId) ?: return null
+        return runCatching {
+            val json = JSONObject(payload)
+            Song(
+                id = songId,
+                title = json.optString("title"),
+                artist = json.optString("artist"),
+                data = json.optString("data"),
+                duration = json.optLong("duration", 0L),
+                albumId = 0L,
+                uri = json.optString("uri").takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY,
+                artworkUri = json.optString("artworkUri").takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY,
+                album = json.optString("album"),
+                dateAdded = json.optLong("dateAdded", 0L),
+                isExplicit = json.optBoolean("isExplicit", false)
+            )
+        }.getOrNull()
+    }
+
+    private fun Song.requiresRemoteExtraction(): Boolean {
+        return uri.toString().startsWith("http", ignoreCase = true) && data.isNotBlank()
+    }
+
     fun toggleLike(song: Song) {
+        rememberPlaylistSong(song)
         viewModelScope.launch(Dispatchers.IO) {
             val allPlaylists = playlistDao.getAllPlaylistsOnce()
             var likePlaylistEntity = allPlaylists.find { it.name == "Me gusta" }
@@ -902,35 +1024,177 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     suspend fun getSongImageUrl(song: Song): String? = withContext(Dispatchers.IO) {
+        val preloadedArtwork = song.artworkUri.toString()
+            .takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+        if (preloadedArtwork != null) return@withContext preloadedArtwork
+
         val cacheKey = "song_${song.id}"
         if (imageUrlCache.containsKey(cacheKey)) return@withContext imageUrlCache[cacheKey]
-        val url = fetchAlbumArt(song.title, song.artist)
+
+        val url = fetchAlbumArt(song.title, song.artist, requireTrackMatch = true)
         if (url != null) imageUrlCache[cacheKey] = url
         return@withContext url
+    }
+
+    suspend fun getDistinctSongImageUrls(
+        songs: List<Song>,
+        maxImages: Int = 4,
+        scanLimit: Int = 40
+    ): List<String> = withContext(Dispatchers.IO) {
+        val urls = mutableListOf<String>()
+        val seenArtwork = mutableSetOf<String>()
+        val seenMetadata = mutableSetOf<String>()
+
+        for (song in songs.distinctBy { it.id }.take(scanLimit)) {
+            val metadataKey = songArtworkMetadataKey(song)
+            if (!seenMetadata.add(metadataKey)) continue
+
+            val url = getSongImageUrl(song)?.takeIf { it.isNotBlank() } ?: continue
+            val artworkKey = artworkIdentityKey(url)
+            if (seenArtwork.add(artworkKey)) {
+                urls.add(url)
+            }
+
+            if (urls.size >= maxImages) break
+        }
+
+        urls
     }
 
     suspend fun getArtistImageUrl(artistName: String): String? = withContext(Dispatchers.IO) {
         val cacheKey = "artist_$artistName"
         if (imageUrlCache.containsKey(cacheKey)) return@withContext imageUrlCache[cacheKey]
-        val url = fetchAlbumArt(artistName, "")
+        val url = fetchAlbumArt(artistName, "", requireTrackMatch = false)
         if (url != null) imageUrlCache[cacheKey] = url
         return@withContext url
     }
 
-    private fun fetchAlbumArt(title: String, artist: String?): String? {
+    private fun fetchAlbumArt(
+        title: String,
+        artist: String?,
+        requireTrackMatch: Boolean
+    ): String? {
         return try {
-            val cleanQuery = title.lowercase().replace(".mp3", "").replace(".m4a", "").replace(".wav", "").replace("_", " ").replace("-", " ").replace(Regex("\\(.*?\\)"), "").replace(Regex("\\[.*?]"), "").replace("official", "", ignoreCase = true).replace("video", "", ignoreCase = true).replace("audio", "", ignoreCase = true).replace("lyrics", "", ignoreCase = true).trim()
-            val cleanArtist = if (artist.isNullOrBlank() || artist.contains("unknown", ignoreCase = true)) "" else artist
+            val cleanQuery = normalizeArtworkText(title)
+            val cleanArtist = if (artist.isNullOrBlank() || artist.contains("unknown", ignoreCase = true)) "" else artist.trim()
             val finalQueryText = "$cleanQuery $cleanArtist".trim().replace(Regex("\\s+"), " ")
+            if (finalQueryText.isBlank()) return null
+
             val encodedQuery = URLEncoder.encode(finalQueryText, "UTF-8")
-            val url = "https://itunes.apple.com/search?term=$encodedQuery&media=music&entity=song&limit=1"
+            val url = "https://itunes.apple.com/search?term=$encodedQuery&media=music&entity=song&limit=10"
 
             val response = URL(url).readText()
             val json = JSONObject(response)
             val results = json.getJSONArray("results")
 
-            if (results.length() > 0) results.getJSONObject(0).getString("artworkUrl100").replace("100x100bb.jpg", "600x600bb.jpg") else null
+            var bestUrl: String? = null
+            var bestScore = 0
+
+            for (index in 0 until results.length()) {
+                val result = results.optJSONObject(index) ?: continue
+                val artworkUrl = result.optString("artworkUrl100").takeIf { it.isNotBlank() } ?: continue
+                val normalizedArtworkUrl = normalizeAppleArtworkUrl(artworkUrl)
+
+                if (!requireTrackMatch) return normalizedArtworkUrl
+
+                val score = artworkMetadataScore(
+                    expectedTitle = title,
+                    expectedArtist = cleanArtist,
+                    resultTitle = result.optString("trackName"),
+                    resultArtist = result.optString("artistName")
+                )
+
+                if (score > bestScore) {
+                    bestScore = score
+                    bestUrl = normalizedArtworkUrl
+                }
+            }
+
+            bestUrl
         } catch (e: Exception) { null }
+    }
+
+    private fun artworkMetadataScore(
+        expectedTitle: String,
+        expectedArtist: String,
+        resultTitle: String,
+        resultArtist: String
+    ): Int {
+        val titleScore = textMatchScore(
+            expected = normalizeArtworkText(expectedTitle),
+            actual = normalizeArtworkText(resultTitle)
+        )
+        if (titleScore < 2) return 0
+
+        val artistScore = if (expectedArtist.isBlank()) {
+            1
+        } else {
+            textMatchScore(
+                expected = normalizeArtworkText(expectedArtist),
+                actual = normalizeArtworkText(resultArtist)
+            )
+        }
+        if (expectedArtist.isNotBlank() && artistScore == 0) return 0
+
+        return titleScore * 10 + artistScore
+    }
+
+    private fun textMatchScore(expected: String, actual: String): Int {
+        if (expected.isBlank() || actual.isBlank()) return 0
+        if (expected == actual) return 4
+        if ((expected.length >= 4 && actual.contains(expected)) ||
+            (actual.length >= 4 && expected.contains(actual))
+        ) {
+            return 3
+        }
+
+        val expectedTokens = expected.split(" ").filter { it.length > 1 }.toSet()
+        val actualTokens = actual.split(" ").filter { it.length > 1 }.toSet()
+        if (expectedTokens.isEmpty() || actualTokens.isEmpty()) return 0
+
+        val overlap = expectedTokens.count { it in actualTokens }
+        val expectedCoverage = overlap.toDouble() / expectedTokens.size.toDouble()
+        val actualCoverage = overlap.toDouble() / actualTokens.size.toDouble()
+
+        return when {
+            expectedCoverage >= 0.80 && actualCoverage >= 0.50 -> 2
+            expectedCoverage >= 0.60 && actualCoverage >= 0.60 -> 1
+            else -> 0
+        }
+    }
+
+    private fun songArtworkMetadataKey(song: Song): String {
+        return listOf(
+            normalizeArtworkText(song.title),
+            normalizeArtworkText(song.artist),
+            normalizeArtworkText(song.album)
+        ).joinToString("|")
+    }
+
+    private fun artworkIdentityKey(url: String): String {
+        return url
+            .substringBefore("?")
+            .replace(Regex("/\\d+x\\d+bb\\.(jpg|jpeg|png|webp)$", RegexOption.IGNORE_CASE), "/artwork")
+    }
+
+    private fun normalizeAppleArtworkUrl(url: String): String {
+        return url
+            .replace("100x100bb.jpg", "600x600bb.jpg")
+            .replace("100x100bb.png", "600x600bb.png")
+    }
+
+    private fun normalizeArtworkText(value: String?): String {
+        return value.orEmpty()
+            .lowercase()
+            .replace(Regex("(?i)\\.(mp3|m4a|wav|flac|ogg)$"), " ")
+            .replace("_", " ")
+            .replace("-", " ")
+            .replace(Regex("\\(.*?\\)|\\[.*?]"), " ")
+            .replace(Regex("(?i)\\b(feat|ft|featuring)\\b\\.?"), " ")
+            .replace(Regex("(?i)\\b(official|video|audio|lyrics|lyric|visualizer|remaster|remastered|explicit|clean|edit)\\b"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     private suspend fun fetchLyrics(artist: String, title: String): String? = withContext(Dispatchers.IO) {

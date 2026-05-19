@@ -83,6 +83,19 @@ class SettingsManager(context: Context) {
         editor.apply()
     }
 
+    fun playlistSongMetadata(songId: Long): String? =
+        prefs.getString("playlist_song_$songId", null)
+
+    fun setPlaylistSongMetadata(songId: Long, metadata: String?) {
+        val editor = prefs.edit()
+        if (metadata.isNullOrBlank()) {
+            editor.remove("playlist_song_$songId")
+        } else {
+            editor.putString("playlist_song_$songId", metadata)
+        }
+        editor.apply()
+    }
+
     var followedArtists: Set<String>
         get() = prefs.getStringSet("followed_artists", emptySet())?.toSet().orEmpty()
         set(value) = prefs.edit().putStringSet("followed_artists", value).apply()

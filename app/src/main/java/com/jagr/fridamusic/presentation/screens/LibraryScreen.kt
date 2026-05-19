@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -52,6 +53,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
@@ -136,6 +139,14 @@ private enum class LibrarySortOption {
     TITLE,
     DATE,
     ARTIST
+}
+
+private enum class PlaylistSongSortOption {
+    DEFAULT,
+    DATE,
+    ARTIST,
+    TITLE,
+    CUSTOM
 }
 
 private data class LibraryAlbum(
@@ -450,15 +461,19 @@ fun LibraryScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         if (detail != null) {
             when (val currentDetail = detail) {
-                is LibraryDetail.PlaylistDetail -> PlaylistDetailPage(
-                    playlist = currentDetail.playlist,
-                    songs = songs.filter { it.id in currentDetail.playlist.songIds },
-                    playlists = playlists,
-                    customCoverUri = playlistCoverUris[currentDetail.playlist.id],
-                    paddingValues = paddingValues,
-                    viewModel = viewModel,
-                    onBack = { detail = null }
-                )
+                is LibraryDetail.PlaylistDetail -> {
+                    val currentPlaylist = playlists.firstOrNull { it.id == currentDetail.playlist.id }
+                        ?: currentDetail.playlist
+                    PlaylistDetailPage(
+                        playlist = currentPlaylist,
+                        songs = viewModel.songsForPlaylist(currentPlaylist),
+                        playlists = playlists,
+                        customCoverUri = playlistCoverUris[currentPlaylist.id],
+                        paddingValues = paddingValues,
+                        viewModel = viewModel,
+                        onBack = { detail = null }
+                    )
+                }
 
                 is LibraryDetail.AlbumDetail -> AlbumDetailPage(
                     album = currentDetail.album,
@@ -796,8 +811,8 @@ private fun AllPage(
                         icon = Icons.AutoMirrored.Filled.QueueMusic,
                         viewModel = viewModel,
                         coverSongs = playlists.flatMap { playlist ->
-                            songs.filter { song -> song.id in playlist.songIds }
-                        }.distinctBy { it.id }.take(4),
+                            viewModel.songsForPlaylist(playlist)
+                        }.distinctBy { it.id },
                         customCoverUri = playlists.firstNotNullOfOrNull { playlistCoverUris[it.id] },
                         onOpen = { onOpenTab(LibraryTab.PLAYLISTS.ordinal) },
                         onPlay = { playlists.firstOrNull()?.let(viewModel::playPlaylist) },
@@ -817,7 +832,7 @@ private fun AllPage(
                         subtitle = stringResource(R.string.songs_count, songs.size),
                         icon = Icons.Default.MusicNote,
                         viewModel = viewModel,
-                        coverSongs = songs.take(4),
+                        coverSongs = songs,
                         onOpen = { onOpenTab(LibraryTab.SONGS.ordinal) },
                         onPlay = { viewModel.playSongs(songs) },
                         onShuffle = { viewModel.playSongs(songs, shuffle = true) }
@@ -832,7 +847,7 @@ private fun AllPage(
                         subtitle = stringResource(R.string.artists_count, artists.size),
                         icon = Icons.Default.Person,
                         viewModel = viewModel,
-                        coverSongs = artists.mapNotNull { it.songs.firstOrNull() }.take(4),
+                        coverSongs = artists.mapNotNull { it.songs.firstOrNull() },
                         onOpen = { onOpenTab(LibraryTab.ARTISTS.ordinal) },
                         onPlay = { viewModel.playSongs(artists.flatMap { it.songs }) },
                         onShuffle = { viewModel.playSongs(artists.flatMap { it.songs }, shuffle = true) }
@@ -874,9 +889,12 @@ private fun SongsPage(
             }
         } else {
             items(songs, key = { "local_${it.id}" }) { song ->
-                LibrarySongItem(song = song, viewModel = viewModel, playlists = playlists) {
-                    viewModel.playSong(song)
-                }
+                LibrarySongItem(
+                    song = song,
+                    viewModel = viewModel,
+                    playlists = playlists,
+                    onClick = { viewModel.playSong(song) }
+                )
             }
         }
     }
@@ -966,7 +984,7 @@ private fun PlaylistsPage(
                 items(playlists, key = { "playlist_${it.id}" }) { playlist ->
                     PlaylistListItem(
                         playlist = playlist,
-                        songs = songs.filter { song -> song.id in playlist.songIds },
+                        songs = viewModel.songsForPlaylist(playlist),
                         customCoverUri = playlistCoverUris[playlist.id],
                         viewModel = viewModel,
                         onOpen = { onOpenPlaylist(playlist) },
@@ -1121,8 +1139,19 @@ private fun PlaylistDetailPage(
 ) {
     val context = LocalContext.current
     var showActions by rememberSaveable { mutableStateOf(false) }
+    var showEditSheet by rememberSaveable { mutableStateOf(false) }
+    var songSortName by rememberSaveable(playlist.id) {
+        mutableStateOf(PlaylistSongSortOption.DEFAULT.name)
+    }
+    val songSortOption = remember(songSortName) {
+        runCatching { PlaylistSongSortOption.valueOf(songSortName) }
+            .getOrDefault(PlaylistSongSortOption.DEFAULT)
+    }
+    val displayedSongs = remember(songs, songSortOption) {
+        songs.sortedPlaylistSongs(songSortOption)
+    }
     val leadArtworkUrl by rememberLeadArtworkUrl(
-        songs = songs,
+        songs = displayedSongs,
         customCoverUri = customCoverUri,
         viewModel = viewModel
     )
@@ -1146,34 +1175,34 @@ private fun PlaylistDetailPage(
         description = playlist.description.orEmpty(),
         cover = {
             SmartCollectionCover(
-                songs = songs,
+                songs = displayedSongs,
                 customCoverUri = customCoverUri,
                 viewModel = viewModel,
                 shape = RoundedCornerShape(24.dp),
                 fallbackIcon = Icons.AutoMirrored.Filled.QueueMusic
             )
         },
-        countLabel = stringResource(R.string.songs_count, songs.size),
+        countLabel = stringResource(R.string.songs_count, displayedSongs.size),
         backgroundArtUrl = leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
-        onPlay = { viewModel.playPlaylist(playlist) },
-        onShuffle = { viewModel.playPlaylist(playlist, shuffle = true) },
+        onPlay = { viewModel.playSongs(displayedSongs) },
+        onShuffle = { viewModel.playSongs(displayedSongs, shuffle = true) },
         secondaryActions = {
             DetailChipButton(
                 icon = Icons.Default.Radio,
                 label = stringResource(R.string.radio),
-                onClick = { viewModel.playSongs(songs, shuffle = true) }
+                onClick = { viewModel.playSongs(displayedSongs, shuffle = true) }
             )
             DetailIconButton(
                 icon = Icons.Default.Share,
                 contentDescription = stringResource(R.string.share),
-                onClick = { sharePlaylist(context, playlist, songs) }
+                onClick = { sharePlaylist(context, playlist, displayedSongs) }
             )
         },
         paddingValues = paddingValues
     ) {
-        if (songs.isEmpty()) {
+        if (displayedSongs.isEmpty()) {
             item {
                 EmptyLibraryState(
                     icon = Icons.AutoMirrored.Filled.QueueMusic,
@@ -1181,12 +1210,30 @@ private fun PlaylistDetailPage(
                 )
             }
         } else {
-            items(songs, key = { "playlist_detail_${it.id}" }) { song ->
+            item {
+                PlaylistSongSortSelector(
+                    selected = songSortOption,
+                    onSelected = { option -> songSortName = option.name }
+                )
+            }
+            itemsIndexed(displayedSongs, key = { _, song -> "playlist_detail_${playlist.id}_${song.id}" }) { index, song ->
                 LibrarySongItem(
                     song = song,
                     viewModel = viewModel,
                     playlists = playlists,
-                    onClick = { viewModel.playSong(song) }
+                    onClick = { viewModel.playSongFromLibrary(song) },
+                    playlist = playlist,
+                    canMoveUp = songSortOption == PlaylistSongSortOption.CUSTOM && index > 0,
+                    canMoveDown = songSortOption == PlaylistSongSortOption.CUSTOM && index < displayedSongs.lastIndex,
+                    onRemoveFromPlaylist = {
+                        viewModel.removeSongFromPlaylist(playlist, song.id)
+                    },
+                    onMoveUp = {
+                        viewModel.moveSongInPlaylist(playlist, song.id, -1)
+                    },
+                    onMoveDown = {
+                        viewModel.moveSongInPlaylist(playlist, song.id, 1)
+                    }
                 )
             }
         }
@@ -1200,21 +1247,25 @@ private fun PlaylistDetailPage(
             PlaylistActionsSheet(
                 playlist = playlist,
                 onDismiss = { showActions = false },
+                onEdit = {
+                    showActions = false
+                    showEditSheet = true
+                },
                 onPlay = {
                     showActions = false
-                    viewModel.playPlaylist(playlist)
+                    viewModel.playSongs(displayedSongs)
                 },
                 onShuffle = {
                     showActions = false
-                    viewModel.playPlaylist(playlist, shuffle = true)
+                    viewModel.playSongs(displayedSongs, shuffle = true)
                 },
                 onAddToQueue = {
                     showActions = false
-                    viewModel.addPlaylistToQueue(playlist)
+                    viewModel.addSongsToQueue(displayedSongs)
                 },
                 onShare = {
                     showActions = false
-                    sharePlaylist(context, playlist, songs)
+                    sharePlaylist(context, playlist, displayedSongs)
                 },
                 onChangeCover = {
                     showActions = false
@@ -1232,6 +1283,22 @@ private fun PlaylistDetailPage(
                     showActions = false
                     viewModel.deletePlaylist(playlist)
                     onBack()
+                }
+            )
+        }
+    }
+
+    if (showEditSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showEditSheet = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            EditPlaylistSheet(
+                playlist = playlist,
+                onDismiss = { showEditSheet = false },
+                onSave = { name, description ->
+                    viewModel.updatePlaylistDetails(playlist, name, description)
+                    showEditSheet = false
                 }
             )
         }
@@ -1683,7 +1750,7 @@ private fun SmartCollectionCover(
         value = if (!customCoverUri.isNullOrBlank()) {
             listOf(customCoverUri)
         } else {
-            songs.take(4).mapNotNull { song -> viewModel.getSongImageUrl(song) }
+            viewModel.getDistinctSongImageUrls(songs)
         }
     }
 
@@ -1784,7 +1851,7 @@ private fun SmartCollectionThumbnail(
         value = if (!customCoverUri.isNullOrBlank()) {
             listOf(customCoverUri)
         } else {
-            songs.take(4).mapNotNull { song -> viewModel.getSongImageUrl(song) }
+            viewModel.getDistinctSongImageUrls(songs)
         }
     }
 
@@ -1922,6 +1989,52 @@ private fun DetailIconButton(
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = contentDescription)
+    }
+}
+
+@Composable
+private fun PlaylistSongSortSelector(
+    selected: PlaylistSongSortOption,
+    onSelected: (PlaylistSongSortOption) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = stringResource(R.string.playlist_song_order),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(PlaylistSongSortOption.entries, key = { it.name }) { option ->
+                FilterChip(
+                    selected = selected == option,
+                    onClick = { onSelected(option) },
+                    label = {
+                        Text(
+                            when (option) {
+                                PlaylistSongSortOption.DEFAULT -> stringResource(R.string.default_order)
+                                PlaylistSongSortOption.DATE -> stringResource(R.string.date)
+                                PlaylistSongSortOption.ARTIST -> stringResource(R.string.artists_tab)
+                                PlaylistSongSortOption.TITLE -> stringResource(R.string.title_label)
+                                PlaylistSongSortOption.CUSTOM -> stringResource(R.string.custom_order)
+                            }
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = when (option) {
+                                PlaylistSongSortOption.DEFAULT -> Icons.Default.Refresh
+                                PlaylistSongSortOption.DATE -> Icons.Default.History
+                                PlaylistSongSortOption.ARTIST -> Icons.Default.Person
+                                PlaylistSongSortOption.TITLE -> Icons.Default.SortByAlpha
+                                PlaylistSongSortOption.CUSTOM -> Icons.Default.Edit
+                            },
+                            contentDescription = null
+                        )
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -2212,12 +2325,20 @@ private fun LibraryCollectionCard(
         }
 
         IconButton(onClick = onPlay) {
-            Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.play))
+            Icon(
+                Icons.Default.PlayArrow,
+                contentDescription = stringResource(R.string.play),
+                tint = MaterialTheme.colorScheme.onSurface
+            )
         }
 
         Box {
             IconButton(onClick = { showMenu = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.more_options),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
             }
             DropdownMenu(
                 expanded = showMenu,
@@ -2259,6 +2380,7 @@ private fun PlaylistListItem(
     onDelete: () -> Unit
 ) {
     var showActions by rememberSaveable { mutableStateOf(false) }
+    var showEditSheet by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val coverPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -2316,6 +2438,10 @@ private fun PlaylistListItem(
             PlaylistActionsSheet(
                 playlist = playlist,
                 onDismiss = { showActions = false },
+                onEdit = {
+                    showActions = false
+                    showEditSheet = true
+                },
                 onPlay = {
                     showActions = false
                     onPlay()
@@ -2351,12 +2477,29 @@ private fun PlaylistListItem(
             )
         }
     }
+
+    if (showEditSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showEditSheet = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            EditPlaylistSheet(
+                playlist = playlist,
+                onDismiss = { showEditSheet = false },
+                onSave = { name, description ->
+                    viewModel.updatePlaylistDetails(playlist, name, description)
+                    showEditSheet = false
+                }
+            )
+        }
+    }
 }
 
 @Composable
 private fun PlaylistActionsSheet(
     playlist: Playlist,
     onDismiss: () -> Unit,
+    onEdit: (() -> Unit)? = null,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onAddToQueue: () -> Unit,
@@ -2370,6 +2513,9 @@ private fun PlaylistActionsSheet(
         subtitle = stringResource(R.string.playlist_label),
         onDismiss = onDismiss,
         actions = buildList {
+            if (onEdit != null) {
+                add(ActionSpec(Icons.Default.Edit, stringResource(R.string.edit_playlist), onClick = onEdit))
+            }
             add(ActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play), onClick = onPlay))
             add(ActionSpec(Icons.Default.Shuffle, stringResource(R.string.shuffle), onClick = onShuffle))
             add(ActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue), onClick = onAddToQueue))
@@ -2443,24 +2589,38 @@ private fun SongActionsSheet(
     onAddToQueue: () -> Unit,
     onSaveToPlaylist: () -> Unit,
     onToggleLike: () -> Unit,
+    onRemoveFromPlaylist: (() -> Unit)? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
     onShare: () -> Unit
 ) {
     ActionSheetFrame(
         title = song.title,
         subtitle = stringResource(R.string.track),
         onDismiss = onDismiss,
-        actions = listOf(
-            ActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play), onClick = onPlay),
-            ActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next), onClick = onPlayNext),
-            ActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue), onClick = onAddToQueue),
-            ActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist), onClick = onSaveToPlaylist),
-            ActionSpec(
-                if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like),
-                onClick = onToggleLike
-            ),
-            ActionSpec(Icons.Default.Share, stringResource(R.string.share), onClick = onShare)
-        )
+        actions = buildList {
+            add(ActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play), onClick = onPlay))
+            add(ActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next), onClick = onPlayNext))
+            add(ActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue), onClick = onAddToQueue))
+            add(ActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist), onClick = onSaveToPlaylist))
+            if (onMoveUp != null) {
+                add(ActionSpec(Icons.Default.KeyboardArrowUp, stringResource(R.string.move_up), onClick = onMoveUp))
+            }
+            if (onMoveDown != null) {
+                add(ActionSpec(Icons.Default.KeyboardArrowDown, stringResource(R.string.move_down), onClick = onMoveDown))
+            }
+            if (onRemoveFromPlaylist != null) {
+                add(ActionSpec(Icons.Default.Delete, stringResource(R.string.remove_from_playlist), destructive = true, onClick = onRemoveFromPlaylist))
+            }
+            add(
+                ActionSpec(
+                    if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like),
+                    onClick = onToggleLike
+                )
+            )
+            add(ActionSpec(Icons.Default.Share, stringResource(R.string.share), onClick = onShare))
+        }
     )
 }
 
@@ -2712,7 +2872,13 @@ private fun LibrarySongItem(
     song: Song,
     viewModel: LibraryViewModels,
     playlists: List<Playlist>,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    playlist: Playlist? = null,
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
+    onRemoveFromPlaylist: (() -> Unit)? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null
 ) {
     val imageUrl by produceState<String?>(initialValue = null, key1 = song) {
         value = viewModel.getSongImageUrl(song)
@@ -2799,7 +2965,7 @@ private fun LibrarySongItem(
                 onDismiss = { showActions = false },
                 onPlay = {
                     showActions = false
-                    viewModel.playSong(song)
+                    viewModel.playSongFromLibrary(song)
                 },
                 onPlayNext = {
                     showActions = false
@@ -2816,6 +2982,28 @@ private fun LibrarySongItem(
                 onToggleLike = {
                     showActions = false
                     viewModel.toggleLike(song)
+                },
+                onRemoveFromPlaylist = onRemoveFromPlaylist?.let {
+                    {
+                        showActions = false
+                        it()
+                    }
+                },
+                onMoveUp = if (playlist != null && canMoveUp && onMoveUp != null) {
+                    {
+                        showActions = false
+                        onMoveUp()
+                    }
+                } else {
+                    null
+                },
+                onMoveDown = if (playlist != null && canMoveDown && onMoveDown != null) {
+                    {
+                        showActions = false
+                        onMoveDown()
+                    }
+                } else {
+                    null
                 },
                 onShare = {
                     showActions = false
@@ -2840,7 +3028,7 @@ private fun LibrarySongItem(
                 playlists = playlists,
                 onDismiss = { showPlaylistPicker = false },
                 onSelect = { playlist ->
-                    viewModel.addSongToPlaylist(playlist, song.id)
+                    viewModel.addSongToPlaylist(playlist, song)
                     showPlaylistPicker = false
                 }
             )
@@ -3017,7 +3205,7 @@ private fun HistorySongItem(
                 playlists = playlists,
                 onDismiss = { showPlaylistPicker = false },
                 onSelect = { playlist ->
-                    viewModel.addSongToPlaylist(playlist, linkedSong.id)
+                    viewModel.addSongToPlaylist(playlist, linkedSong)
                     showPlaylistPicker = false
                 }
             )
@@ -3174,6 +3362,86 @@ private fun CreatePlaylistSheet(
             shape = RoundedCornerShape(28.dp)
         ) {
             Text(stringResource(R.string.create), fontSize = 18.sp)
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun EditPlaylistSheet(
+    playlist: Playlist,
+    onDismiss: () -> Unit,
+    onSave: (String, String?) -> Unit
+) {
+    var playlistName by rememberSaveable(playlist.id) { mutableStateOf(playlist.name) }
+    var playlistDescription by rememberSaveable(playlist.id) { mutableStateOf(playlist.description.orEmpty()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+            }
+            Text(
+                text = stringResource(R.string.edit_playlist),
+                fontSize = 24.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.width(48.dp))
+        }
+
+        Spacer(modifier = Modifier.height(22.dp))
+
+        OutlinedTextField(
+            value = playlistName,
+            onValueChange = { playlistName = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text(stringResource(R.string.playlist_name)) },
+            leadingIcon = {
+                Icon(Icons.Default.Edit, contentDescription = null)
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = playlistDescription,
+            onValueChange = { playlistDescription = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text(stringResource(R.string.playlist_description)) },
+            leadingIcon = {
+                Icon(Icons.Default.MusicNote, contentDescription = null)
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Button(
+            onClick = {
+                onSave(
+                    playlistName.trim(),
+                    playlistDescription.trim().takeIf { it.isNotBlank() }
+                )
+            },
+            enabled = playlistName.isNotBlank(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(28.dp)
+        ) {
+            Text(stringResource(R.string.save_changes), fontSize = 18.sp)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -3451,6 +3719,18 @@ private fun Int.nearestPageForTab(targetTab: Int, tabCount: Int): Int {
     val backward = forward - tabCount
     val delta = if (kotlin.math.abs(backward) < kotlin.math.abs(forward)) backward else forward
     return this + delta
+}
+
+private fun List<Song>.sortedPlaylistSongs(sortOption: PlaylistSongSortOption): List<Song> {
+    return when (sortOption) {
+        PlaylistSongSortOption.DEFAULT,
+        PlaylistSongSortOption.CUSTOM -> this
+        PlaylistSongSortOption.DATE -> sortedByDescending { it.dateAdded }
+        PlaylistSongSortOption.ARTIST -> sortedWith(
+            compareBy<Song> { it.artist.lowercase() }.thenBy { it.title.lowercase() }
+        )
+        PlaylistSongSortOption.TITLE -> sortedBy { it.title.lowercase() }
+    }
 }
 
 private fun List<Song>.sortedSongs(
