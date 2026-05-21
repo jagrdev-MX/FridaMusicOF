@@ -30,11 +30,15 @@ import com.jagr.fridamusic.data.repository.AudioRepository
 import com.jagr.fridamusic.data.repository.SettingsManager
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
 import com.jagr.fridamusic.domain.lyrics.LyricsParser
+import com.jagr.fridamusic.domain.model.PlaybackQueueState
 import com.jagr.fridamusic.domain.model.Playlist
+import com.jagr.fridamusic.domain.model.QueueItem
+import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.service.MusicService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import org.json.JSONArray
 import org.json.JSONObject
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
@@ -68,21 +72,36 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
     private val _fullHistory =
         MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
-    private val _manualQueue = MutableStateFlow<List<Song>>(emptyList())
+    private val _queueState = MutableStateFlow(PlaybackQueueState())
     private val _playlistCoverUris = MutableStateFlow<Map<Long, String>>(emptyMap())
     private val _followedArtists = MutableStateFlow(settingsManager.followedArtists)
 
     val recentHistory = _recentHistory.asStateFlow()
     val fullHistory = _fullHistory.asStateFlow()
     val searchHistory = _searchHistory.asStateFlow()
-    val manualQueue = _manualQueue.asStateFlow()
+    val queueState = _queueState.asStateFlow()
+    val manualQueue = _queueState
+        .map { state -> state.upNext.map { it.song } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val playlistCoverUris = _playlistCoverUris.asStateFlow()
     val followedArtists = _followedArtists.asStateFlow()
 
-    val isAutoPlayEnabled = MutableStateFlow(false)
+    val isAutoPlayEnabled = MutableStateFlow(settingsManager.autoplayEnabled)
 
     fun toggleAutoplay(enabled: Boolean) {
         isAutoPlayEnabled.value = enabled
+        settingsManager.autoplayEnabled = enabled
+        if (enabled) {
+            refreshAutoplayRecommendations(force = true)
+        } else {
+            recommendationJob?.cancel()
+            _queueState.value = _queueState.value.copy(
+                autoplay = emptyList(),
+                isAutoplayLoading = false,
+                autoplayError = null
+            )
+        }
+        persistQueueState()
     }
 
     fun addToSearchHistory(query: String) {
@@ -142,9 +161,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _lyricsLines = MutableStateFlow<List<LyricsLine>>(emptyList())
     val lyricsLines = _lyricsLines.asStateFlow()
 
-    private val _repeatMode = MutableStateFlow<RepeatMode>(RepeatMode.OFF)
+    private val _repeatMode = MutableStateFlow(
+        runCatching { RepeatMode.valueOf(settingsManager.repeatModeName) }.getOrDefault(RepeatMode.OFF)
+    )
     val repeatMode = _repeatMode.asStateFlow()
-    val isShuffleMode = MutableStateFlow(false)
+    val isShuffleMode = MutableStateFlow(settingsManager.shuffleEnabled)
 
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
     val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
@@ -193,6 +214,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var progressJob: Job? = null
     private var extractionJob: Job? = null
     private var searchJob: Job? = null
+    private var recommendationJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
     private val audioStreamCache = ConcurrentHashMap<String, String>()
     private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
@@ -252,13 +274,22 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         if (state == Player.STATE_ENDED) {
                             _currentPosition.value = 0L
 
-                            if (isAutoPlayEnabled.value) {
-                                skipToNext()
-                            } else {
-                                _isPlaying.value = false
-                                exoPlayer?.seekTo(0)
-                                exoPlayer?.pause()
-                                _currentSong.value?.let { updateNotification(it, false) }
+                            when {
+                                _repeatMode.value == RepeatMode.ONE -> {
+                                    exoPlayer?.seekTo(0)
+                                    exoPlayer?.play()
+                                }
+                                _queueState.value.hasPlayableNext ||
+                                    isAutoPlayEnabled.value ||
+                                    _repeatMode.value == RepeatMode.ALL -> {
+                                    skipToNext()
+                                }
+                                else -> {
+                                    _isPlaying.value = false
+                                    exoPlayer?.seekTo(0)
+                                    exoPlayer?.pause()
+                                    _currentSong.value?.let { updateNotification(it, false) }
+                                }
                             }
                         }
                     }
@@ -289,6 +320,18 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 _currentPosition.value = lastPos
                 _duration.value = savedSong.duration
                 _currentAlbumArt.value = savedSong.artworkUri.toString()
+                _queueState.value = restoreQueueState(settingsManager.playbackQueueJson)
+                    ?.let { restored ->
+                        if (restored.current != null) {
+                            restored
+                        } else {
+                            restored.copy(current = QueueItem(savedSong, QueueSource.RESTORED))
+                        }
+                    }
+                    ?: PlaybackQueueState(
+                        current = QueueItem(savedSong, QueueSource.RESTORED),
+                        source = QueueSource.RESTORED
+                    )
 
                 exoPlayer?.apply {
                     val uriString = savedSong.uri.toString()
@@ -299,14 +342,35 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                             seekTo(lastPos)
                         } catch (e: Exception) {}
                     }
+                    applyPlayerRepeatMode()
                 }
             }
         }
     }
 
-    @OptIn(UnstableApi::class)
     fun playSong(song: Song) {
-        if (_currentSong.value?.id == song.id && exoPlayer != null) {
+        playSongFromLibrary(song)
+    }
+
+    fun playSongFromCollection(
+        song: Song,
+        collection: List<Song>,
+        source: QueueSource = QueueSource.LIBRARY,
+        sourceName: String? = null,
+        shuffle: Boolean = false
+    ) {
+        startQueueSession(
+            songs = collection.ifEmpty { listOf(song) },
+            startSong = song,
+            source = source,
+            sourceName = sourceName,
+            shuffle = shuffle
+        )
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun playSongNow(song: Song, toggleIfSame: Boolean = true) {
+        if (toggleIfSame && sameSong(_currentSong.value, song) && exoPlayer != null) {
             togglePlayback()
             return
         }
@@ -316,16 +380,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         exoPlayer?.apply {
             setMediaItem(MediaItem.fromUri(song.uri))
-            repeatMode = when (_repeatMode.value) {
-                RepeatMode.OFF -> Player.REPEAT_MODE_OFF
-                RepeatMode.ALL -> Player.REPEAT_MODE_ALL
-                RepeatMode.ONE -> Player.REPEAT_MODE_ONE
-            }
+            applyPlayerRepeatMode()
             prepare()
             play()
         }
 
         _currentSong.value = song
+        syncQueueCurrentSong(song)
         viewModelScope.launch {
             playbackHistoryRepository.addToHistory(
                 PlaybackHistoryEntity(
@@ -337,6 +398,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             )
             loadHistory()
         }
+        maybeRefreshAutoplayRecommendations()
         _isPlaying.value = true
         startProgressUpdate()
         updateNotification(song, true)
@@ -366,6 +428,479 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         _fullHistory.value = playbackHistoryRepository.getFullHistory()
     }
 
+    private fun startQueueSession(
+        songs: List<Song>,
+        startSong: Song?,
+        source: QueueSource,
+        sourceName: String? = null,
+        shuffle: Boolean = false
+    ) {
+        val selectedSong = startSong ?: songs.firstOrNull()
+        if (selectedSong == null) {
+            _errorMessage.value = getApplication<Application>().getString(R.string.no_songs_available)
+            return
+        }
+
+        isShuffleMode.value = shuffle
+        settingsManager.shuffleEnabled = shuffle
+
+        val distinctSongs = distinctSongs(songs.ifEmpty { listOf(selectedSong) })
+        val startIndex = distinctSongs.indexOfFirst { sameSong(it, selectedSong) }.coerceAtLeast(0)
+        val ordered = if (shuffle) {
+            listOf(distinctSongs[startIndex]) + distinctSongs
+                .filterIndexed { index, _ -> index != startIndex }
+                .shuffled()
+        } else {
+            distinctSongs.drop(startIndex) + distinctSongs.take(startIndex)
+        }
+
+        val current = queueItem(ordered.firstOrNull() ?: selectedSong, source, reason = sourceName)
+        _queueState.value = PlaybackQueueState(
+            current = current,
+            previous = emptyList(),
+            upNext = ordered.drop(1).map { queueItem(it, source, reason = sourceName) },
+            source = source,
+            sourceName = sourceName
+        )
+        persistQueueState()
+        playQueueItem(current)
+    }
+
+    private fun playQueueItem(item: QueueItem) {
+        if (item.song.requiresRemoteExtraction()) {
+            playYouTubeSongNow(
+                YouTubeResult(
+                    videoId = item.song.data,
+                    title = item.song.title,
+                    artist = item.song.artist,
+                    thumbnailUrl = item.song.artworkUri.toString(),
+                    type = ResultType.SONG
+                )
+            )
+        } else {
+            playSongNow(item.song, toggleIfSame = false)
+        }
+    }
+
+    private fun queueItem(
+        song: Song,
+        source: QueueSource,
+        reason: String? = null,
+        userInserted: Boolean = false
+    ): QueueItem = QueueItem(song, source, reason, userInserted)
+
+    private fun appendPrevious(previous: List<QueueItem>, current: QueueItem?): List<QueueItem> {
+        return (previous + listOfNotNull(current)).takeLast(50)
+    }
+
+    private fun distinctSongs(songs: List<Song>): List<Song> {
+        val seen = mutableSetOf<String>()
+        return songs.filter { seen.add(songIdentityKey(it)) }
+    }
+
+    private fun sameSong(first: Song?, second: Song?): Boolean {
+        if (first == null || second == null) return false
+        return first.id == second.id || metadataIdentity(first.title, first.artist) == metadataIdentity(second.title, second.artist)
+    }
+
+    private fun songIdentityKey(song: Song): String {
+        val remoteId = song.data.takeIf { it.isNotBlank() && song.uri.toString().startsWith("http", ignoreCase = true) }
+        return remoteId ?: "${song.id}|${metadataIdentity(song.title, song.artist)}"
+    }
+
+    private fun metadataIdentity(title: String, artist: String): String =
+        "${normalizeSearchText(title)}|${normalizeSearchText(artist)}"
+
+    private fun resultToSong(result: YouTubeResult): Song =
+        Song(
+            id = result.videoId.hashCode().toLong(),
+            title = result.title,
+            artist = result.artist,
+            data = result.videoId,
+            duration = 0L,
+            albumId = 0L,
+            uri = Uri.parse("https://music.youtube.com/watch?v=${result.videoId}"),
+            artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
+        )
+
+    private fun syncQueueCurrentSong(song: Song) {
+        val state = _queueState.value
+        val current = state.current
+        if (current == null || sameSong(current.song, song)) {
+            _queueState.value = state.copy(current = (current ?: queueItem(song, QueueSource.LIBRARY)).copy(song = song))
+            persistQueueState()
+        }
+    }
+
+    private fun applyPlayerRepeatMode() {
+        exoPlayer?.repeatMode = if (_repeatMode.value == RepeatMode.ONE) {
+            Player.REPEAT_MODE_ONE
+        } else {
+            Player.REPEAT_MODE_OFF
+        }
+    }
+
+    private fun maybeRefreshAutoplayRecommendations() {
+        if (!isAutoPlayEnabled.value) return
+        val state = _queueState.value
+        if (state.upNext.size + state.autoplay.size >= 6 || state.isAutoplayLoading) return
+        refreshAutoplayRecommendations(force = false)
+    }
+
+    private fun refreshAutoplayRecommendations(
+        force: Boolean = false,
+        playFirstWhenReady: Boolean = false
+    ) {
+        if (!isAutoPlayEnabled.value) return
+        val seed = _queueState.value.current?.song ?: _currentSong.value ?: return
+        if (!force && _queueState.value.autoplay.isNotEmpty()) return
+
+        recommendationJob?.cancel()
+        recommendationJob = viewModelScope.launch(Dispatchers.IO) {
+            _queueState.value = _queueState.value.copy(isAutoplayLoading = true, autoplayError = null)
+            try {
+                val recommendations = generateAutoplayRecommendations(seed, _queueState.value)
+                withContext(Dispatchers.Main) {
+                    _queueState.value = _queueState.value.copy(
+                        autoplay = recommendations,
+                        isAutoplayLoading = false,
+                        autoplayError = if (recommendations.isEmpty()) {
+                            getApplication<Application>().getString(R.string.queue_autoplay_empty)
+                        } else {
+                            null
+                        }
+                    )
+                    persistQueueState()
+
+                    if (playFirstWhenReady && recommendations.isNotEmpty()) {
+                        skipToNext()
+                    }
+                }
+            } catch (e: Exception) {
+                if (e !is CancellationException) {
+                    withContext(Dispatchers.Main) {
+                        _queueState.value = _queueState.value.copy(
+                            isAutoplayLoading = false,
+                            autoplayError = getApplication<Application>().getString(R.string.queue_autoplay_error)
+                        )
+                        persistQueueState()
+                    }
+                }
+            }
+        }
+    }
+
+    private data class RecommendationCandidate(
+        val song: Song,
+        val score: Int,
+        val reason: String
+    )
+
+    private suspend fun generateAutoplayRecommendations(
+        seed: Song,
+        state: PlaybackQueueState
+    ): List<QueueItem> = withContext(Dispatchers.IO) {
+        val excluded = (state.previous.takeLast(20) + listOfNotNull(state.current) + state.upNext + state.autoplay)
+            .map { songIdentityKey(it.song) }
+            .toMutableSet()
+        val historyCounts = _fullHistory.value.groupingBy { metadataIdentity(it.title, it.artist) }.eachCount()
+        val candidates = LinkedHashMap<String, RecommendationCandidate>()
+
+        fun addCandidate(song: Song, baseScore: Int, reason: String) {
+            val key = songIdentityKey(song)
+            if (key in excluded || sameSong(seed, song)) return
+            val score = recommendationScore(seed, song, historyCounts) + baseScore
+            if (score < 24) return
+            val existing = candidates[key]
+            if (existing == null || score > existing.score) {
+                candidates[key] = RecommendationCandidate(song, score, reason)
+            }
+        }
+
+        _songs.value.forEach { song ->
+            addCandidate(song, 0, recommendationReason(seed, song))
+        }
+
+        _youtubeSearchResults.value
+            .filter { it.type == ResultType.SONG }
+            .forEachIndexed { index, result ->
+                addCandidate(resultToSong(result), (12 - index).coerceAtLeast(0), recommendationReason(seed, resultToSong(result)))
+            }
+
+        if (candidates.size < 12) {
+            recommendationQueries(seed).forEach { query ->
+                val cacheKey = normalizeSearchText(query)
+                val results = searchResultsCache[cacheKey] ?: run {
+                    val merged = mergeSearchResults(
+                        query = query,
+                        groups = listOf(
+                            DeezerApi.search(query),
+                            YouTube.search(query)
+                        )
+                    )
+                    if (searchResultsCache.size > 24) searchResultsCache.clear()
+                    searchResultsCache[cacheKey] = merged
+                    merged
+                }
+
+                results
+                    .filter { it.type == ResultType.SONG }
+                    .take(10)
+                    .forEachIndexed { index, result ->
+                        addCandidate(
+                            song = resultToSong(result),
+                            baseScore = (22 - index).coerceAtLeast(4),
+                            reason = query
+                        )
+                    }
+            }
+        }
+
+        val selected = selectDiverseRecommendations(candidates.values.toList(), seed)
+        if (selected.isNotEmpty()) {
+            return@withContext selected.map {
+                queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason)
+            }
+        }
+
+        _songs.value
+            .filterNot { songIdentityKey(it) in excluded || sameSong(seed, it) }
+            .sortedBy { stableSearchRank(seed.title, songIdentityKey(it)) }
+            .take(8)
+            .map { queueItem(it, QueueSource.AUTOPLAY, reason = getApplication<Application>().getString(R.string.from_your_library)) }
+    }
+
+    private fun recommendationScore(
+        seed: Song,
+        candidate: Song,
+        historyCounts: Map<String, Int>
+    ): Int {
+        val seedArtist = normalizeSearchText(seed.artist)
+        val candidateArtist = normalizeSearchText(candidate.artist)
+        val seedAlbum = normalizeSearchText(seed.album)
+        val candidateAlbum = normalizeSearchText(candidate.album)
+        val seedTokens = recommendationTokens(seed)
+        val candidateTokens = recommendationTokens(candidate)
+        val seedStyles = styleTokens(seed)
+        val candidateStyles = styleTokens(candidate)
+
+        var score = 0
+        if (seedArtist.isNotBlank() && seedArtist == candidateArtist) score += 70
+        if (seedArtist.isNotBlank() && candidateArtist.contains(seedArtist)) score += 26
+        if (seedAlbum.isNotBlank() && seedAlbum == candidateAlbum) score += 22
+        score += seedTokens.intersect(candidateTokens).size * 8
+        score += seedStyles.intersect(candidateStyles).size * 28
+        score += kotlin.math.min((historyCounts[metadataIdentity(candidate.title, candidate.artist)] ?: 0) * 3, 15)
+
+        val recentKeys = _fullHistory.value.take(12).map { metadataIdentity(it.title, it.artist) }.toSet()
+        if (metadataIdentity(candidate.title, candidate.artist) in recentKeys) score -= 30
+        if (candidate.title.equals(seed.title, ignoreCase = true) && candidate.artist.equals(seed.artist, ignoreCase = true)) score -= 100
+
+        return score
+    }
+
+    private fun recommendationReason(seed: Song, candidate: Song): String {
+        val sharedStyles = styleTokens(seed).intersect(styleTokens(candidate))
+        return when {
+            normalizeSearchText(seed.artist).isNotBlank() &&
+                normalizeSearchText(seed.artist) == normalizeSearchText(candidate.artist) -> seed.artist
+            sharedStyles.isNotEmpty() -> sharedStyles.first()
+            candidate.album.isNotBlank() && normalizeSearchText(candidate.album) == normalizeSearchText(seed.album) -> candidate.album
+            else -> getApplication<Application>().getString(R.string.autoplay)
+        }
+    }
+
+    private fun recommendationQueries(seed: Song): List<String> {
+        val artist = seed.artist.takeIf { normalizeSearchText(it).isNotBlank() && !it.contains("unknown", ignoreCase = true) }
+        val styles = styleTokens(seed)
+        val baseTitle = seed.title.replace(Regex("\\(.*?\\)|\\[.*?]"), "").trim()
+        val queries = LinkedHashSet<String>()
+
+        if (artist != null) {
+            styles.forEach { style -> queries += "$artist $style music" }
+            queries += "$artist similar songs"
+            queries += "$artist $baseTitle"
+        }
+        styles.forEach { style -> queries += "$style music ${artist.orEmpty()}".trim() }
+        if (baseTitle.isNotBlank()) queries += "$baseTitle ${artist.orEmpty()} audio".trim()
+
+        return queries.filter { it.isNotBlank() }.take(4)
+    }
+
+    private fun selectDiverseRecommendations(
+        candidates: List<RecommendationCandidate>,
+        seed: Song
+    ): List<RecommendationCandidate> {
+        val artistCounts = mutableMapOf<String, Int>()
+        val sorted = candidates.sortedWith(
+            compareByDescending<RecommendationCandidate> { it.score }
+                .thenBy { stableSearchRank(seed.title, songIdentityKey(it.song)) }
+        )
+        val selected = mutableListOf<RecommendationCandidate>()
+
+        sorted.forEach { candidate ->
+            val artist = normalizeSearchText(candidate.song.artist)
+            val count = artistCounts[artist] ?: 0
+            val lastTwoSameArtist = selected.takeLast(2).all {
+                normalizeSearchText(it.song.artist) == artist
+            } && selected.size >= 2
+            if (count >= 3 || lastTwoSameArtist) return@forEach
+
+            selected += candidate
+            artistCounts[artist] = count + 1
+            if (selected.size >= 12) return selected
+        }
+
+        return selected
+    }
+
+    private fun recommendationTokens(song: Song): Set<String> =
+        expandedSearchTokens(normalizeSearchText("${song.title} ${song.artist} ${song.album}"))
+
+    private fun styleTokens(song: Song): Set<String> {
+        val text = normalizeSearchText("${song.title} ${song.artist} ${song.album}")
+        val styles = linkedSetOf<String>()
+        val groups = mapOf(
+            "phonk" to setOf("phonk", "phonky", "drift"),
+            "slowed" to setOf("slowed", "slow", "reverb"),
+            "nightcore" to setOf("nightcore", "sped", "speed up", "sped up"),
+            "lofi" to setOf("lofi", "lo fi", "chill"),
+            "trap" to setOf("trap", "drill"),
+            "rap" to setOf("rap", "hip hop"),
+            "rock" to setOf("rock", "metal", "punk"),
+            "electronic" to setOf("edm", "house", "techno", "electro"),
+            "latin" to setOf("reggaeton", "salsa", "bachata", "corrido"),
+            "pop" to setOf("pop", "dance")
+        )
+        groups.forEach { (style, aliases) ->
+            if (aliases.any { alias -> text.contains(alias) }) styles += style
+        }
+        return styles
+    }
+
+    private fun buildHistoryQueueSongs(
+        selected: PlaybackHistoryEntity,
+        selectedRemoteMatch: YouTubeResult?
+    ): List<Song> {
+        val songsByUri = _songs.value.associateBy { it.uri.toString() }
+        val songsByMetadata = _songs.value.associateBy { metadataIdentity(it.title, it.artist) }
+        val selectedKey = metadataIdentity(selected.title, selected.artist)
+        val seen = mutableSetOf<String>()
+
+        return _fullHistory.value.mapNotNull { history ->
+            val key = metadataIdentity(history.title, history.artist)
+            val song = songsByUri[history.songId] ?: songsByMetadata[key] ?: if (key == selectedKey && selectedRemoteMatch != null) {
+                resultToSong(
+                    YouTubeResult(
+                        videoId = selectedRemoteMatch.videoId,
+                        title = history.title,
+                        artist = history.artist,
+                        thumbnailUrl = history.artworkUrl.orEmpty(),
+                        type = ResultType.SONG
+                    )
+                )
+            } else {
+                null
+            }
+            song?.takeIf { seen.add(songIdentityKey(it)) }
+        }
+    }
+
+    private fun persistQueueState() {
+        if (!settingsManager.saveLastPlayback) return
+        settingsManager.playbackQueueJson = encodeQueueState(_queueState.value)
+    }
+
+    private fun encodeQueueState(state: PlaybackQueueState): String {
+        return JSONObject().apply {
+            put("source", state.source.name)
+            put("sourceName", state.sourceName)
+            put("current", state.current?.toJson())
+            put("previous", JSONArray().apply { state.previous.forEach { put(it.toJson()) } })
+            put("upNext", JSONArray().apply { state.upNext.forEach { put(it.toJson()) } })
+            put("autoplay", JSONArray().apply { state.autoplay.forEach { put(it.toJson()) } })
+        }.toString()
+    }
+
+    private fun restoreQueueState(payload: String): PlaybackQueueState? {
+        if (payload.isBlank()) return null
+        return runCatching {
+            val json = JSONObject(payload)
+            PlaybackQueueState(
+                current = json.optJSONObject("current")?.toQueueItem(),
+                previous = json.optJSONArray("previous").toQueueItems(),
+                upNext = json.optJSONArray("upNext").toQueueItems(),
+                autoplay = json.optJSONArray("autoplay").toQueueItems(),
+                source = runCatching { QueueSource.valueOf(json.optString("source", QueueSource.RESTORED.name)) }
+                    .getOrDefault(QueueSource.RESTORED),
+                sourceName = json.optString("sourceName").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }.getOrNull()
+    }
+
+    private fun QueueItem.toJson(): JSONObject =
+        JSONObject().apply {
+            put("source", source.name)
+            put("reason", reason)
+            put("userInserted", userInserted)
+            put("song", song.toJson())
+        }
+
+    private fun Song.toJson(): JSONObject =
+        JSONObject().apply {
+            put("id", id)
+            put("title", title)
+            put("artist", artist)
+            put("data", data)
+            put("duration", duration)
+            put("albumId", albumId)
+            put("uri", uri.toString())
+            put("artworkUri", artworkUri.toString())
+            put("album", album)
+            put("dateAdded", dateAdded)
+            put("lyrics", lyrics)
+            put("isFavorite", isFavorite)
+            put("isExplicit", isExplicit)
+        }
+
+    private fun JSONObject.toQueueItem(): QueueItem? {
+        val song = optJSONObject("song")?.toSong() ?: return null
+        val source = runCatching { QueueSource.valueOf(optString("source", QueueSource.RESTORED.name)) }
+            .getOrDefault(QueueSource.RESTORED)
+        return QueueItem(
+            song = song,
+            source = source,
+            reason = optString("reason").takeIf { it.isNotBlank() && it != "null" },
+            userInserted = optBoolean("userInserted", false)
+        )
+    }
+
+    private fun JSONObject.toSong(): Song =
+        Song(
+            id = optLong("id"),
+            title = optString("title"),
+            artist = optString("artist"),
+            data = optString("data"),
+            duration = optLong("duration", 0L),
+            albumId = optLong("albumId", 0L),
+            uri = optString("uri").takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY,
+            artworkUri = optString("artworkUri").takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY,
+            album = optString("album"),
+            dateAdded = optLong("dateAdded", 0L),
+            lyrics = optString("lyrics").takeIf { it.isNotBlank() && it != "null" },
+            isFavorite = optBoolean("isFavorite", false),
+            isExplicit = optBoolean("isExplicit", false)
+        )
+
+    private fun JSONArray?.toQueueItems(): List<QueueItem> {
+        if (this == null) return emptyList()
+        return buildList {
+            for (index in 0 until length()) {
+                optJSONObject(index)?.toQueueItem()?.let(::add)
+            }
+        }
+    }
+
     fun playHistoryItem(history: PlaybackHistoryEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             val isRemoteHistoryItem = history.songId.startsWith("http", ignoreCase = true)
@@ -375,14 +910,21 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     .firstOrNull { it.type == ResultType.SONG }
 
                 if (match != null) {
+                    val historyContext = buildHistoryQueueSongs(history, match)
                     withContext(Dispatchers.Main) {
-                        playYouTubeSong(
+                        val song = resultToSong(
                             YouTubeResult(
                                 videoId = match.videoId,
                                 title = history.title,
                                 artist = history.artist,
                                 thumbnailUrl = history.artworkUrl.orEmpty()
                             )
+                        )
+                        startQueueSession(
+                            songs = historyContext.ifEmpty { listOf(song) },
+                            startSong = song,
+                            source = QueueSource.HISTORY,
+                            sourceName = getApplication<Application>().getString(R.string.history_tab)
                         )
                     }
                 } else {
@@ -397,7 +939,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             }
 
             if (localSong != null) {
-                withContext(Dispatchers.Main) { playSong(localSong) }
+                val historyContext = buildHistoryQueueSongs(history, null)
+                withContext(Dispatchers.Main) {
+                    startQueueSession(
+                        songs = historyContext.ifEmpty { listOf(localSong) },
+                        startSong = localSong,
+                        source = QueueSource.HISTORY,
+                        sourceName = getApplication<Application>().getString(R.string.history_tab)
+                    )
+                }
             } else {
                 _errorMessage.value = getApplication<Application>().getString(R.string.song_unavailable)
             }
@@ -405,53 +955,114 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun playPlaylist(playlist: Playlist, shuffle: Boolean = false) {
-        playSongs(songsForPlaylist(playlist), shuffle)
+        val playlistSongs = songsForPlaylist(playlist)
+        startQueueSession(
+            songs = playlistSongs,
+            startSong = playlistSongs.firstOrNull(),
+            source = QueueSource.PLAYLIST,
+            sourceName = playlist.name,
+            shuffle = shuffle
+        )
     }
 
     fun playSongs(collection: List<Song>, shuffle: Boolean = false) {
-        val playableSongs = if (shuffle) collection.shuffled() else collection
-        val nextSong = playableSongs.firstOrNull()
-
-        if (nextSong != null) {
-            setShuffleMode(shuffle)
-            _manualQueue.value = playableSongs.drop(1)
-            playSongFromLibrary(nextSong)
-        } else {
-            _errorMessage.value = getApplication<Application>().getString(R.string.no_songs_available)
-        }
+        startQueueSession(
+            songs = collection,
+            startSong = collection.firstOrNull(),
+            source = QueueSource.LIBRARY,
+            sourceName = getApplication<Application>().getString(R.string.library),
+            shuffle = shuffle
+        )
     }
 
     fun playSongFromLibrary(song: Song) {
-        if (song.requiresRemoteExtraction()) {
-            playYouTubeSong(
-                YouTubeResult(
-                    videoId = song.data,
-                    title = song.title,
-                    artist = song.artist,
-                    thumbnailUrl = song.artworkUri.toString(),
-                    type = ResultType.SONG
-                )
-            )
-        } else {
-            playSong(song)
-        }
+        val localContext = _songs.value.takeIf { librarySongs ->
+            librarySongs.any { sameSong(it, song) }
+        }.orEmpty()
+
+        startQueueSession(
+            songs = localContext.ifEmpty { listOf(song) },
+            startSong = song,
+            source = if (localContext.isEmpty()) QueueSource.SEARCH else QueueSource.LIBRARY,
+            sourceName = if (localContext.isEmpty()) null else getApplication<Application>().getString(R.string.library)
+        )
+    }
+
+    fun playSongFromSearch(song: Song, relatedSongs: List<Song>, query: String) {
+        startQueueSession(
+            songs = relatedSongs.ifEmpty { listOf(song) },
+            startSong = song,
+            source = QueueSource.SEARCH,
+            sourceName = query.takeIf { it.isNotBlank() }
+        )
+    }
+
+    fun playSongFromArtist(song: Song, artistSongs: List<Song>) {
+        startQueueSession(
+            songs = artistSongs.ifEmpty { listOf(song) },
+            startSong = song,
+            source = QueueSource.ARTIST,
+            sourceName = song.artist.takeIf { it.isNotBlank() }
+        )
+    }
+
+    fun playYouTubeSong(result: YouTubeResult) {
+        val song = resultToSong(result)
+        val related = _youtubeSearchResults.value
+            .filter { it.type == ResultType.SONG }
+            .map(::resultToSong)
+
+        startQueueSession(
+            songs = related.ifEmpty { listOf(song) },
+            startSong = song,
+            source = QueueSource.SEARCH,
+            sourceName = result.artist.takeIf { it.isNotBlank() }
+        )
     }
 
     fun addSongNext(song: Song) {
-        _manualQueue.value = listOf(song) + _manualQueue.value
+        if (_queueState.value.current == null) {
+            startQueueSession(listOf(song), song, QueueSource.USER)
+        } else {
+            _queueState.value = _queueState.value.copy(
+                upNext = listOf(queueItem(song, QueueSource.USER, userInserted = true)) + _queueState.value.upNext
+            )
+            persistQueueState()
+        }
     }
 
     fun addSongToQueue(song: Song) {
-        _manualQueue.value = _manualQueue.value + song
+        if (_queueState.value.current == null) {
+            startQueueSession(listOf(song), song, QueueSource.USER)
+        } else {
+            _queueState.value = _queueState.value.copy(
+                upNext = _queueState.value.upNext + queueItem(song, QueueSource.USER, userInserted = true)
+            )
+            persistQueueState()
+        }
     }
 
     fun addPlaylistToQueue(playlist: Playlist) {
         val queuedSongs = songsForPlaylist(playlist)
-        _manualQueue.value = _manualQueue.value + queuedSongs
+        addSongsToQueue(queuedSongs, QueueSource.PLAYLIST, playlist.name)
     }
 
     fun addSongsToQueue(collection: List<Song>) {
-        _manualQueue.value = _manualQueue.value + collection
+        addSongsToQueue(collection, QueueSource.USER, null)
+    }
+
+    private fun addSongsToQueue(collection: List<Song>, source: QueueSource, sourceName: String?) {
+        if (collection.isEmpty()) return
+        if (_queueState.value.current == null) {
+            startQueueSession(collection, collection.firstOrNull(), source, sourceName)
+        } else {
+            _queueState.value = _queueState.value.copy(
+                upNext = _queueState.value.upNext + collection.map {
+                    queueItem(it, source, reason = sourceName, userInserted = true)
+                }
+            )
+            persistQueueState()
+        }
     }
 
     suspend fun resolveShareUrl(song: Song): String? = withContext(Dispatchers.IO) {
@@ -475,13 +1086,89 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun clearManualQueue() {
-        _manualQueue.value = emptyList()
+        _queueState.value = _queueState.value.copy(
+            upNext = emptyList(),
+            autoplay = emptyList(),
+            autoplayError = null,
+            isAutoplayLoading = false
+        )
+        persistQueueState()
     }
 
-    fun playYouTubeSong(result: YouTubeResult) {
+    fun playUpNext(index: Int) {
+        val state = _queueState.value
+        val item = state.upNext.getOrNull(index) ?: return
+        _queueState.value = state.copy(
+            current = item,
+            previous = (state.previous + listOfNotNull(state.current) + state.upNext.take(index)).takeLast(50),
+            upNext = state.upNext.drop(index + 1),
+            autoplayError = null
+        )
+        persistQueueState()
+        playQueueItem(item)
+    }
+
+    fun playAutoplayItem(index: Int) {
+        val state = _queueState.value
+        val item = state.autoplay.getOrNull(index) ?: return
+        _queueState.value = state.copy(
+            current = item,
+            previous = appendPrevious(state.previous, state.current),
+            autoplay = state.autoplay.drop(index + 1),
+            autoplayError = null
+        )
+        persistQueueState()
+        playQueueItem(item)
+        maybeRefreshAutoplayRecommendations()
+    }
+
+    fun replayPrevious(index: Int) {
+        val state = _queueState.value
+        val item = state.previous.getOrNull(index) ?: return
+        _queueState.value = state.copy(
+            current = item,
+            previous = state.previous.take(index),
+            upNext = state.previous.drop(index + 1) + listOfNotNull(state.current) + state.upNext,
+            autoplayError = null
+        )
+        persistQueueState()
+        playQueueItem(item)
+    }
+
+    fun removeFromQueue(index: Int) {
+        val state = _queueState.value
+        if (index !in state.upNext.indices) return
+        _queueState.value = state.copy(
+            upNext = state.upNext.filterIndexed { itemIndex, _ -> itemIndex != index }
+        )
+        persistQueueState()
+    }
+
+    fun moveQueueItem(index: Int, direction: Int) {
+        val state = _queueState.value
+        val targetIndex = (index + direction).coerceIn(0, state.upNext.lastIndex)
+        if (index !in state.upNext.indices || index == targetIndex) return
+
+        val next = state.upNext.toMutableList()
+        val item = next.removeAt(index)
+        next.add(targetIndex, item)
+        _queueState.value = state.copy(upNext = next)
+        persistQueueState()
+    }
+
+    fun moveQueueItemToNext(index: Int) {
+        val state = _queueState.value
+        val item = state.upNext.getOrNull(index) ?: return
+        _queueState.value = state.copy(
+            upNext = listOf(item) + state.upNext.filterIndexed { itemIndex, _ -> itemIndex != index }
+        )
+        persistQueueState()
+    }
+
+    private fun playYouTubeSongNow(result: YouTubeResult) {
         extractionJob?.cancel()
 
-        extractionJob = viewModelScope.launch(Dispatchers.IO) {
+        val newExtractionJob = viewModelScope.launch(Dispatchers.IO) {
             _isExtracting.value = true
             _errorMessage.value = null
 
@@ -511,7 +1198,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
                     withContext(Dispatchers.Main) {
                         _currentAlbumArt.value = result.thumbnailUrl
-                        playSong(virtualSong)
+                        playSongNow(virtualSong, toggleIfSame = false)
 
                         launch {
                             delay(800)
@@ -550,7 +1237,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
                     withContext(Dispatchers.Main) {
                         _currentAlbumArt.value = result.thumbnailUrl
-                        playSong(virtualSong)
+                        playSongNow(virtualSong, toggleIfSame = false)
                         prefetchNextSongInList(result.videoId)
                     }
                 } else {
@@ -564,11 +1251,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     )
                 }
             } finally {
+                val isActiveExtraction = extractionJob === currentCoroutineContext()[Job]
                 withContext(Dispatchers.Main) {
-                    _isExtracting.value = false
+                    if (isActiveExtraction) {
+                        _isExtracting.value = false
+                    }
                 }
             }
         }
+        extractionJob = newExtractionJob
     }
 
     fun togglePlayback() {
@@ -587,71 +1278,91 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun skipToNext() {
-        val queuedSong = _manualQueue.value.firstOrNull()
-        if (queuedSong != null) {
-            _manualQueue.value = _manualQueue.value.drop(1)
-            playSongFromLibrary(queuedSong)
+        val state = _queueState.value
+        val current = state.current
+
+        state.upNext.firstOrNull()?.let { next ->
+            _queueState.value = state.copy(
+                current = next,
+                previous = appendPrevious(state.previous, current),
+                upNext = state.upNext.drop(1),
+                autoplayError = null
+            )
+            persistQueueState()
+            playQueueItem(next)
             return
         }
 
-        val currentId = _currentSong.value?.id ?: return
-        val ytList = _youtubeSearchResults.value
-        val ytIndex = ytList.indexOfFirst { it.videoId.hashCode().toLong() == currentId }
+        state.autoplay.firstOrNull()?.let { next ->
+            _queueState.value = state.copy(
+                current = next,
+                previous = appendPrevious(state.previous, current),
+                autoplay = state.autoplay.drop(1),
+                autoplayError = null
+            )
+            persistQueueState()
+            playQueueItem(next)
+            maybeRefreshAutoplayRecommendations()
+            return
+        }
 
-        if (ytIndex != -1) {
-            if (isShuffleMode.value && ytList.size > 1) {
-                var randomResult: YouTubeResult
-                do { randomResult = ytList.random() } while (randomResult.videoId.hashCode().toLong() == currentId)
-                playYouTubeSong(randomResult)
-            } else {
-                val nextIndex = if (ytIndex == ytList.size - 1) 0 else ytIndex + 1
-                playYouTubeSong(ytList[nextIndex])
+        if (_repeatMode.value == RepeatMode.ALL) {
+            val loop = state.previous + listOfNotNull(current)
+            val next = loop.firstOrNull()
+            if (next != null) {
+                _queueState.value = state.copy(
+                    current = next,
+                    previous = emptyList(),
+                    upNext = loop.drop(1),
+                    autoplayError = null
+                )
+                persistQueueState()
+                playQueueItem(next)
+                return
             }
-            return
         }
 
-        val localList = _songs.value
-        if (localList.isEmpty()) return
-
-        val localIndex = localList.indexOfFirst { it.id == currentId }
-        if (isShuffleMode.value && localList.size > 1) {
-            var randomSong: Song
-            do { randomSong = localList.random() } while (randomSong.id == currentId)
-            playSong(randomSong)
-        } else {
-            val nextIndex = if (localIndex == -1 || localIndex == localList.size - 1) 0 else localIndex + 1
-            playSong(localList[nextIndex])
+        if (isAutoPlayEnabled.value) {
+            refreshAutoplayRecommendations(force = true, playFirstWhenReady = true)
         }
     }
 
     fun skipToPrevious() {
-        val currentId = _currentSong.value?.id ?: return
-        val ytList = _youtubeSearchResults.value
-        val ytIndex = ytList.indexOfFirst { it.videoId.hashCode().toLong() == currentId }
-
-        if (ytIndex != -1) {
-            if (isShuffleMode.value && ytList.size > 1) {
-                var randomResult: YouTubeResult
-                do { randomResult = ytList.random() } while (randomResult.videoId.hashCode().toLong() == currentId)
-                playYouTubeSong(randomResult)
-            } else {
-                val prevIndex = if (ytIndex <= 0) ytList.size - 1 else ytIndex - 1
-                playYouTubeSong(ytList[prevIndex])
-            }
+        val currentPosition = exoPlayer?.currentPosition ?: _currentPosition.value
+        if (currentPosition > 3000L) {
+            seekTo(0)
             return
         }
 
-        val localList = _songs.value
-        if (localList.isEmpty()) return
+        val state = _queueState.value
+        val previous = state.previous
+        val previousItem = previous.lastOrNull()
 
-        val localIndex = localList.indexOfFirst { it.id == currentId }
-        if (isShuffleMode.value && localList.size > 1) {
-            var randomSong: Song
-            do { randomSong = localList.random() } while (randomSong.id == currentId)
-            playSong(randomSong)
-        } else {
-            val prevIndex = if (localIndex <= 0) localList.size - 1 else localIndex - 1
-            playSong(localList[prevIndex])
+        if (previousItem != null) {
+            _queueState.value = state.copy(
+                current = previousItem,
+                previous = previous.dropLast(1),
+                upNext = listOfNotNull(state.current) + state.upNext,
+                autoplayError = null
+            )
+            persistQueueState()
+            playQueueItem(previousItem)
+            return
+        }
+
+        if (_repeatMode.value == RepeatMode.ALL) {
+            val loop = listOfNotNull(state.current) + state.upNext
+            val last = loop.lastOrNull()
+            if (last != null && loop.size > 1) {
+                _queueState.value = state.copy(
+                    current = last,
+                    previous = loop.dropLast(1),
+                    upNext = emptyList(),
+                    autoplayError = null
+                )
+                persistQueueState()
+                playQueueItem(last)
+            }
         }
     }
 
@@ -667,6 +1378,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         settingsManager.lastSongArtwork = _currentAlbumArt.value ?: ""
         settingsManager.lastSongDuration = song.duration
         settingsManager.lastPosition = pos
+        settingsManager.autoplayEnabled = isAutoPlayEnabled.value
+        settingsManager.shuffleEnabled = isShuffleMode.value
+        settingsManager.repeatModeName = _repeatMode.value.name
+        settingsManager.playbackQueueJson = encodeQueueState(_queueState.value)
     }
 
     fun loadSongs() {
@@ -1081,8 +1796,19 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         return setOf(localizedName, "Me gusta", "Favorites")
     }
 
-    fun setShuffleMode(enabled: Boolean) { isShuffleMode.value = enabled }
-    fun toggleShuffleMode() { isShuffleMode.value = !isShuffleMode.value }
+    fun setShuffleMode(enabled: Boolean) {
+        if (isShuffleMode.value == enabled) return
+        isShuffleMode.value = enabled
+        settingsManager.shuffleEnabled = enabled
+        if (enabled) {
+            _queueState.value = _queueState.value.copy(upNext = _queueState.value.upNext.shuffled())
+        }
+        persistQueueState()
+    }
+
+    fun toggleShuffleMode() {
+        setShuffleMode(!isShuffleMode.value)
+    }
 
     fun toggleRepeatMode() {
         _repeatMode.value = when (_repeatMode.value) {
@@ -1090,11 +1816,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
         }
-        exoPlayer?.repeatMode = when (_repeatMode.value) {
-            RepeatMode.OFF -> Player.REPEAT_MODE_OFF
-            RepeatMode.ALL -> Player.REPEAT_MODE_ALL
-            RepeatMode.ONE -> Player.REPEAT_MODE_ONE
-        }
+        settingsManager.repeatModeName = _repeatMode.value.name
+        applyPlayerRepeatMode()
+        persistQueueState()
     }
 
     fun updateTheme(theme: AppTheme) { _currentTheme.value = theme }

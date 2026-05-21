@@ -52,6 +52,7 @@ fun MainScreen() {
     val libraryViewModel: LibraryViewModels = viewModel()
 
     val repeatMode by libraryViewModel.repeatMode.collectAsState()
+    val isShuffleMode by libraryViewModel.isShuffleMode.collectAsState()
     val currentSong by libraryViewModel.currentSong.collectAsState()
     val isPlaying by libraryViewModel.isPlaying.collectAsState()
     val playbackState by libraryViewModel.playbackState.collectAsState()
@@ -271,7 +272,10 @@ fun MainScreen() {
                         popularReleases = localArtistPlaylists.ifEmpty { onlineArtistPlaylists },
                         onBack = { navController.popBackStack() },
                         onPlaySong = { song ->
-                            libraryViewModel.playSongFromLibrary(song)
+                            libraryViewModel.playSongFromArtist(
+                                song,
+                                localArtistSongs.ifEmpty { onlineArtistSongs }
+                            )
                         }
                     )
                 }
@@ -318,12 +322,14 @@ fun MainScreen() {
                 currentPosition = { currentPositionState.value },
                 albumArtUrl = currentAlbumArt,
                 repeatMode = repeatMode,
+                isShuffleMode = isShuffleMode,
                 lyricsLines = lyricsLines,
                 onPlayPause = { libraryViewModel.togglePlayback() },
                 onNext = { libraryViewModel.skipToNext() },
                 onPrevious = { libraryViewModel.skipToPrevious() },
                 onSeek = { libraryViewModel.seekTo(it) },
                 onToggleRepeat = { libraryViewModel.toggleRepeatMode() },
+                onToggleShuffle = { libraryViewModel.toggleShuffleMode() },
                 onCollapse = { isPlayerExpanded = false },
                 viewModel = libraryViewModel
             )

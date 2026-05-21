@@ -1,5 +1,8 @@
 package com.jagr.fridamusic.presentation.screens
 
+import android.content.Context
+import android.content.Intent
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
@@ -43,6 +46,8 @@ import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
+import com.jagr.fridamusic.domain.model.QueueItem
+import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.theme.*
@@ -59,12 +64,14 @@ fun NowPlayingScreen(
     currentPosition: () -> Long,
     albumArtUrl: String?,
     repeatMode: RepeatMode,
+    isShuffleMode: Boolean,
     lyricsLines: List<LyricsLine>,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeek: (Long) -> Unit,
     onToggleRepeat: () -> Unit,
+    onToggleShuffle: () -> Unit,
     onCollapse: () -> Unit,
     viewModel: LibraryViewModels
 ) {
@@ -195,10 +202,12 @@ fun NowPlayingScreen(
             PlayerControlsSection(
                 isPlaying = isPlaying,
                 repeatMode = repeatMode,
+                isShuffleMode = isShuffleMode,
                 onPlayPause = onPlayPause,
                 onNext = onNext,
                 onPrevious = onPrevious,
-                onToggleRepeat = onToggleRepeat
+                onToggleRepeat = onToggleRepeat,
+                onToggleShuffle = onToggleShuffle
             )
 
             BottomActionsSection(
@@ -408,17 +417,26 @@ private fun SeekBarSection(totalDuration: Long, currentPosition: () -> Long, onS
 private fun PlayerControlsSection(
     isPlaying: Boolean,
     repeatMode: RepeatMode,
+    isShuffleMode: Boolean,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
-    onToggleRepeat: () -> Unit
+    onToggleRepeat: () -> Unit,
+    onToggleShuffle: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = { }) { Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.shuffle), tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), modifier = Modifier.size(28.dp)) }
+        IconButton(onClick = onToggleShuffle) {
+            Icon(
+                Icons.Default.Shuffle,
+                contentDescription = stringResource(R.string.shuffle),
+                tint = if (isShuffleMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                modifier = Modifier.size(28.dp)
+            )
+        }
         IconButton(onClick = onPrevious) { Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(36.dp)) }
         Box(
             modifier = Modifier
@@ -447,7 +465,7 @@ private fun PlayerControlsSection(
 
         val repeatIcon = if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
         val repeatTint = if (repeatMode == RepeatMode.OFF) MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary
-        IconButton(onClick = onToggleRepeat) { Icon(repeatIcon, contentDescription = stringResource(R.string.theme), tint = repeatTint, modifier = Modifier.size(28.dp)) }
+        IconButton(onClick = onToggleRepeat) { Icon(repeatIcon, contentDescription = stringResource(R.string.repeat), tint = repeatTint, modifier = Modifier.size(28.dp)) }
     }
 }
 
@@ -473,108 +491,477 @@ private fun QueueBottomSheet(
     viewModel: LibraryViewModels,
     onDismiss: () -> Unit
 ) {
-    val isInfiniteQueueEnabled by viewModel.isAutoPlayEnabled.collectAsState()
-    val manualQueue by viewModel.manualQueue.collectAsState()
+    val queueState by viewModel.queueState.collectAsState()
+    val isAutoplayEnabled by viewModel.isAutoPlayEnabled.collectAsState()
+    val playlists by viewModel.playlists.collectAsState(initial = emptyList())
+    var actionTarget by remember { mutableStateOf<QueueActionTarget?>(null) }
+    var playlistPickerSong by remember { mutableStateOf<Song?>(null) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surface) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .navigationBarsPadding()
+                .padding(horizontal = 18.dp)
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(stringResource(R.string.queue), style = LiquidTypography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AllInclusive, null, tint = if (isInfiniteQueueEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f), modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(stringResource(R.string.autoplay), color = if (isInfiniteQueueEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Switch(
-                        checked = isInfiniteQueueEnabled,
-                        onCheckedChange = { viewModel.toggleAutoplay(it) },
-                        modifier = Modifier.scale(0.8f)
-                    )
-                }
-            }
-
-            Text(stringResource(R.string.now_playing), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)).padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        AsyncImage(model = albumArtUrl, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
-                        Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.background.copy(0.4f)))
-                        Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(currentSong?.title ?: stringResource(R.string.unknown), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(currentSong?.artist ?: stringResource(R.string.unknown), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(stringResource(R.string.up_next), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 16.dp))
-
-            if (manualQueue.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = if (isInfiniteQueueEnabled) Icons.Default.AllInclusive else Icons.Default.LibraryMusic,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f),
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = if (isInfiniteQueueEnabled) stringResource(R.string.infinite_mode_on) else stringResource(R.string.queue_empty_autoplay),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 18.sp
-                        )
+                Column {
+                    Text(stringResource(R.string.queue), style = LiquidTypography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                    queueState.sourceName?.takeIf { it.isNotBlank() }?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    manualQueue.forEach { song ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.MusicNote, contentDescription = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = song.title,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = song.artist,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 13.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (queueState.upNext.isNotEmpty() || queueState.autoplay.isNotEmpty()) {
+                        TextButton(onClick = viewModel::clearManualQueue) {
+                            Text(stringResource(R.string.clear_queue))
                         }
                     }
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                if (isAutoplayEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            )
+                            .padding(start = 10.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.AllInclusive,
+                            contentDescription = null,
+                            tint = if (isAutoplayEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Switch(
+                            checked = isAutoplayEnabled,
+                            onCheckedChange = viewModel::toggleAutoplay,
+                            modifier = Modifier.scale(0.72f)
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(40.dp))
+
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 28.dp)
+            ) {
+                if (queueState.previous.isNotEmpty()) {
+                    item { QueueSectionTitle(stringResource(R.string.queue_previous)) }
+                    val previousOffset = (queueState.previous.size - 6).coerceAtLeast(0)
+                    itemsIndexed(queueState.previous.takeLast(6), key = { index, item -> "previous_${previousOffset + index}_${item.song.id}" }) { index, item ->
+                        val realIndex = previousOffset + index
+                        QueueSongRow(
+                            item = item,
+                            imageUrl = queueArtworkUrl(item.song, null),
+                            isCurrent = false,
+                            isMuted = true,
+                            onClick = { viewModel.replayPrevious(realIndex) },
+                            onMore = { actionTarget = QueueActionTarget(item, QueueSection.PREVIOUS, realIndex, queueState.previous.size) }
+                        )
+                    }
+                }
+
+                item { QueueSectionTitle(stringResource(R.string.now_playing)) }
+                item {
+                    val nowPlaying = queueState.current ?: currentSong?.let { QueueItem(it, QueueSource.RESTORED) }
+                    if (nowPlaying != null) {
+                        QueueSongRow(
+                            item = nowPlaying,
+                            imageUrl = albumArtUrl ?: queueArtworkUrl(nowPlaying.song, null),
+                            isCurrent = true,
+                            isMuted = false,
+                            onClick = null,
+                            onMore = null
+                        )
+                    } else {
+                        QueueEmptyState(text = stringResource(R.string.no_song_playing), loading = false)
+                    }
+                }
+
+                item { QueueSectionTitle(stringResource(R.string.up_next)) }
+                if (queueState.upNext.isEmpty()) {
+                    item {
+                        QueueEmptyState(
+                            text = stringResource(R.string.no_songs_in_queue),
+                            loading = false
+                        )
+                    }
+                } else {
+                    itemsIndexed(queueState.upNext, key = { index, item -> "next_${index}_${item.song.id}" }) { index, item ->
+                        QueueSongRow(
+                            item = item,
+                            imageUrl = queueArtworkUrl(item.song, null),
+                            isCurrent = false,
+                            isMuted = false,
+                            onClick = { viewModel.playUpNext(index) },
+                            onMore = { actionTarget = QueueActionTarget(item, QueueSection.UP_NEXT, index, queueState.upNext.size) }
+                        )
+                    }
+                }
+
+                if (isAutoplayEnabled || queueState.autoplay.isNotEmpty() || queueState.isAutoplayLoading || queueState.autoplayError != null) {
+                    item { QueueSectionTitle(stringResource(R.string.autoplay)) }
+                    if (queueState.isAutoplayLoading) {
+                        item { QueueEmptyState(text = stringResource(R.string.queue_autoplay_loading), loading = true) }
+                    }
+                    queueState.autoplayError?.let { error ->
+                        item { QueueEmptyState(text = error, loading = false, isError = true) }
+                    }
+                    itemsIndexed(queueState.autoplay, key = { index, item -> "autoplay_${index}_${item.song.id}" }) { index, item ->
+                        QueueSongRow(
+                            item = item,
+                            imageUrl = queueArtworkUrl(item.song, null),
+                            isCurrent = false,
+                            isMuted = false,
+                            onClick = { viewModel.playAutoplayItem(index) },
+                            onMore = { actionTarget = QueueActionTarget(item, QueueSection.AUTOPLAY, index, queueState.autoplay.size) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    actionTarget?.let { target ->
+        ModalBottomSheet(
+            onDismissRequest = { actionTarget = null },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            QueueActionsSheet(
+                target = target,
+                viewModel = viewModel,
+                onDismiss = { actionTarget = null },
+                onPickPlaylist = { song ->
+                    actionTarget = null
+                    playlistPickerSong = song
+                }
+            )
+        }
+    }
+
+    playlistPickerSong?.let { song ->
+        ModalBottomSheet(
+            onDismissRequest = { playlistPickerSong = null },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            QueuePlaylistPicker(
+                playlists = playlists,
+                onDismiss = { playlistPickerSong = null },
+                onSelect = { playlist ->
+                    viewModel.addSongToPlaylist(playlist, song)
+                    playlistPickerSong = null
+                }
+            )
         }
     }
 }
 
+private enum class QueueSection { PREVIOUS, UP_NEXT, AUTOPLAY }
+
+private data class QueueActionTarget(
+    val item: QueueItem,
+    val section: QueueSection,
+    val index: Int,
+    val sectionSize: Int
+)
+
+private data class QueueActionSpec(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val label: String,
+    val destructive: Boolean = false,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun QueueSectionTitle(text: String) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp,
+        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun QueueSongRow(
+    item: QueueItem,
+    imageUrl: String?,
+    isCurrent: Boolean,
+    isMuted: Boolean,
+    onClick: (() -> Unit)?,
+    onMore: (() -> Unit)?
+) {
+    val container = when {
+        isCurrent -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f)
+    }
+    val titleColor = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    val subtitleColor = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.76f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(14.dp))
+        .background(container)
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .padding(horizontal = 10.dp, vertical = 9.dp)
+
+    Row(modifier = rowModifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(contentAlignment = Alignment.Center) {
+            if (!imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (isCurrent) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.35f))
+                )
+                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.song.title,
+                color = titleColor.copy(alpha = if (isMuted) 0.72f else 1f),
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            val reason = item.reason?.takeIf { item.source == QueueSource.AUTOPLAY && it.isNotBlank() }
+            Text(
+                text = listOfNotNull(item.song.artist, reason).filter { it.isNotBlank() }.joinToString(" - "),
+                color = subtitleColor.copy(alpha = if (isMuted) 0.62f else 1f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (onMore != null) {
+            IconButton(onClick = onMore, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueEmptyState(text: String, loading: Boolean, isError: Boolean = false) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .padding(22.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    imageVector = if (isError) Icons.Default.ErrorOutline else Icons.Default.LibraryMusic,
+                    contentDescription = null,
+                    tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = text,
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun QueueActionsSheet(
+    target: QueueActionTarget,
+    viewModel: LibraryViewModels,
+    onDismiss: () -> Unit,
+    onPickPlaylist: (Song) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val song = target.item.song
+    val actions = buildList {
+        add(QueueActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play_now)) {
+            onDismiss()
+            when (target.section) {
+                QueueSection.PREVIOUS -> viewModel.replayPrevious(target.index)
+                QueueSection.UP_NEXT -> viewModel.playUpNext(target.index)
+                QueueSection.AUTOPLAY -> viewModel.playAutoplayItem(target.index)
+            }
+        })
+        if (target.section != QueueSection.UP_NEXT || target.index > 0) {
+            add(QueueActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next)) {
+                onDismiss()
+                if (target.section == QueueSection.UP_NEXT) {
+                    viewModel.moveQueueItemToNext(target.index)
+                } else {
+                    viewModel.addSongNext(song)
+                }
+            })
+        }
+        if (target.section == QueueSection.UP_NEXT) {
+            if (target.index > 0) {
+                add(QueueActionSpec(Icons.Default.KeyboardArrowUp, stringResource(R.string.move_up)) {
+                    onDismiss()
+                    viewModel.moveQueueItem(target.index, -1)
+                })
+            }
+            if (target.index < target.sectionSize - 1) {
+                add(QueueActionSpec(Icons.Default.KeyboardArrowDown, stringResource(R.string.move_down)) {
+                    onDismiss()
+                    viewModel.moveQueueItem(target.index, 1)
+                })
+            }
+            add(QueueActionSpec(Icons.Default.Delete, stringResource(R.string.remove_from_queue), destructive = true) {
+                onDismiss()
+                viewModel.removeFromQueue(target.index)
+            })
+        } else {
+            add(QueueActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
+                onDismiss()
+                viewModel.addSongToQueue(song)
+            })
+        }
+        add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
+            onPickPlaylist(song)
+        })
+        add(QueueActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
+            onDismiss()
+            scope.launch {
+                shareQueueSong(context, song, viewModel.resolveShareUrl(song))
+            }
+        })
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(song.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+            }
+        }
+        actions.forEach { action ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = action.onClick)
+                    .padding(horizontal = 12.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val color = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                Icon(action.icon, contentDescription = null, tint = color)
+                Spacer(modifier = Modifier.width(14.dp))
+                Text(action.label, color = color, fontWeight = FontWeight.Medium)
+            }
+        }
+        Spacer(modifier = Modifier.height(18.dp))
+    }
+}
+
+@Composable
+private fun QueuePlaylistPicker(
+    playlists: List<com.jagr.fridamusic.domain.model.Playlist>,
+    onDismiss: () -> Unit,
+    onSelect: (com.jagr.fridamusic.domain.model.Playlist) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(R.string.save_to_playlist), style = LiquidTypography.titleMedium)
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+            }
+        }
+        if (playlists.isEmpty()) {
+            QueueEmptyState(text = stringResource(R.string.no_playlists), loading = false)
+        } else {
+            playlists.forEach { playlist ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onSelect(playlist) }
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null)
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(playlist.name, fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.songs_count, playlist.songIds.size), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(18.dp))
+    }
+}
+
+private fun queueArtworkUrl(song: Song, fallback: String?): String? =
+    fallback?.takeIf { it.isNotBlank() }
+        ?: song.artworkUri.toString().takeIf { it.isNotBlank() && it != "content://media/external/audio/albumart/0" }
+
+private fun shareQueueSong(context: Context, song: Song, remoteUrl: String?) {
+    val text = buildString {
+        append(song.title)
+        if (song.artist.isNotBlank()) append(" - ").append(song.artist)
+        if (!remoteUrl.isNullOrBlank()) append("\n").append(remoteUrl)
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, song.title)
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, song.title))
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LyricsBottomSheet(

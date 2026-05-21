@@ -54,6 +54,22 @@ class SettingsManager(context: Context) {
         get() = prefs.getLong("last_position", 0L)
         set(value) = prefs.edit().putLong("last_position", value).apply()
 
+    var playbackQueueJson: String
+        get() = prefs.getString("playback_queue_json", "") ?: ""
+        set(value) = prefs.edit().putString("playback_queue_json", value).apply()
+
+    var autoplayEnabled: Boolean
+        get() = prefs.getBoolean("autoplay_enabled", false)
+        set(value) = prefs.edit().putBoolean("autoplay_enabled", value).apply()
+
+    var shuffleEnabled: Boolean
+        get() = prefs.getBoolean("shuffle_enabled", false)
+        set(value) = prefs.edit().putBoolean("shuffle_enabled", value).apply()
+
+    var repeatModeName: String
+        get() = prefs.getString("repeat_mode_name", "OFF") ?: "OFF"
+        set(value) = prefs.edit().putString("repeat_mode_name", value).apply()
+
     var searchHistory: String
         get() = prefs.getString("search_history", "") ?: ""
         set(value) = prefs.edit().putString("search_history", value).apply()

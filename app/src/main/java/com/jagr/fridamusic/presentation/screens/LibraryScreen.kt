@@ -119,6 +119,7 @@ import coil.compose.AsyncImage
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.domain.model.Playlist
+import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
@@ -1221,7 +1222,14 @@ private fun PlaylistDetailPage(
                     song = song,
                     viewModel = viewModel,
                     playlists = playlists,
-                    onClick = { viewModel.playSongFromLibrary(song) },
+                    onClick = {
+                        viewModel.playSongFromCollection(
+                            song = song,
+                            collection = displayedSongs,
+                            source = QueueSource.PLAYLIST,
+                            sourceName = playlist.name
+                        )
+                    },
                     playlist = playlist,
                     canMoveUp = songSortOption == PlaylistSongSortOption.CUSTOM && index > 0,
                     canMoveDown = songSortOption == PlaylistSongSortOption.CUSTOM && index < displayedSongs.lastIndex,

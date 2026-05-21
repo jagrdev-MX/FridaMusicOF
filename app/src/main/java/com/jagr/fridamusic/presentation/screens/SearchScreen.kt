@@ -238,6 +238,7 @@ fun SearchScreen(
     val songHits = remember(query, songs, onlineResults, fullHistory) {
         buildSongHits(query, songs, onlineResults, fullHistory).take(SEARCH_TAB_LIMIT)
     }
+    val searchQueueSongs = remember(songHits) { songHits.map { it.song } }
     val artistHits = remember(query, songs, onlineResults) {
         buildArtistHits(query, songs, onlineResults).take(SEARCH_TAB_LIMIT)
     }
@@ -413,7 +414,7 @@ fun SearchScreen(
                             items(visibleSongs, key = { it.key }) { hit ->
                                 SearchSongRow(
                                     hit = hit,
-                                    onClick = { viewModel.playSongFromLibrary(hit.song) },
+                                    onClick = { viewModel.playSongFromSearch(hit.song, searchQueueSongs, query) },
                                     onAddToPlaylist = { playlistPickerSong = hit.song },
                                     onMore = { actionTarget = SearchActionTarget.SongTarget(hit) }
                                 )
@@ -475,7 +476,7 @@ fun SearchScreen(
                             items(songHits, key = { it.key }) { hit ->
                                 SearchSongRow(
                                     hit = hit,
-                                    onClick = { viewModel.playSongFromLibrary(hit.song) },
+                                    onClick = { viewModel.playSongFromSearch(hit.song, searchQueueSongs, query) },
                                     onAddToPlaylist = { playlistPickerSong = hit.song },
                                     onMore = { actionTarget = SearchActionTarget.SongTarget(hit) }
                                 )
@@ -595,6 +596,8 @@ fun SearchScreen(
                     target = target,
                     playlists = playlists,
                     followedArtists = followedArtists,
+                    searchSongs = searchQueueSongs,
+                    query = query,
                     viewModel = viewModel,
                     onDismiss = { actionTarget = null },
                     onPickPlaylist = { song ->
@@ -1479,6 +1482,8 @@ private fun SearchActionsSheet(
     target: SearchActionTarget,
     playlists: List<Playlist>,
     followedArtists: Set<String>,
+    searchSongs: List<Song>,
+    query: String,
     viewModel: LibraryViewModels,
     onDismiss: () -> Unit,
     onPickPlaylist: (Song) -> Unit,
@@ -1503,7 +1508,7 @@ private fun SearchActionsSheet(
             actions = buildList {
                 add(SearchActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play)) {
                     onDismiss()
-                    viewModel.playSongFromLibrary(song)
+                    viewModel.playSongFromSearch(song, searchSongs, query)
                 })
                 add(SearchActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next)) {
                     onDismiss()
