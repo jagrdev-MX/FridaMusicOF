@@ -2,6 +2,7 @@ package com.jagr.fridamusic.presentation.screens
 
 import android.Manifest
 import android.app.Activity
+import android.net.Uri
 import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,6 +44,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.text.Normalizer
 
 @Composable
 fun MainScreen() {
@@ -63,6 +65,7 @@ fun MainScreen() {
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var libraryReselectSignal by remember { mutableIntStateOf(0) }
+    var searchFocusSignal by remember { mutableIntStateOf(0) }
 
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -133,6 +136,9 @@ fun MainScreen() {
                         onNext = { libraryViewModel.skipToNext() },
                         onPrevious = { libraryViewModel.skipToPrevious() },
                         onNavigate = { route ->
+                            if (route == "search") {
+                                searchFocusSignal++
+                            }
                             if (route == selectedTopLevelRoute && route == "library") {
                                 libraryReselectSignal++
                             } else {
@@ -176,6 +182,7 @@ fun MainScreen() {
                         paddingValues = paddingValues,
                         listState = searchListState,
                         viewModel = libraryViewModel,
+                        focusSignal = searchFocusSignal,
                         onNavigateToArtist = { name, url ->
                             val encName = URLEncoder.encode(name, "UTF-8")
                             val encUrl = URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
@@ -187,25 +194,84 @@ fun MainScreen() {
                 composable("artist?name={artistName}&url={artistUrl}") { backStackEntry ->
                     val name = URLDecoder.decode(backStackEntry.arguments?.getString("artistName") ?: "", "UTF-8")
                     val rawUrl = URLDecoder.decode(backStackEntry.arguments?.getString("artistUrl") ?: "", "UTF-8")
-                    val artistSongs by libraryViewModel.artistSongs.collectAsState()
-                    val artistPlaylists by libraryViewModel.artistPlaylists.collectAsState()
+                    val songs by libraryViewModel.songs.collectAsState()
+                    val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
+                    val onlineResults by libraryViewModel.youtubeSearchResults.collectAsState()
+                    val playlistLabel = stringResource(R.string.playlist_label)
+                    val normalizedArtistName = remember(name) { normalizeRouteArtistName(name) }
+                    val localArtistSongs = remember(songs, normalizedArtistName) {
+                        songs.filter { normalizeRouteArtistName(it.artist) == normalizedArtistName }
+                    }
+                    val onlineArtistSongs = remember(onlineResults, normalizedArtistName) {
+                        onlineResults
+                            .filter {
+                                it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.SONG &&
+                                    normalizeRouteArtistName(it.artist).let { artist ->
+                                        artist.isNotBlank() && (
+                                            artist == normalizedArtistName ||
+                                            artist.contains(normalizedArtistName) ||
+                                            normalizedArtistName.contains(artist)
+                                        )
+                                    }
+                            }
+                            .map { result ->
+                                com.jagr.fridamusic.domain.model.Song(
+                                    id = result.videoId.hashCode().toLong(),
+                                    title = result.title,
+                                    artist = result.artist,
+                                    data = result.videoId,
+                                    duration = 0L,
+                                    albumId = 0L,
+                                    uri = Uri.parse("https://music.youtube.com/watch?v=${result.videoId}"),
+                                    artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
+                                )
+                            }
+                    }
+                    val localArtistPlaylists = remember(playlists, localArtistSongs, playlistLabel) {
+                        val artistSongIds = localArtistSongs.map { it.id }.toSet()
+                        playlists
+                            .filter { playlist -> playlist.songIds.any { it in artistSongIds } }
+                            .map { playlist ->
+                                com.jagr.fridamusic.domain.model.Song(
+                                    id = playlist.id,
+                                    title = playlist.name,
+                                    artist = playlistLabel,
+                                    data = playlist.id.toString(),
+                                    duration = 0L,
+                                    albumId = 0L,
+                                    uri = Uri.EMPTY,
+                                    artworkUri = Uri.EMPTY
+                                )
+                            }
+                    }
+                    val onlineArtistPlaylists = remember(onlineResults, normalizedArtistName, playlistLabel) {
+                        onlineResults
+                            .filter {
+                                it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.PLAYLIST &&
+                                    normalizeRouteArtistName("${it.title} ${it.artist}").contains(normalizedArtistName)
+                            }
+                            .map { result ->
+                                com.jagr.fridamusic.domain.model.Song(
+                                    id = result.videoId.hashCode().toLong(),
+                                    title = result.title,
+                                    artist = playlistLabel,
+                                    data = result.videoId,
+                                    duration = 0L,
+                                    albumId = 0L,
+                                    uri = Uri.parse("https://www.youtube.com/playlist?list=${result.videoId}"),
+                                    artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
+                                )
+                            }
+                    }
 
                     ArtistScreen(
                         artistName = name,
                         artistImageUrl = if (rawUrl == "none") "" else rawUrl,
-                        popularSongs = artistSongs,
-                        popularReleases = artistPlaylists,
+                        popularSongs = localArtistSongs.ifEmpty { onlineArtistSongs },
+                        popularReleases = localArtistPlaylists.ifEmpty { onlineArtistPlaylists },
                         onBack = { navController.popBackStack() },
                         onPlaySong = { song ->
-                            libraryViewModel.setShuffleMode(true)
-                            libraryViewModel.playYouTubeSong(
-                                com.jagr.fridamusic.data.remote.innertube.YouTubeResult(
-                                    videoId = song.data,
-                                    title = song.title,
-                                    artist = song.artist ?: "",
-                                    thumbnailUrl = song.artworkUri.toString()
-                                )
-                            )
+                            libraryViewModel.playSongFromLibrary(song)
                         }
                     )
                 }
@@ -263,4 +329,15 @@ fun MainScreen() {
             )
         }
     }
+}
+
+private fun normalizeRouteArtistName(value: String): String {
+    val withoutMarks = Normalizer.normalize(value, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+
+    return withoutMarks
+        .lowercase()
+        .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }

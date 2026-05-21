@@ -17,6 +17,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.data.repository.PlaybackHistoryRepository
@@ -39,6 +40,7 @@ import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import java.net.URL
 import java.net.URLEncoder
+import java.text.Normalizer
 import java.util.concurrent.ConcurrentHashMap
 
 enum class RepeatMode { OFF, ALL, ONE }
@@ -84,11 +86,12 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun addToSearchHistory(query: String) {
-        if (query.isBlank()) return
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return
         val current = _searchHistory.value.toMutableList()
-        current.remove(query)
-        current.add(0, query)
-        if (current.size > 10) current.removeAt(current.lastIndex)
+        current.removeAll { it.equals(cleanQuery, ignoreCase = true) }
+        current.add(0, cleanQuery)
+        while (current.size > 30) current.removeAt(current.lastIndex)
 
         _searchHistory.value = current
         settingsManager.searchHistory = current.joinToString("||")
@@ -148,13 +151,31 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     val artistSongs = _youtubeSearchResults.map { results ->
         results.filter { it.type == ResultType.SONG }.map { result ->
-            Song(result.videoId.hashCode().toLong(), result.title, result.artist, result.videoId, 0L, 0L, Uri.parse(""), Uri.parse(result.thumbnailUrl))
+            Song(
+                id = result.videoId.hashCode().toLong(),
+                title = result.title,
+                artist = result.artist,
+                data = result.videoId,
+                duration = 0L,
+                albumId = 0L,
+                uri = Uri.parse("https://music.youtube.com/watch?v=${result.videoId}"),
+                artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
+            )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val artistPlaylists = _youtubeSearchResults.map { results ->
         results.filter { it.type == ResultType.PLAYLIST }.map { result ->
-            Song(result.videoId.hashCode().toLong(), result.title, result.artist, result.videoId, 0L, 0L, Uri.parse(""), Uri.parse(result.thumbnailUrl))
+            Song(
+                id = result.videoId.hashCode().toLong(),
+                title = result.title,
+                artist = result.artist,
+                data = result.videoId,
+                duration = 0L,
+                albumId = 0L,
+                uri = Uri.parse("https://www.youtube.com/playlist?list=${result.videoId}"),
+                artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
+            )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -175,6 +196,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val imageUrlCache = ConcurrentHashMap<String, String>()
     private val audioStreamCache = ConcurrentHashMap<String, String>()
     private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
+    private val searchResultsCache = ConcurrentHashMap<String, List<YouTubeResult>>()
 
     private val notificationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -364,7 +386,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         )
                     }
                 } else {
-                    _errorMessage.value = "No se pudo volver a cargar esta cancion del historial"
+                    _errorMessage.value = getApplication<Application>().getString(R.string.history_reload_failed)
                 }
                 return@launch
             }
@@ -377,7 +399,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             if (localSong != null) {
                 withContext(Dispatchers.Main) { playSong(localSong) }
             } else {
-                _errorMessage.value = "Esta cancion ya no esta disponible en el dispositivo"
+                _errorMessage.value = getApplication<Application>().getString(R.string.song_unavailable)
             }
         }
     }
@@ -395,7 +417,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             _manualQueue.value = playableSongs.drop(1)
             playSongFromLibrary(nextSong)
         } else {
-            _errorMessage.value = "No hay canciones disponibles para reproducir"
+            _errorMessage.value = getApplication<Application>().getString(R.string.no_songs_available)
         }
     }
 
@@ -468,7 +490,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
                 if (realYtId == null) {
                     val ytMatch = YouTube.search("${result.title} ${result.artist} audio").firstOrNull { it.type == ResultType.SONG }
-                    realYtId = ytMatch?.videoId ?: throw Exception("No se encontró versión en YouTube")
+                    realYtId = ytMatch?.videoId
+                        ?: throw Exception(getApplication<Application>().getString(R.string.youtube_version_not_found))
                     deezerToYoutubeMap[result.videoId] = realYtId
                 }
 
@@ -531,11 +554,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         prefetchNextSongInList(result.videoId)
                     }
                 } else {
-                    _errorMessage.value = "No compatible audio streams found"
+                    _errorMessage.value = getApplication<Application>().getString(R.string.no_compatible_audio_streams)
                 }
             } catch (e: Exception) {
                 if (e !is CancellationException) {
-                    _errorMessage.value = "Error extracting audio: ${e.localizedMessage}"
+                    _errorMessage.value = getApplication<Application>().getString(
+                        R.string.audio_extraction_error_format,
+                        e.localizedMessage ?: e.message.orEmpty()
+                    )
                 }
             } finally {
                 withContext(Dispatchers.Main) {
@@ -653,8 +679,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private fun ensureFavoritesPlaylistExists() {
         viewModelScope.launch(Dispatchers.IO) {
             val allPlaylists = playlistDao.getAllPlaylistsOnce()
-            if (allPlaylists.none { it.name == "Me gusta" }) {
-                createPlaylist("Me gusta", "Tus canciones favoritas")
+            if (allPlaylists.none { it.name in favoritePlaylistNames() }) {
+                createPlaylist(
+                    getApplication<Application>().getString(R.string.favorites_playlist_name),
+                    getApplication<Application>().getString(R.string.favorites_playlist_description)
+                )
             }
         }
     }
@@ -663,6 +692,20 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             playlistDao.insertPlaylist(
                 PlaylistEntity(name = name, description = description ?: "", songIds = "", createdAt = System.currentTimeMillis())
+            )
+        }
+    }
+
+    fun createPlaylistWithSong(name: String, description: String? = null, song: Song) {
+        rememberPlaylistSong(song)
+        viewModelScope.launch(Dispatchers.IO) {
+            playlistDao.insertPlaylist(
+                PlaylistEntity(
+                    name = name,
+                    description = description ?: "",
+                    songIds = song.id.toString(),
+                    createdAt = System.currentTimeMillis()
+                )
             )
         }
     }
@@ -836,20 +879,20 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         rememberPlaylistSong(song)
         viewModelScope.launch(Dispatchers.IO) {
             val allPlaylists = playlistDao.getAllPlaylistsOnce()
-            var likePlaylistEntity = allPlaylists.find { it.name == "Me gusta" }
+            var likePlaylistEntity = allPlaylists.find { it.name in favoritePlaylistNames() }
 
             if (likePlaylistEntity == null) {
                 playlistDao.insertPlaylist(
                     PlaylistEntity(
-                        name = "Me gusta",
-                        description = "Tus canciones favoritas",
+                        name = getApplication<Application>().getString(R.string.favorites_playlist_name),
+                        description = getApplication<Application>().getString(R.string.favorites_playlist_description),
                         songIds = "",
                         createdAt = System.currentTimeMillis()
                     )
                 )
                 delay(200)
                 val updatedPlaylists = playlistDao.getAllPlaylistsOnce()
-                likePlaylistEntity = updatedPlaylists.find { it.name == "Me gusta" }
+                likePlaylistEntity = updatedPlaylists.find { it.name in favoritePlaylistNames() }
             }
 
             likePlaylistEntity?.let { entity ->
@@ -875,34 +918,45 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun searchYouTube(query: String) {
-        if (query.isBlank()) return
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) {
+            searchJob?.cancel()
+            _youtubeSearchResults.value = emptyList()
+            _isSearching.value = false
+            return
+        }
+
+        val cacheKey = normalizeSearchText(cleanQuery)
+        searchResultsCache[cacheKey]?.let { cachedResults ->
+            searchJob?.cancel()
+            _youtubeSearchResults.value = cachedResults
+            _isSearching.value = false
+            return
+        }
+
         searchJob?.cancel()
 
         searchJob = viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             try {
-                delay(300)
+                delay(120)
                 if (!isActive) return@launch
 
-                val results = DeezerApi.search(query)
+                val deezerResults = async { DeezerApi.search(cleanQuery) }
+                val youtubeResults = async { YouTube.search(cleanQuery) }
 
-                if (isActive && results.isNotEmpty()) {
+                val results = mergeSearchResults(
+                    query = cleanQuery,
+                    groups = listOf(
+                        deezerResults.await(),
+                        youtubeResults.await()
+                    )
+                )
+
+                if (isActive) {
+                    if (searchResultsCache.size > 24) searchResultsCache.clear()
+                    searchResultsCache[cacheKey] = results
                     _youtubeSearchResults.value = results
-                    addToSearchHistory(query)
-
-                    launch(Dispatchers.IO) {
-                        results.take(5).forEach { deezerResult ->
-                            try {
-                                val ytSearchQuery = "${deezerResult.title} ${deezerResult.artist} audio"
-                                val ytMatch = YouTube.search(ytSearchQuery).firstOrNull { it.type == ResultType.SONG }
-
-                                if (ytMatch != null) {
-                                    deezerToYoutubeMap[deezerResult.videoId] = ytMatch.videoId
-                                    prefetchYouTubeAudio(ytMatch.videoId)
-                                }
-                            } catch (e: Exception) {}
-                        }
-                    }
                 }
             } catch (e: Exception) {
                 if (e !is CancellationException) {
@@ -914,6 +968,117 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 }
             }
         }
+    }
+
+    private data class RankedSearchResult(
+        val result: YouTubeResult,
+        val score: Int,
+        val order: Int
+    )
+
+    private fun mergeSearchResults(
+        query: String,
+        groups: List<List<YouTubeResult>>
+    ): List<YouTubeResult> {
+        val rankedByKey = LinkedHashMap<String, RankedSearchResult>()
+
+        groups.flatten().forEachIndexed { index, result ->
+            val key = "${result.type}:${result.videoId.ifBlank { "${result.title}|${result.artist}" }}"
+            val ranked = RankedSearchResult(
+                result = result,
+                score = remoteSearchScore(query, result) - index,
+                order = index
+            )
+            val existing = rankedByKey[key]
+            if (existing == null || ranked.score > existing.score) {
+                rankedByKey[key] = ranked
+            }
+        }
+
+        return rankedByKey.values
+            .sortedWith(
+                compareByDescending<RankedSearchResult> { it.score }
+                    .thenBy { stableSearchRank(query, it.result.videoId.ifBlank { it.result.title }) }
+                    .thenBy { it.order }
+            )
+            .map { it.result }
+            .let { ranked ->
+                val perTypeCounts = mutableMapOf<ResultType, Int>()
+                ranked.filter { result ->
+                    val count = perTypeCounts[result.type] ?: 0
+                    if (count >= 20) {
+                        false
+                    } else {
+                        perTypeCounts[result.type] = count + 1
+                        true
+                    }
+                }.take(48)
+            }
+    }
+
+    private fun remoteSearchScore(query: String, result: YouTubeResult): Int {
+        val normalizedQuery = normalizeSearchText(query)
+        val queryTokens = expandedSearchTokens(normalizedQuery)
+        val title = normalizeSearchText(result.title)
+        val artist = normalizeSearchText(result.artist)
+        val combined = "$title $artist"
+
+        var score = when (result.type) {
+            ResultType.SONG -> 12
+            ResultType.ARTIST -> 10
+            ResultType.PLAYLIST -> 9
+            ResultType.ALBUM -> 8
+        }
+
+        if (title == normalizedQuery || artist == normalizedQuery) score += 70
+        if (title.contains(normalizedQuery) || artist.contains(normalizedQuery)) score += 42
+        queryTokens.forEach { token ->
+            if (title.startsWith(token)) score += 18
+            if (title.contains(token)) score += 14
+            if (artist.startsWith(token)) score += 16
+            if (artist.contains(token)) score += 12
+            if (combined.contains(token)) score += 4
+        }
+
+        if (result.type == ResultType.PLAYLIST && "playlist" in combined) score += 6
+        if (result.type == ResultType.ARTIST && queryTokens.any { artist.contains(it) || title.contains(it) }) score += 8
+
+        return score
+    }
+
+    private fun expandedSearchTokens(value: String): Set<String> {
+        val tokens = value.split(" ").filter { it.length > 1 }.toMutableSet()
+        if ("brazilian" in tokens) tokens += setOf("brasil", "brasileiro", "brasileira")
+        if ("brasilian" in tokens) tokens += setOf("brasil", "brazilian")
+        if ("slowed" in tokens) tokens += setOf("slow", "reverb")
+        if ("nightcore" in tokens) tokens += setOf("sped", "speed")
+        if ("phonk" in tokens) tokens += setOf("drift", "phonky")
+        return tokens
+    }
+
+    private fun stableSearchRank(query: String, key: String): Int =
+        kotlin.math.abs("$query|$key".hashCode())
+
+    private fun normalizeSearchText(value: String?): String {
+        val withoutMarks = Normalizer.normalize(value.orEmpty(), Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+
+        return withoutMarks
+            .lowercase()
+            .replace(Regex("(?i)\\.(mp3|m4a|wav|flac|ogg)$"), " ")
+            .replace("_", " ")
+            .replace("-", " ")
+            .replace(Regex("\\(.*?\\)|\\[.*?]"), " ")
+            .replace(Regex("(?i)\\b(feat|ft|featuring)\\b\\.?"), " ")
+            .replace(Regex("(?i)\\b(official|video|audio|lyrics|lyric|visualizer|remaster|remastered|explicit|clean|edit)\\b"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun favoritePlaylistNames(): Set<String> {
+        val localizedName = getApplication<Application>().getString(R.string.favorites_playlist_name)
+        return setOf(localizedName, "Me gusta", "Favorites")
     }
 
     fun setShuffleMode(enabled: Boolean) { isShuffleMode.value = enabled }

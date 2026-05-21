@@ -49,9 +49,13 @@
     <string name="all_filter">All</string>
     <string name="songs_filter">Songs</string>
     <string name="artists_filter">Artists</string>
+    <string name="albums_filter">Albums</string>
     <string name="playlists_filter">Playlists</string>
     <string name="search_placeholder">What do you want to listen to?</string>
     <string name="recent_searches">Recent Searches</string>
+    <string name="search_history">Search history</string>
+    <string name="you_may_also_like">You may also like</string>
+    <string name="fill_search">Fill search field</string>
     <string name="clear_all">Clear All</string>
     <string name="results">Results</string>
     <string name="in_your_library">In your library</string>
@@ -61,7 +65,29 @@
     <string name="yt_label">YT</string>
     <string name="playlist_format">Playlist • %1$s</string>
     <string name="song_format">Song • %1$s</string>
+    <string name="album_format">Album • %1$s</string>
     <string name="loading_track">Loading track&#8230;</string>
+    <string name="search_start_title">Search your music</string>
+    <string name="search_start_subtitle">Find songs, artists, playlists, and saved music from your library.</string>
+    <string name="no_search_results">No results found</string>
+    <string name="try_another_search">Try another search for \"%1$s\".</string>
+    <string name="library_source">LIB</string>
+    <string name="online_playlist_source">Playlist on YouTube</string>
+    <string name="open_artist">Open artist</string>
+    <string name="details">Details</string>
+    <string name="back_to_top">Back to top</string>
+    <string name="added_to_playlist_format">Added to %1$s</string>
+    <string name="added_to_favorites">Added to favorites</string>
+    <string name="removed_from_favorites">Removed from favorites</string>
+    <string name="added_to_queue_feedback">Added to queue</string>
+    <string name="play_next_feedback">Will play next</string>
+    <string name="album_label">Album</string>
+    <string name="history_reload_failed">Could not reload this song from history</string>
+    <string name="song_unavailable">This song is no longer available on this device</string>
+    <string name="no_songs_available">No songs available to play</string>
+    <string name="youtube_version_not_found">No YouTube version found</string>
+    <string name="no_compatible_audio_streams">No compatible audio streams found</string>
+    <string name="audio_extraction_error_format">Error extracting audio: %1$s</string>
 
     <!-- Library Screen -->
     <string name="library">Library</string>
