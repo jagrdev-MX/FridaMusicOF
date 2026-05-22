@@ -159,6 +159,21 @@ Las contribuciones son bienvenidas. Puedes abrir un **issue** para reportes/mejo
 
 ---
 
+
+## License
+Apache License 2.0
+
+## Branding Notice
+FridaMusic TM and Frida Labs TM branding, artwork, assets, visual identity and official releases are reserved.
+
+## Open Source
+Forks and contributions are allowed under Apache 2.0, but official branding and identity remain property of the project ecosystem.
+
+## Organization
+FridaMusic TM is part of the Frida Labs TM ecosystem.
+
+---
+
 <p align="center">
 Hecho con ❤️ para la comunidad de FridaMusic.
 </p>
