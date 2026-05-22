@@ -34,7 +34,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -509,44 +511,34 @@ private fun QueueBottomSheet(
                 .navigationBarsPadding()
                 .padding(horizontal = 18.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column {
-                    Text(stringResource(R.string.queue), style = LiquidTypography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                    queueState.sourceName?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (queueState.upNext.isNotEmpty() || queueState.autoplay.isNotEmpty()) {
-                        TextButton(onClick = viewModel::clearManualQueue) {
-                            Text(stringResource(R.string.clear_queue))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(stringResource(R.string.queue), style = LiquidTypography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                        queueState.sourceName?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(
-                                if (isAutoplayEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                            )
-                            .padding(start = 10.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.AllInclusive,
-                            contentDescription = null,
-                            tint = if (isAutoplayEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Switch(
-                            checked = isAutoplayEnabled,
-                            onCheckedChange = viewModel::toggleAutoplay,
-                            modifier = Modifier.scale(0.72f)
-                        )
+                    SmartAutoplayControl(
+                        isEnabled = isAutoplayEnabled,
+                        isLoading = queueState.isAutoplayLoading,
+                        suggestionCount = queueState.autoplay.size,
+                        onToggle = viewModel::toggleAutoplay
+                    )
+                }
+                if (queueState.upNext.isNotEmpty() || queueState.autoplay.isNotEmpty()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        val clearLabel = if (queueState.upNext.isNotEmpty()) R.string.clear_queue else R.string.remove_suggestions
+                        TextButton(onClick = viewModel::clearManualQueue) {
+                            Text(stringResource(clearLabel))
+                        }
                     }
                 }
             }
@@ -610,23 +602,31 @@ private fun QueueBottomSheet(
                     }
                 }
 
-                if (isAutoplayEnabled || queueState.autoplay.isNotEmpty() || queueState.isAutoplayLoading || queueState.autoplayError != null) {
-                    item { QueueSectionTitle(stringResource(R.string.autoplay)) }
-                    if (queueState.isAutoplayLoading) {
+                item { QueueSectionTitle(stringResource(R.string.autoplay_suggestions)) }
+                when {
+                    !isAutoplayEnabled -> {
+                        item { QueueEmptyState(text = stringResource(R.string.queue_autoplay_off), loading = false) }
+                    }
+                    queueState.isAutoplayLoading -> {
                         item { QueueEmptyState(text = stringResource(R.string.queue_autoplay_loading), loading = true) }
                     }
-                    queueState.autoplayError?.let { error ->
-                        item { QueueEmptyState(text = error, loading = false, isError = true) }
+                    queueState.autoplayError != null -> {
+                        item { QueueEmptyState(text = queueState.autoplayError.orEmpty(), loading = false, isError = true) }
                     }
-                    itemsIndexed(queueState.autoplay, key = { index, item -> "autoplay_${index}_${item.song.id}" }) { index, item ->
-                        QueueSongRow(
-                            item = item,
-                            imageUrl = queueArtworkUrl(item.song, null),
-                            isCurrent = false,
-                            isMuted = false,
-                            onClick = { viewModel.playAutoplayItem(index) },
-                            onMore = { actionTarget = QueueActionTarget(item, QueueSection.AUTOPLAY, index, queueState.autoplay.size) }
-                        )
+                    queueState.autoplay.isEmpty() -> {
+                        item { QueueEmptyState(text = stringResource(R.string.queue_autoplay_empty), loading = false) }
+                    }
+                    else -> {
+                        itemsIndexed(queueState.autoplay, key = { index, item -> "autoplay_${index}_${item.song.id}" }) { index, item ->
+                            QueueSongRow(
+                                item = item,
+                                imageUrl = queueArtworkUrl(item.song, null),
+                                isCurrent = false,
+                                isMuted = false,
+                                onClick = { viewModel.playAutoplayItem(index) },
+                                onMore = { actionTarget = QueueActionTarget(item, QueueSection.AUTOPLAY, index, queueState.autoplay.size) }
+                            )
+                        }
                     }
                 }
             }
@@ -693,6 +693,120 @@ private fun QueueSectionTitle(text: String) {
         letterSpacing = 1.sp,
         modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
     )
+}
+
+@Composable
+private fun SmartAutoplayControl(
+    isEnabled: Boolean,
+    isLoading: Boolean,
+    suggestionCount: Int,
+    onToggle: (Boolean) -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
+    val containerColor by animateColorAsState(
+        targetValue = if (isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.20f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f),
+        animationSpec = tween(durationMillis = 220),
+        label = "autoplayContainer"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.46f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+        animationSpec = tween(durationMillis = 220),
+        label = "autoplayBorder"
+    )
+    val iconColor by animateColorAsState(
+        targetValue = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 220),
+        label = "autoplayIcon"
+    )
+    val auraAlpha by animateFloatAsState(
+        targetValue = if (isEnabled) 0.26f else 0.06f,
+        animationSpec = tween(durationMillis = 260),
+        label = "autoplayAura"
+    )
+    val knobOffset by animateDpAsState(
+        targetValue = if (isEnabled) 15.dp else 0.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "autoplayKnob"
+    )
+    val label = when {
+        isLoading -> stringResource(R.string.smart_autoplay_loading)
+        isEnabled -> stringResource(R.string.suggestions_on)
+        else -> stringResource(R.string.smart_autoplay)
+    }
+
+    Box(
+        modifier = Modifier
+            .widthIn(min = 138.dp, max = 196.dp)
+            .clip(RoundedCornerShape(50))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = auraAlpha),
+                        MaterialTheme.colorScheme.secondary.copy(alpha = auraAlpha * 0.72f),
+                        containerColor
+                    )
+                )
+            )
+            .border(1.dp, borderColor, RoundedCornerShape(50))
+            .clickable {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onToggle(!isEnabled)
+            }
+            .padding(start = 12.dp, end = 9.dp, top = 8.dp, bottom = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(
+                Icons.Default.AllInclusive,
+                contentDescription = label,
+                tint = iconColor,
+                modifier = Modifier.size(17.dp)
+            )
+            Text(
+                text = label,
+                color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else if (isEnabled && suggestionCount > 0) {
+                Text(
+                    text = suggestionCount.coerceAtMost(99).toString(),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .width(30.dp)
+                        .height(16.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 0.18f else 0.10f))
+                        .padding(2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .offset(x = knobOffset)
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(iconColor)
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

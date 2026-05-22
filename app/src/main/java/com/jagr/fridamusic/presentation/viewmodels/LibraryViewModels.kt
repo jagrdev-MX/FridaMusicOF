@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -35,6 +36,7 @@ import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.QueueItem
 import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.domain.recommendation.AutoplayDiversity
 import com.jagr.fridamusic.presentation.service.MusicService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -49,6 +51,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 enum class RepeatMode { OFF, ALL, ONE }
 enum class AppTheme(val displayName: String) { SYSTEM("System Default"), LIGHT("Light"), DARK("Dark") }
+
+private const val AUTOPLAY_TARGET_SIZE = 12
+private const val AUTOPLAY_FAST_READY_SIZE = 8
+private const val AUTOPLAY_REMOTE_QUERY_LIMIT = 1
+private const val AUTOPLAY_REMOTE_TIMEOUT_MS = 3_000L
+private const val AUTOPLAY_CACHE_LIMIT = 18
+private const val AUTOPLAY_LOG_TAG = "FridaAutoplay"
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
@@ -91,6 +100,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun toggleAutoplay(enabled: Boolean) {
         isAutoPlayEnabled.value = enabled
         settingsManager.autoplayEnabled = enabled
+        Log.i(AUTOPLAY_LOG_TAG, "toggle enabled=$enabled current=${_queueState.value.current?.song?.title.orEmpty()}")
         if (enabled) {
             refreshAutoplayRecommendations(force = true)
         } else {
@@ -215,10 +225,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var extractionJob: Job? = null
     private var searchJob: Job? = null
     private var recommendationJob: Job? = null
+    private var profileWarmupJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
     private val audioStreamCache = ConcurrentHashMap<String, String>()
     private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
     private val searchResultsCache = ConcurrentHashMap<String, List<YouTubeResult>>()
+    private val autoplayRecommendationCache = ConcurrentHashMap<String, List<QueueItem>>()
+    private val recommendationProfileCache = ConcurrentHashMap<String, SongRecommendationProfile>()
 
     private val notificationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -332,6 +345,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         current = QueueItem(savedSong, QueueSource.RESTORED),
                         source = QueueSource.RESTORED
                     )
+                _queueState.value = sanitizeQueueState(_queueState.value)
+                persistQueueState()
 
                 exoPlayer?.apply {
                     val uriString = savedSong.uri.toString()
@@ -453,18 +468,39 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         } else {
             distinctSongs.drop(startIndex) + distinctSongs.take(startIndex)
         }
+        val queueSongs = diversifyQueueSongs(ordered, source)
 
-        val current = queueItem(ordered.firstOrNull() ?: selectedSong, source, reason = sourceName)
+        val current = queueItem(queueSongs.firstOrNull() ?: selectedSong, source, reason = sourceName)
         _queueState.value = PlaybackQueueState(
             current = current,
             previous = emptyList(),
-            upNext = ordered.drop(1).map { queueItem(it, source, reason = sourceName) },
+            upNext = queueSongs.drop(1).map { queueItem(it, source, reason = sourceName) },
             source = source,
             sourceName = sourceName
         )
         persistQueueState()
         playQueueItem(current)
     }
+
+    private fun diversifyQueueSongs(songs: List<Song>, source: QueueSource): List<Song> {
+        if (!shouldDiversifyQueueSource(source)) return songs
+        return AutoplayDiversity.diversifySequence(songs)
+    }
+
+    private fun sanitizeQueueState(state: PlaybackQueueState): PlaybackQueueState {
+        if (!shouldDiversifyQueueSource(state.source) || state.upNext.size < 2) return state
+        val current = state.current ?: return state
+        val orderedItems = listOf(current) + state.upNext
+        val itemByKey = orderedItems.associateBy { songIdentityKey(it.song) }
+        val diversifiedUpNext = AutoplayDiversity.diversifySequence(orderedItems.map { it.song })
+            .drop(1)
+            .mapNotNull { itemByKey[songIdentityKey(it)] }
+
+        return state.copy(upNext = diversifiedUpNext)
+    }
+
+    private fun shouldDiversifyQueueSource(source: QueueSource): Boolean =
+        source != QueueSource.PLAYLIST
 
     private fun playQueueItem(item: QueueItem) {
         if (item.song.requiresRemoteExtraction()) {
@@ -543,7 +579,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private fun maybeRefreshAutoplayRecommendations() {
         if (!isAutoPlayEnabled.value) return
         val state = _queueState.value
-        if (state.upNext.size + state.autoplay.size >= 6 || state.isAutoplayLoading) return
+        if (state.autoplay.size >= AUTOPLAY_FAST_READY_SIZE || state.isAutoplayLoading) return
         refreshAutoplayRecommendations(force = false)
     }
 
@@ -553,18 +589,94 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     ) {
         if (!isAutoPlayEnabled.value) return
         val seed = _queueState.value.current?.song ?: _currentSong.value ?: return
-        if (!force && _queueState.value.autoplay.isNotEmpty()) return
+        val initialState = _queueState.value
+        if (!force && initialState.autoplay.size >= AUTOPLAY_FAST_READY_SIZE) return
+        val cacheKey = autoplayCacheKey(seed)
+        val cachedRecommendations = autoplayRecommendationCache[cacheKey]
+            ?.let { filterAutoplayForState(it, seed, initialState) }
+            .orEmpty()
+        Log.i(
+            AUTOPLAY_LOG_TAG,
+            "refresh force=$force playFirst=$playFirstWhenReady seed=${seed.title} upNext=${initialState.upNext.size} autoplay=${initialState.autoplay.size} cached=${cachedRecommendations.size}"
+        )
 
         recommendationJob?.cancel()
         recommendationJob = viewModelScope.launch(Dispatchers.IO) {
-            _queueState.value = _queueState.value.copy(isAutoplayLoading = true, autoplayError = null)
             try {
-                val recommendations = generateAutoplayRecommendations(seed, _queueState.value)
+                if (cachedRecommendations.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        if (!isCurrentAutoplaySeed(seed)) return@withContext
+                        val nextAutoplay = mergeAutoplayRecommendations(
+                            existing = if (force) emptyList() else _queueState.value.autoplay,
+                            incoming = cachedRecommendations,
+                            seed = seed
+                        )
+                        _queueState.value = _queueState.value.copy(
+                            autoplay = nextAutoplay,
+                            isAutoplayLoading = nextAutoplay.size < AUTOPLAY_FAST_READY_SIZE,
+                            autoplayError = null
+                        )
+                        persistQueueState()
+                        if (playFirstWhenReady) {
+                            skipToNext()
+                        }
+                    }
+                    if (_queueState.value.autoplay.size >= AUTOPLAY_FAST_READY_SIZE || playFirstWhenReady) return@launch
+                } else {
+                    withContext(Dispatchers.Main) {
+                        if (!isCurrentAutoplaySeed(seed)) return@withContext
+                        _queueState.value = _queueState.value.copy(isAutoplayLoading = true, autoplayError = null)
+                    }
+                }
+
+                val instantRecommendations = generateAutoplayRecommendations(
+                    seed = seed,
+                    state = initialState,
+                    allowRemote = false
+                )
+
+                if (instantRecommendations.isNotEmpty() && cachedRecommendations.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        if (!isCurrentAutoplaySeed(seed)) return@withContext
+                        val nextAutoplay = mergeAutoplayRecommendations(
+                            existing = if (force) emptyList() else _queueState.value.autoplay,
+                            incoming = instantRecommendations,
+                            seed = seed
+                        )
+                        _queueState.value = _queueState.value.copy(
+                            autoplay = nextAutoplay,
+                            isAutoplayLoading = nextAutoplay.size < AUTOPLAY_FAST_READY_SIZE,
+                            autoplayError = null
+                        )
+                        persistQueueState()
+                        if (playFirstWhenReady) {
+                            skipToNext()
+                        }
+                    }
+                    if (_queueState.value.autoplay.size >= AUTOPLAY_FAST_READY_SIZE || playFirstWhenReady) {
+                        autoplayRecommendationCache[cacheKey] = instantRecommendations
+                        trimAutoplayRecommendationCache()
+                        return@launch
+                    }
+                }
+
+                val recommendations = generateAutoplayRecommendations(
+                    seed = seed,
+                    state = initialState,
+                    allowRemote = true
+                ).ifEmpty { cachedRecommendations.ifEmpty { instantRecommendations } }
+
                 withContext(Dispatchers.Main) {
+                    if (!isCurrentAutoplaySeed(seed)) return@withContext
+                    val nextAutoplay = mergeAutoplayRecommendations(
+                        existing = if (force) emptyList() else _queueState.value.autoplay,
+                        incoming = recommendations,
+                        seed = seed
+                    )
                     _queueState.value = _queueState.value.copy(
-                        autoplay = recommendations,
+                        autoplay = nextAutoplay,
                         isAutoplayLoading = false,
-                        autoplayError = if (recommendations.isEmpty()) {
+                        autoplayError = if (nextAutoplay.isEmpty()) {
                             getApplication<Application>().getString(R.string.queue_autoplay_empty)
                         } else {
                             null
@@ -572,13 +684,20 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     )
                     persistQueueState()
 
-                    if (playFirstWhenReady && recommendations.isNotEmpty()) {
+                    if (playFirstWhenReady && nextAutoplay.isNotEmpty()) {
                         skipToNext()
                     }
                 }
+                if (recommendations.isNotEmpty()) {
+                    autoplayRecommendationCache[cacheKey] = recommendations
+                    trimAutoplayRecommendationCache()
+                }
+                Log.i(AUTOPLAY_LOG_TAG, "refresh complete seed=${seed.title} recommendations=${recommendations.size}")
             } catch (e: Exception) {
                 if (e !is CancellationException) {
+                    Log.w(AUTOPLAY_LOG_TAG, "refresh failed seed=${seed.title}", e)
                     withContext(Dispatchers.Main) {
+                        if (!isCurrentAutoplaySeed(seed)) return@withContext
                         _queueState.value = _queueState.value.copy(
                             isAutoplayLoading = false,
                             autoplayError = getApplication<Application>().getString(R.string.queue_autoplay_error)
@@ -592,68 +711,209 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private data class RecommendationCandidate(
         val song: Song,
+        val profile: SongRecommendationProfile,
         val score: Int,
         val reason: String
     )
 
-    private suspend fun generateAutoplayRecommendations(
+    private data class RecommendationContext(
+        val tokens: Set<String>,
+        val styles: Set<String>,
+        val artists: Set<String>
+    )
+
+    private data class SongRecommendationProfile(
+        val identityKey: String,
+        val metadataKey: String,
+        val titleBase: String,
+        val variants: Set<String>,
+        val styles: Set<String>,
+        val tokens: Set<String>,
+        val artist: String,
+        val primaryArtist: String,
+        val album: String
+    )
+
+    private fun isCurrentAutoplaySeed(seed: Song): Boolean {
+        val currentSeed = _queueState.value.current?.song ?: _currentSong.value
+        return sameSong(currentSeed, seed)
+    }
+
+    private fun autoplayCacheKey(seed: Song): String =
+        songProfile(seed).let { profile ->
+            listOf(
+                profile.metadataKey,
+                profile.titleBase,
+                profile.styles.sorted().joinToString(","),
+                profile.variants.sorted().joinToString(",")
+            ).joinToString("|")
+        }
+
+    private fun filterAutoplayForState(
+        cached: List<QueueItem>,
         seed: Song,
         state: PlaybackQueueState
+    ): List<QueueItem> {
+        val excluded = (state.previous.takeLast(20) + listOfNotNull(state.current) + state.upNext.take(AUTOPLAY_FAST_READY_SIZE) + state.autoplay)
+            .map { songIdentityKey(it.song) }
+            .toSet()
+        val candidates = cached
+            .filterNot { item -> songIdentityKey(item.song) in excluded || sameSong(seed, item.song) }
+            .mapIndexed { index, item ->
+                RecommendationCandidate(
+                    song = item.song,
+                    profile = songProfile(item.song),
+                    score = AUTOPLAY_TARGET_SIZE - index,
+                    reason = item.reason ?: getApplication<Application>().getString(R.string.autoplay)
+                )
+            }
+
+        return selectDiverseRecommendations(candidates, seed)
+            .map { queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason) }
+    }
+
+    private fun mergeAutoplayRecommendations(
+        existing: List<QueueItem>,
+        incoming: List<QueueItem>,
+        seed: Song
+    ): List<QueueItem> {
+        val seen = mutableSetOf<String>()
+        val merged = buildList {
+            (existing + incoming).forEach { item ->
+                if (seen.add(songIdentityKey(item.song)) && !sameSong(seed, item.song)) add(item)
+            }
+        }
+        val candidates = merged.mapIndexed { index, item ->
+            RecommendationCandidate(
+                song = item.song,
+                profile = songProfile(item.song),
+                score = AUTOPLAY_TARGET_SIZE * 2 - index,
+                reason = item.reason ?: getApplication<Application>().getString(R.string.autoplay)
+            )
+        }
+
+        return selectDiverseRecommendations(candidates, seed)
+            .map { queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason) }
+    }
+
+    private fun trimAutoplayRecommendationCache() {
+        if (autoplayRecommendationCache.size <= AUTOPLAY_CACHE_LIMIT) return
+        autoplayRecommendationCache.keys.take(autoplayRecommendationCache.size - AUTOPLAY_CACHE_LIMIT).forEach {
+            autoplayRecommendationCache.remove(it)
+        }
+    }
+
+    private suspend fun generateAutoplayRecommendations(
+        seed: Song,
+        state: PlaybackQueueState,
+        allowRemote: Boolean
     ): List<QueueItem> = withContext(Dispatchers.IO) {
-        val excluded = (state.previous.takeLast(20) + listOfNotNull(state.current) + state.upNext + state.autoplay)
+        val generateStartedAt = System.currentTimeMillis()
+        Log.i(AUTOPLAY_LOG_TAG, "generate start allowRemote=$allowRemote seed=${seed.title} source=${state.source} upNext=${state.upNext.size}")
+        val seedProfile = songProfile(seed)
+        val immediateUpNext = state.upNext.take(AUTOPLAY_FAST_READY_SIZE)
+        val excludedContext = state.previous.takeLast(20) + listOfNotNull(state.current) + immediateUpNext + state.autoplay
+        val activeBaseContext = state.previous.takeLast(8) + immediateUpNext + state.autoplay
+        val excluded = excludedContext
             .map { songIdentityKey(it.song) }
             .toMutableSet()
-        val historyCounts = _fullHistory.value.groupingBy { metadataIdentity(it.title, it.artist) }.eachCount()
+        val localSongs = _songs.value
+        val context = recommendationContext(state)
+        val autoplayHistory = _fullHistory.value.take(300)
+        val historyCounts = autoplayHistory.groupingBy { metadataIdentity(it.title, it.artist) }.eachCount()
+        val recentMetadataKeys = autoplayHistory.take(12).map { metadataIdentity(it.title, it.artist) }.toSet()
+        val recentBaseCounts = autoplayHistory
+            .take(24)
+            .map { titleBaseKey(it.title) }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+        val activeBaseCounts = activeBaseContext
+            .map { songProfile(it.song).titleBase }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
         val candidates = LinkedHashMap<String, RecommendationCandidate>()
 
-        fun addCandidate(song: Song, baseScore: Int, reason: String) {
-            val key = songIdentityKey(song)
-            if (key in excluded || sameSong(seed, song)) return
-            val score = recommendationScore(seed, song, historyCounts) + baseScore
-            if (score < 24) return
+        fun isSeedProfile(profile: SongRecommendationProfile): Boolean =
+            profile.identityKey == seedProfile.identityKey || profile.metadataKey == seedProfile.metadataKey
+
+        fun isContextMatch(profile: SongRecommendationProfile): Boolean {
+            if (profile.styles.intersect(seedProfile.styles).isNotEmpty()) return true
+            if (profile.styles.intersect(context.styles).isNotEmpty()) return true
+            if (profile.primaryArtist.isNotBlank() && profile.primaryArtist == seedProfile.primaryArtist) return true
+            if (profile.primaryArtist.isNotBlank() && profile.primaryArtist in context.artists) return true
+            if (profile.tokens.intersect(seedProfile.tokens).isNotEmpty()) return true
+            if (profile.tokens.intersect(context.tokens).size >= 2) return true
+            if (profile.metadataKey in historyCounts) return true
+            return false
+        }
+
+        fun addCandidate(song: Song, baseScore: Int, reason: String? = null, requireContextMatch: Boolean = false) {
+            val profile = songProfile(song)
+            val key = profile.identityKey
+            if (key in excluded || isSeedProfile(profile)) return
+            if (requireContextMatch && !isContextMatch(profile)) return
+            val score = recommendationScore(
+                seed = seedProfile,
+                candidate = profile,
+                historyCounts = historyCounts,
+                recentMetadataKeys = recentMetadataKeys,
+                recentBaseCounts = recentBaseCounts,
+                activeBaseCounts = activeBaseCounts,
+                context = context
+            ) + baseScore
+            if (score < 22) return
             val existing = candidates[key]
             if (existing == null || score > existing.score) {
-                candidates[key] = RecommendationCandidate(song, score, reason)
+                candidates[key] = RecommendationCandidate(
+                    song = song,
+                    profile = profile,
+                    score = score,
+                    reason = reason ?: recommendationReason(seed, song)
+                )
             }
         }
 
-        _songs.value.forEach { song ->
-            addCandidate(song, 0, recommendationReason(seed, song))
+        localSongs.forEach { song ->
+            addCandidate(song, 10, requireContextMatch = true)
         }
 
         _youtubeSearchResults.value
             .filter { it.type == ResultType.SONG }
             .forEachIndexed { index, result ->
-                addCandidate(resultToSong(result), (12 - index).coerceAtLeast(0), recommendationReason(seed, resultToSong(result)))
+                val song = resultToSong(result)
+                addCandidate(song, (12 - index).coerceAtLeast(0))
             }
 
-        if (candidates.size < 12) {
-            recommendationQueries(seed).forEach { query ->
-                val cacheKey = normalizeSearchText(query)
-                val results = searchResultsCache[cacheKey] ?: run {
-                    val merged = mergeSearchResults(
-                        query = query,
-                        groups = listOf(
-                            DeezerApi.search(query),
-                            YouTube.search(query)
-                        )
-                    )
-                    if (searchResultsCache.size > 24) searchResultsCache.clear()
-                    searchResultsCache[cacheKey] = merged
-                    merged
+        val fastSelected = selectDiverseRecommendations(candidates.values.toList(), seed)
+        if (fastSelected.size >= AUTOPLAY_FAST_READY_SIZE || (!allowRemote && fastSelected.isNotEmpty())) {
+            Log.i(
+                AUTOPLAY_LOG_TAG,
+                "generate fast allowRemote=$allowRemote candidates=${candidates.size} selected=${fastSelected.size} took=${System.currentTimeMillis() - generateStartedAt}ms seed=${seed.title}"
+            )
+            return@withContext fastSelected.map {
+                queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason)
+            }
+        }
+
+        if (allowRemote && fastSelected.size < AUTOPLAY_FAST_READY_SIZE) {
+            recommendationQueries(seed)
+                .take(AUTOPLAY_REMOTE_QUERY_LIMIT)
+                .forEach { query ->
+                    val results = cachedRecommendationSearch(query)
+                    Log.i(AUTOPLAY_LOG_TAG, "remote query='$query' results=${results.size}")
+                    results
+                        .filter { it.type == ResultType.SONG }
+                        .take(10)
+                        .forEachIndexed { index, result ->
+                            addCandidate(
+                                song = resultToSong(result),
+                                baseScore = (22 - index).coerceAtLeast(4),
+                                reason = query
+                            )
+                        }
                 }
-
-                results
-                    .filter { it.type == ResultType.SONG }
-                    .take(10)
-                    .forEachIndexed { index, result ->
-                        addCandidate(
-                            song = resultToSong(result),
-                            baseScore = (22 - index).coerceAtLeast(4),
-                            reason = query
-                        )
-                    }
-            }
         }
 
         val selected = selectDiverseRecommendations(candidates.values.toList(), seed)
@@ -663,68 +923,201 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             }
         }
 
-        _songs.value
-            .filterNot { songIdentityKey(it) in excluded || sameSong(seed, it) }
-            .sortedBy { stableSearchRank(seed.title, songIdentityKey(it)) }
-            .take(8)
-            .map { queueItem(it, QueueSource.AUTOPLAY, reason = getApplication<Application>().getString(R.string.from_your_library)) }
+        val libraryReason = getApplication<Application>().getString(R.string.from_your_library)
+        val libraryFallback = localSongs
+            .mapNotNull {
+                val profile = songProfile(it)
+                if (profile.identityKey in excluded || isSeedProfile(profile)) return@mapNotNull null
+                RecommendationCandidate(
+                    song = it,
+                    profile = profile,
+                    score = recommendationScore(
+                        seed = seedProfile,
+                        candidate = profile,
+                        historyCounts = historyCounts,
+                        recentMetadataKeys = recentMetadataKeys,
+                        recentBaseCounts = recentBaseCounts,
+                        activeBaseCounts = activeBaseCounts,
+                        context = context
+                    ) + 10,
+                    reason = libraryReason
+                )
+            }
+            .filter { it.score >= 12 }
+
+        val fallbackSelected = selectDiverseRecommendations(libraryFallback, seed)
+        Log.i(AUTOPLAY_LOG_TAG, "generate fallback allowRemote=$allowRemote candidates=${libraryFallback.size} selected=${fallbackSelected.size} seed=${seed.title}")
+        fallbackSelected
+            .take(AUTOPLAY_FAST_READY_SIZE)
+            .map { queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason) }
+    }
+
+    private fun recommendationContext(state: PlaybackQueueState): RecommendationContext {
+        val contextSongs = (
+            listOfNotNull(state.current?.song) +
+                state.previous.takeLast(8).map { it.song } +
+                state.upNext.take(40).map { it.song }
+            )
+        val contextProfiles = contextSongs.map(::songProfile)
+        val sourceTokens = expandedSearchTokens(normalizeSearchText(state.sourceName.orEmpty()))
+        return RecommendationContext(
+            tokens = contextProfiles.flatMap { it.tokens }.toSet() + sourceTokens,
+            styles = contextProfiles.flatMap { it.styles }.toSet() + AutoplayDiversity.styleTokens(state.sourceName.orEmpty()),
+            artists = contextProfiles.map { it.primaryArtist }.filter { it.isNotBlank() }.toSet()
+        )
+    }
+
+    private fun songProfile(song: Song): SongRecommendationProfile {
+        val key = songIdentityKey(song)
+        recommendationProfileCache[key]?.let { return it }
+        val profile = SongRecommendationProfile(
+            identityKey = key,
+            metadataKey = metadataIdentity(song.title, song.artist),
+            titleBase = AutoplayDiversity.baseTitleKey(song),
+            variants = AutoplayDiversity.variantTokens(song),
+            styles = AutoplayDiversity.styleTokens(song),
+            tokens = expandedSearchTokens(normalizeSearchText("${song.title} ${song.artist} ${song.album}")),
+            artist = normalizeSearchText(song.artist),
+            primaryArtist = primaryArtistName(song.artist)?.let(::normalizeSearchText).orEmpty(),
+            album = normalizeSearchText(song.album)
+        )
+        if (recommendationProfileCache.size > 1_200) recommendationProfileCache.clear()
+        recommendationProfileCache[key] = profile
+        return profile
+    }
+
+    private suspend fun cachedRecommendationSearch(query: String): List<YouTubeResult> = withContext(Dispatchers.IO) {
+        val cacheKey = normalizeSearchText(query)
+        searchResultsCache[cacheKey]?.let { return@withContext it }
+
+        val merged = withTimeoutOrNull(AUTOPLAY_REMOTE_TIMEOUT_MS) {
+            supervisorScope {
+                val deezerResults = async {
+                    withTimeoutOrNull(AUTOPLAY_REMOTE_TIMEOUT_MS) {
+                        runCatching { DeezerApi.search(query) }.getOrDefault(emptyList())
+                    }.orEmpty()
+                }
+                val youtubeResults = async {
+                    withTimeoutOrNull(AUTOPLAY_REMOTE_TIMEOUT_MS) {
+                        runCatching { YouTube.search(query) }.getOrDefault(emptyList())
+                    }.orEmpty()
+                }
+
+                mergeSearchResults(
+                    query = query,
+                    groups = listOf(deezerResults.await(), youtubeResults.await())
+                )
+            }
+        }.orEmpty()
+        if (merged.isEmpty()) {
+            Log.i(AUTOPLAY_LOG_TAG, "remote timeout/empty query='$query'")
+        }
+        if (searchResultsCache.size > 24) searchResultsCache.clear()
+        searchResultsCache[cacheKey] = merged
+        merged
     }
 
     private fun recommendationScore(
-        seed: Song,
-        candidate: Song,
-        historyCounts: Map<String, Int>
+        seed: SongRecommendationProfile,
+        candidate: SongRecommendationProfile,
+        historyCounts: Map<String, Int>,
+        recentMetadataKeys: Set<String>,
+        recentBaseCounts: Map<String, Int>,
+        activeBaseCounts: Map<String, Int>,
+        context: RecommendationContext
     ): Int {
-        val seedArtist = normalizeSearchText(seed.artist)
-        val candidateArtist = normalizeSearchText(candidate.artist)
-        val seedAlbum = normalizeSearchText(seed.album)
-        val candidateAlbum = normalizeSearchText(candidate.album)
-        val seedTokens = recommendationTokens(seed)
-        val candidateTokens = recommendationTokens(candidate)
-        val seedStyles = styleTokens(seed)
-        val candidateStyles = styleTokens(candidate)
+        val seedArtist = seed.artist
+        val candidateArtist = candidate.artist
+        val candidatePrimaryArtist = candidate.primaryArtist
+        val seedAlbum = seed.album
+        val candidateAlbum = candidate.album
+        val seedTokens = seed.tokens
+        val candidateTokens = candidate.tokens
+        val seedStyles = seed.styles
+        val candidateStyles = candidate.styles
+        val seedVariants = seed.variants
+        val candidateVariants = candidate.variants
+        val seedBase = seed.titleBase
+        val candidateBase = candidate.titleBase
+        val sameBaseTitle = seedBase.isNotBlank() && seedBase == candidateBase
+        val sharedStyles = seedStyles.intersect(candidateStyles)
+        val sharedContextStyles = candidateStyles.intersect(context.styles)
+        val sharedTokens = seedTokens.intersect(candidateTokens)
+        val sharedContextTokens = candidateTokens.intersect(context.tokens)
+        val sharedVariants = seedVariants.intersect(candidateVariants)
 
         var score = 0
-        if (seedArtist.isNotBlank() && seedArtist == candidateArtist) score += 70
-        if (seedArtist.isNotBlank() && candidateArtist.contains(seedArtist)) score += 26
-        if (seedAlbum.isNotBlank() && seedAlbum == candidateAlbum) score += 22
-        score += seedTokens.intersect(candidateTokens).size * 8
-        score += seedStyles.intersect(candidateStyles).size * 28
-        score += kotlin.math.min((historyCounts[metadataIdentity(candidate.title, candidate.artist)] ?: 0) * 3, 15)
+        score += (sharedStyles.size * 34).coerceAtMost(90)
+        score += (sharedContextStyles.size * 18).coerceAtMost(54)
+        if (seedStyles.isNotEmpty() && sharedStyles.isEmpty()) score -= 18
 
-        val recentKeys = _fullHistory.value.take(12).map { metadataIdentity(it.title, it.artist) }.toSet()
-        if (metadataIdentity(candidate.title, candidate.artist) in recentKeys) score -= 30
-        if (candidate.title.equals(seed.title, ignoreCase = true) && candidate.artist.equals(seed.artist, ignoreCase = true)) score -= 100
+        if (seedArtist.isNotBlank() && seedArtist == candidateArtist) {
+            score += 42
+        } else if (seedArtist.isNotBlank() && (candidateArtist.contains(seedArtist) || seedArtist.contains(candidateArtist))) {
+            score += 18
+        }
+        if (candidatePrimaryArtist.isNotBlank() && candidatePrimaryArtist in context.artists && !sameBaseTitle) score += 18
+        if (seedAlbum.isNotBlank() && seedAlbum == candidateAlbum) score += 16
+        score += (sharedTokens.size * 5).coerceAtMost(42)
+        score += (sharedContextTokens.size * 2).coerceAtMost(18)
+        score += kotlin.math.min((historyCounts[candidate.metadataKey] ?: 0) * 3, 15)
+        if (candidateArtist.isNotBlank() && candidateArtist != seedArtist && !sameBaseTitle) score += 10
+
+        if (candidate.metadataKey in recentMetadataKeys) score -= 30
+        if (candidate.metadataKey == seed.metadataKey) score -= 100
+        if (candidateBase.isNotBlank()) {
+            score -= ((recentBaseCounts[candidateBase] ?: 0) * 18).coerceAtMost(72)
+            score -= ((activeBaseCounts[candidateBase] ?: 0) * 22).coerceAtMost(88)
+        }
+        if (sameBaseTitle) {
+            score -= 90
+            if (seedVariants.isNotEmpty() || candidateVariants.isNotEmpty()) score -= 20
+        } else if (candidateVariants.isNotEmpty() && seedVariants.isNotEmpty() && sharedVariants.isEmpty()) {
+            score -= 8
+        }
 
         return score
     }
 
     private fun recommendationReason(seed: Song, candidate: Song): String {
-        val sharedStyles = styleTokens(seed).intersect(styleTokens(candidate))
+        val seedProfile = songProfile(seed)
+        val candidateProfile = songProfile(candidate)
+        val sharedStyles = seedProfile.styles.intersect(candidateProfile.styles)
         return when {
-            normalizeSearchText(seed.artist).isNotBlank() &&
-                normalizeSearchText(seed.artist) == normalizeSearchText(candidate.artist) -> seed.artist
+            seedProfile.artist.isNotBlank() && seedProfile.artist == candidateProfile.artist -> seed.artist
             sharedStyles.isNotEmpty() -> sharedStyles.first()
-            candidate.album.isNotBlank() && normalizeSearchText(candidate.album) == normalizeSearchText(seed.album) -> candidate.album
+            candidate.album.isNotBlank() && candidateProfile.album == seedProfile.album -> candidate.album
             else -> getApplication<Application>().getString(R.string.autoplay)
         }
     }
 
     private fun recommendationQueries(seed: Song): List<String> {
-        val artist = seed.artist.takeIf { normalizeSearchText(it).isNotBlank() && !it.contains("unknown", ignoreCase = true) }
+        val artist = primaryArtistName(seed.artist)
         val styles = styleTokens(seed)
-        val baseTitle = seed.title.replace(Regex("\\(.*?\\)|\\[.*?]"), "").trim()
+        val variants = variantTokens(seed)
         val queries = LinkedHashSet<String>()
 
         if (artist != null) {
-            styles.forEach { style -> queries += "$artist $style music" }
             queries += "$artist similar songs"
-            queries += "$artist $baseTitle"
+            queries += "$artist radio"
+            styles.take(2).forEach { style -> queries += "$artist $style mix" }
         }
-        styles.forEach { style -> queries += "$style music ${artist.orEmpty()}".trim() }
-        if (baseTitle.isNotBlank()) queries += "$baseTitle ${artist.orEmpty()} audio".trim()
+        styles.take(3).forEach { style ->
+            queries += "$style similar music ${artist.orEmpty()}".trim()
+        }
+        if ("slowed" in variants) queries += "slowed reverb similar songs ${artist.orEmpty()}".trim()
+        if ("sped" in variants) queries += "sped up nightcore similar songs ${artist.orEmpty()}".trim()
+        if (queries.isEmpty() && artist != null) queries += "$artist related songs"
+        if (queries.isEmpty() && seed.album.isNotBlank()) queries += "${seed.album} similar songs"
 
-        return queries.filter { it.isNotBlank() }.take(4)
+        return queries.filter { it.isNotBlank() }.take(5)
+    }
+
+    private fun primaryArtistName(artist: String): String? {
+        return artist
+            .split(Regex("\\s*(,|&|\\bx\\b|\\bfeat\\.?\\b|\\bft\\.?\\b)\\s*", RegexOption.IGNORE_CASE))
+            .firstOrNull { normalizeSearchText(it).isNotBlank() && !it.contains("unknown", ignoreCase = true) }
+            ?.trim()
     }
 
     private fun selectDiverseRecommendations(
@@ -732,51 +1125,49 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         seed: Song
     ): List<RecommendationCandidate> {
         val artistCounts = mutableMapOf<String, Int>()
+        val titleBaseCounts = mutableMapOf<String, Int>()
+        val seedBaseTitle = songProfile(seed).titleBase
         val sorted = candidates.sortedWith(
             compareByDescending<RecommendationCandidate> { it.score }
-                .thenBy { stableSearchRank(seed.title, songIdentityKey(it.song)) }
+                .thenBy { stableSearchRank(seed.title, it.profile.identityKey) }
         )
         val selected = mutableListOf<RecommendationCandidate>()
 
         sorted.forEach { candidate ->
-            val artist = normalizeSearchText(candidate.song.artist)
+            val artist = candidate.profile.primaryArtist.ifBlank { candidate.profile.artist }
             val count = artistCounts[artist] ?: 0
             val lastTwoSameArtist = selected.takeLast(2).all {
-                normalizeSearchText(it.song.artist) == artist
+                val selectedArtist = it.profile.primaryArtist.ifBlank { it.profile.artist }
+                selectedArtist == artist
             } && selected.size >= 2
-            if (count >= 3 || lastTwoSameArtist) return@forEach
+            if (artist.isNotBlank() && (count >= 3 || lastTwoSameArtist)) return@forEach
+
+            val baseTitle = candidate.profile.titleBase
+            val baseCount = titleBaseCounts[baseTitle] ?: 0
+            val maxPerBase = if (baseTitle.isNotBlank() && baseTitle == seedBaseTitle) 1 else 2
+            val lastSameBase = baseTitle.isNotBlank() && selected.lastOrNull()?.let {
+                it.profile.titleBase == baseTitle
+            } == true
+            if (baseTitle.isNotBlank() && (baseCount >= maxPerBase || lastSameBase)) return@forEach
 
             selected += candidate
-            artistCounts[artist] = count + 1
-            if (selected.size >= 12) return selected
+            if (artist.isNotBlank()) artistCounts[artist] = count + 1
+            if (baseTitle.isNotBlank()) titleBaseCounts[baseTitle] = baseCount + 1
+            if (selected.size >= AUTOPLAY_TARGET_SIZE) return selected
         }
 
         return selected
     }
 
-    private fun recommendationTokens(song: Song): Set<String> =
-        expandedSearchTokens(normalizeSearchText("${song.title} ${song.artist} ${song.album}"))
+    private fun recommendationTokens(song: Song): Set<String> = songProfile(song).tokens
 
-    private fun styleTokens(song: Song): Set<String> {
-        val text = normalizeSearchText("${song.title} ${song.artist} ${song.album}")
-        val styles = linkedSetOf<String>()
-        val groups = mapOf(
-            "phonk" to setOf("phonk", "phonky", "drift"),
-            "slowed" to setOf("slowed", "slow", "reverb"),
-            "nightcore" to setOf("nightcore", "sped", "speed up", "sped up"),
-            "lofi" to setOf("lofi", "lo fi", "chill"),
-            "trap" to setOf("trap", "drill"),
-            "rap" to setOf("rap", "hip hop"),
-            "rock" to setOf("rock", "metal", "punk"),
-            "electronic" to setOf("edm", "house", "techno", "electro"),
-            "latin" to setOf("reggaeton", "salsa", "bachata", "corrido"),
-            "pop" to setOf("pop", "dance")
-        )
-        groups.forEach { (style, aliases) ->
-            if (aliases.any { alias -> text.contains(alias) }) styles += style
-        }
-        return styles
-    }
+    private fun styleTokens(song: Song): Set<String> = songProfile(song).styles
+
+    private fun titleBaseKey(song: Song): String = songProfile(song).titleBase
+
+    private fun titleBaseKey(title: String): String = AutoplayDiversity.baseTitleKey(title)
+
+    private fun variantTokens(song: Song): Set<String> = songProfile(song).variants
 
     private fun buildHistoryQueueSongs(
         selected: PlaybackHistoryEntity,
@@ -1388,6 +1779,19 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             val audioFiles = repository.getAudioFiles(filterVoiceNotes.value)
             _songs.value = audioFiles
+            warmRecommendationProfiles(audioFiles)
+        }
+    }
+
+    private fun warmRecommendationProfiles(songs: List<Song>) {
+        profileWarmupJob?.cancel()
+        profileWarmupJob = viewModelScope.launch(Dispatchers.Default) {
+            val startedAt = System.currentTimeMillis()
+            songs.forEach { songProfile(it) }
+            Log.i(
+                AUTOPLAY_LOG_TAG,
+                "profile warmup songs=${songs.size} cached=${recommendationProfileCache.size} took=${System.currentTimeMillis() - startedAt}ms"
+            )
         }
     }
 

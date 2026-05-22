@@ -2,6 +2,7 @@ package com.jagr.fridamusic.data.remote.innertube
 
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
@@ -12,6 +13,11 @@ import io.ktor.client.engine.cio.*
 
 object YouTube {
     private val client = HttpClient(CIO) {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 3_000
+            connectTimeoutMillis = 3_000
+            socketTimeoutMillis = 3_000
+        }
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true

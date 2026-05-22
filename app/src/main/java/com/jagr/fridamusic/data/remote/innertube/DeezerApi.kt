@@ -7,7 +7,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object DeezerApi {
+    private const val NETWORK_TIMEOUT_MS = 3_000
+
     fun search(query: String): List<YouTubeResult> {
+        var connection: HttpURLConnection? = null
         try {
             val builtUri = Uri.parse("https://api.deezer.com/search")
                 .buildUpon()
@@ -16,8 +19,10 @@ object DeezerApi {
                 .build()
 
             val url = URL(builtUri.toString())
-            val connection = url.openConnection() as HttpURLConnection
+            connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
+            connection.connectTimeout = NETWORK_TIMEOUT_MS
+            connection.readTimeout = NETWORK_TIMEOUT_MS
 
             if (connection.responseCode != 200) {
                 Log.e("DeezerApi", "Error de red: ${connection.responseCode}")
@@ -51,6 +56,8 @@ object DeezerApi {
         } catch (e: Exception) {
             Log.e("DeezerApi", "Error fatal parseando Deezer: ${e.message}")
             return emptyList()
+        } finally {
+            connection?.disconnect()
         }
     }
 }
