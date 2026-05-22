@@ -38,6 +38,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,6 +56,7 @@ import coil.compose.SubcomposeAsyncImage
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
+import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
 
 @Composable
 fun MiniPlayer(
@@ -107,11 +112,21 @@ fun MiniPlayer(
     val mutedContentColor = Color.White.copy(alpha = 0.7f)
     val accentColor = Color.White
     val interactionSource = remember { MutableInteractionSource() }
+    val edgeBleed = 4.dp
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
+            .drawBehind {
+                val bleedPx = edgeBleed.toPx()
+                drawRoundRect(
+                    color = containerColor,
+                    topLeft = Offset(-bleedPx, 0f),
+                    size = Size(size.width + bleedPx * 2f, size.height),
+                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                )
+            }
             .clip(RoundedCornerShape(8.dp))
             .clickable(
                 enabled = hasSong,
@@ -145,7 +160,7 @@ fun MiniPlayer(
                     .height(2.dp)
                     .align(Alignment.BottomCenter),
                 color = accentColor,
-                trackColor = contentColor.copy(alpha = 0.30f)
+                trackColor = Color.Transparent
             )
         }
 
@@ -229,24 +244,22 @@ private fun MiniPlayerBackdrop(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Transparent)
+            .background(containerColor)
     ) {
         if (showArtworkGlow) {
-            if (albumArtUrl != null) {
-                SubcomposeAsyncImage(
-                    model = albumArtUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            alpha = 0.15f
-                            scaleX = 1.18f
-                            scaleY = 1.18f
-                        }
-                        .blur(28.dp)
-                )
-            }
+            SubcomposeAsyncImage(
+                model = rememberFridaArtworkRequest(albumArtUrl),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = 0.15f
+                        scaleX = 1.18f
+                        scaleY = 1.18f
+                    }
+                    .blur(28.dp)
+            )
             Box(
                 modifier = Modifier
                     .offset(x = (-26).dp, y = (-30).dp)
@@ -299,18 +312,14 @@ private fun AlbumArtThumb(
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (albumArtUrl != null) {
-            SubcomposeAsyncImage(
-                model = albumArtUrl,
-                contentDescription = stringResource(R.string.album_art),
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                loading = { AlbumArtFallback(hasSong = hasSong, hasError = hasError) },
-                error = { AlbumArtFallback(hasSong = hasSong, hasError = true) }
-            )
-        } else {
-            AlbumArtFallback(hasSong = hasSong, hasError = hasError)
-        }
+        SubcomposeAsyncImage(
+            model = rememberFridaArtworkRequest(albumArtUrl),
+            contentDescription = stringResource(R.string.album_art),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            loading = { AlbumArtFallback(hasSong = hasSong, hasError = hasError) },
+            error = { AlbumArtFallback(hasSong = hasSong, hasError = true) }
+        )
     }
 }
 

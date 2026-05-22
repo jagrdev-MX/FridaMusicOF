@@ -11,6 +11,9 @@
     <string name="see_all">See All</string>
     <string name="now_playing">NOW PLAYING</string>
     <string name="top_artists">Top Artists</string>
+    <string name="quick_picks">Quick Picks</string>
+    <string name="daily_discover">Your Daily Discover</string>
+    <string name="fresh_finds_old_favorites">Fresh Finds, Old Favorites</string>
     <string name="unknown_artist">Unknown Artist</string>
     <string name="unknown">Unknown</string>
 
@@ -84,6 +87,7 @@
     <string name="album_label">Album</string>
     <string name="history_reload_failed">Could not reload this song from history</string>
     <string name="song_unavailable">This song is no longer available on this device</string>
+    <string name="song_skipped_unavailable">Track unavailable. Skipping to the next song.</string>
     <string name="no_songs_available">No songs available to play</string>
     <string name="youtube_version_not_found">No YouTube version found</string>
     <string name="no_compatible_audio_streams">No compatible audio streams found</string>
@@ -150,6 +154,9 @@
     <string name="like">Like</string>
     <string name="shuffle">Shuffle</string>
     <string name="repeat">Repeat</string>
+    <string name="repeat_off">Repeat off</string>
+    <string name="repeat_all">Repeat all</string>
+    <string name="repeat_one">Repeat one</string>
     <string name="previous">Previous</string>
     <string name="pause">Pause</string>
     <string name="play">Play</string>
@@ -180,6 +187,7 @@
     <string name="duration_label">Duration</string>
     <string name="source_youtube">YouTube Music (InnerTube)</string>
     <string name="source_local">Local Device</string>
+    <string name="album_tracks_unavailable">Album tracks are not available from the current source yet.</string>
     <!-- Navigation -->
     <string name="nav_home">Home</string>
     <string name="nav_search">Search</string>

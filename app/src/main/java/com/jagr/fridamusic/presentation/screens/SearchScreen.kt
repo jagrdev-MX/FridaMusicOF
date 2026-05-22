@@ -16,7 +16,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -107,7 +106,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
@@ -116,9 +114,9 @@ import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
 import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
+import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
-import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.Normalizer
@@ -214,9 +212,9 @@ fun SearchScreen(
     paddingValues: PaddingValues,
     listState: LazyListState,
     viewModel: LibraryViewModels,
-    hazeState: HazeState? = null,
     focusSignal: Int = 0,
-    onNavigateToArtist: (String, String) -> Unit = { _, _ -> }
+    onNavigateToArtist: (String, String) -> Unit = { _, _ -> },
+    onNavigateToAlbum: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var activeQuery by rememberSaveable { mutableStateOf("") }
@@ -249,9 +247,7 @@ fun SearchScreen(
         buildPlaylistHits(query, playlists, songs, onlineResults).take(SEARCH_TAB_LIMIT)
     }
     val hasResults = songHits.isNotEmpty() || artistHits.isNotEmpty() || albumHits.isNotEmpty() || playlistHits.isNotEmpty()
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val showingResults = query.isNotBlank()
-    val headerHeight = topInset + if (showingResults) 154.dp else 96.dp
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val reduceMotion = rememberReduceMotion()
@@ -265,8 +261,8 @@ fun SearchScreen(
     val recentCards = remember(recentHistory, songs) {
         buildRecentSearchCards(recentHistory, songs).take(SEARCH_RECENT_CARD_LIMIT)
     }
-    val smartSuggestions = remember(searchHistory, fullHistory, songs) {
-        buildSmartSearchSuggestions(searchHistory, fullHistory, songs).take(SEARCH_RECOMMENDATION_LIMIT)
+    val smartSuggestions = remember(searchHistory, fullHistory, songs, playlists) {
+        buildSmartSearchSuggestions(searchHistory, fullHistory, songs, playlists).take(SEARCH_RECOMMENDATION_LIMIT)
     }
 
     fun focusSearchField() {
@@ -301,9 +297,33 @@ fun SearchScreen(
     }
 
     LaunchedEffect(focusSignal) {
-        delay(220)
+        delay(120)
+        if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+            if (reduceMotion) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+        }
         focusRequester.requestFocus()
         keyboardController?.show()
+    }
+
+    LaunchedEffect(searchQuery) {
+        val cleanQuery = searchQuery.trim()
+        if (cleanQuery.isBlank()) {
+            activeQuery = ""
+            selectedTabName = SearchTab.ALL.name
+            viewModel.searchYouTube("")
+            return@LaunchedEffect
+        }
+        if (cleanQuery.length < 2) {
+            activeQuery = ""
+            selectedTabName = SearchTab.ALL.name
+            return@LaunchedEffect
+        }
+        delay(320)
+        if (cleanQuery != activeQuery) {
+            activeQuery = cleanQuery
+            selectedTabName = SearchTab.ALL.name
+            viewModel.searchYouTube(cleanQuery)
+        }
     }
 
     var isScrollingDown by remember { mutableStateOf(false) }
@@ -351,11 +371,32 @@ fun SearchScreen(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = headerHeight + 8.dp,
+                top = 0.dp,
                 bottom = paddingValues.calculateBottomPadding() + 112.dp
             ),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            item(key = "search-header") {
+                SearchInlineHeader(
+                    query = searchQuery,
+                    selectedTab = selectedTab,
+                    showTabs = showingResults,
+                    focusRequester = focusRequester,
+                    onQueryChange = {
+                        searchQuery = it
+                    },
+                    onSearch = { submitSearch(searchQuery) },
+                    onClearQuery = {
+                        searchQuery = ""
+                        activeQuery = ""
+                        selectedTabName = SearchTab.ALL.name
+                        viewModel.searchYouTube("")
+                        focusSearchField()
+                    },
+                    onTabSelected = { selectedTabName = it.name }
+                )
+            }
+
             if (query.isBlank()) {
                 if (recentCards.isNotEmpty()) {
                     item {
@@ -442,11 +483,7 @@ fun SearchScreen(
                                 SearchAlbumRow(
                                     hit = hit,
                                     onClick = {
-                                        if (hit.localSongs.isNotEmpty()) {
-                                            viewModel.playSongs(hit.localSongs)
-                                        } else {
-                                            detailsTarget = SearchActionTarget.AlbumTarget(hit)
-                                        }
+                                        onNavigateToAlbum(hit.name, hit.artist, hit.thumbnailUrl.orEmpty())
                                     },
                                     onMore = { actionTarget = SearchActionTarget.AlbumTarget(hit) }
                                 )
@@ -508,11 +545,7 @@ fun SearchScreen(
                                 SearchAlbumRow(
                                     hit = hit,
                                     onClick = {
-                                        if (hit.localSongs.isNotEmpty()) {
-                                            viewModel.playSongs(hit.localSongs)
-                                        } else {
-                                            detailsTarget = SearchActionTarget.AlbumTarget(hit)
-                                        }
+                                        onNavigateToAlbum(hit.name, hit.artist, hit.thumbnailUrl.orEmpty())
                                     },
                                     onMore = { actionTarget = SearchActionTarget.AlbumTarget(hit) }
                                 )
@@ -545,35 +578,6 @@ fun SearchScreen(
                 }
             }
         }
-
-        SearchStickyHeader(
-            query = searchQuery,
-            selectedTab = selectedTab,
-            showTabs = showingResults,
-            listState = listState,
-            hazeState = hazeState,
-            focusRequester = focusRequester,
-            onQueryChange = {
-                searchQuery = it
-                if (activeQuery.isNotEmpty() && it.trim() != activeQuery) {
-                    activeQuery = ""
-                    selectedTabName = SearchTab.ALL.name
-                    viewModel.searchYouTube("")
-                }
-            },
-            onSearch = { submitSearch(searchQuery) },
-            onClearQuery = {
-                searchQuery = ""
-                activeQuery = ""
-                selectedTabName = SearchTab.ALL.name
-                viewModel.searchYouTube("")
-                focusSearchField()
-            },
-            onTabSelected = { selectedTabName = it.name },
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .zIndex(2f)
-        )
 
         SearchScrollShortcut(
             visible = showScrollShortcut,
@@ -608,7 +612,8 @@ fun SearchScreen(
                         actionTarget = null
                         detailsTarget = target
                     },
-                    onNavigateToArtist = onNavigateToArtist
+                    onNavigateToArtist = onNavigateToArtist,
+                    onNavigateToAlbum = onNavigateToAlbum
                 )
             }
         }
@@ -677,12 +682,10 @@ private fun SearchBackdrop() {
 }
 
 @Composable
-private fun SearchStickyHeader(
+private fun SearchInlineHeader(
     query: String,
     selectedTab: SearchTab,
     showTabs: Boolean,
-    listState: LazyListState,
-    hazeState: HazeState?,
     focusRequester: FocusRequester,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -690,33 +693,9 @@ private fun SearchStickyHeader(
     onTabSelected: (SearchTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isScrolled by remember {
-        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 16 }
-    }
-    val scrollAlpha by animateFloatAsState(
-        targetValue = if (isScrolled) 1f else 0f,
-        label = "search-header-scroll-alpha"
-    )
-    val isDark = isSystemInDarkTheme()
-    val tint = if (isDark) {
-        MaterialTheme.colorScheme.background.copy(alpha = 0.54f + (0.24f * scrollAlpha))
-    } else {
-        Color.White.copy(alpha = 0.58f + (0.22f * scrollAlpha))
-    }
-    val dividerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f + (0.07f * scrollAlpha))
-
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .searchHeaderGlass(hazeState, tint)
-            .drawBehind {
-                drawLine(
-                    color = dividerColor,
-                    start = androidx.compose.ui.geometry.Offset(0f, size.height),
-                    end = androidx.compose.ui.geometry.Offset(size.width, size.height),
-                    strokeWidth = 1.dp.toPx()
-                )
-            }
             .padding(
                 start = 20.dp,
                 end = 20.dp,
@@ -744,17 +723,6 @@ private fun SearchStickyHeader(
             )
         }
     }
-}
-
-@Composable
-private fun Modifier.searchHeaderGlass(
-    hazeState: HazeState?,
-    tint: Color
-): Modifier {
-    // Search is rendered inside the main hazed NavHost. Haze does not allow a
-    // hazeChild to be a descendant of another haze node, so the top bar keeps
-    // the glass tint locally and relies on the parent surface for depth.
-    return background(tint)
 }
 
 @Composable
@@ -1405,21 +1373,12 @@ private fun SearchArtworkBox(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
-                modifier = Modifier.size(25.dp)
-            )
-        }
+        AsyncImage(
+            model = rememberFridaArtworkRequest(imageUrl),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -1457,7 +1416,7 @@ private fun SearchScrollShortcut(
         enter = if (reduceMotion) EnterTransition.None else fadeIn() + slideInVertically { it / 2 },
         exit = if (reduceMotion) ExitTransition.None else fadeOut() + slideOutVertically { it / 2 },
         modifier = modifier
-            .padding(end = 22.dp, bottom = bottomPadding + 118.dp)
+            .padding(end = 22.dp, bottom = bottomPadding + 84.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1488,7 +1447,8 @@ private fun SearchActionsSheet(
     onDismiss: () -> Unit,
     onPickPlaylist: (Song) -> Unit,
     onShowDetails: () -> Unit,
-    onNavigateToArtist: (String, String) -> Unit
+    onNavigateToArtist: (String, String) -> Unit,
+    onNavigateToAlbum: (String, String, String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1633,6 +1593,10 @@ private fun SearchActionsSheet(
             title = hit.name
             subtitle = stringResource(R.string.album_label)
             actions = buildList {
+                add(SearchActionSpec(Icons.Default.Album, stringResource(R.string.open)) {
+                    onDismiss()
+                    onNavigateToAlbum(hit.name, hit.artist, hit.thumbnailUrl.orEmpty())
+                })
                 if (hit.localSongs.isNotEmpty()) {
                     add(SearchActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play)) {
                         onDismiss()
@@ -2279,7 +2243,8 @@ private fun buildRecentSearchCards(
 private fun buildSmartSearchSuggestions(
     searchHistory: List<String>,
     playbackHistory: List<PlaybackHistoryEntity>,
-    localSongs: List<Song>
+    localSongs: List<Song>,
+    playlists: List<Playlist>
 ): List<String> {
     val suggestions = LinkedHashSet<String>()
     val blocked = searchHistory
@@ -2297,7 +2262,21 @@ private fun buildSmartSearchSuggestions(
         .sortedByDescending { it.value }
         .map { it.key }
         .filter { normalizeForSearch(it) !in blocked }
-        .forEach { suggestions += it }
+        .forEach { artist ->
+            suggestions += artist
+            suggestions += "$artist radio"
+        }
+
+    val localSongsById = localSongs.associateBy { it.id }
+    playlists
+        .asSequence()
+        .flatMap { playlist -> playlist.songIds.asSequence().mapNotNull { localSongsById[it] } }
+        .filter { isKnownArtist(it.artist) }
+        .map { it.artist.trim() }
+        .filter { normalizeForSearch(it) !in blocked }
+        .distinct()
+        .take(6)
+        .forEach { artist -> suggestions += "$artist mix" }
 
     localSongs
         .asSequence()
@@ -2307,6 +2286,14 @@ private fun buildSmartSearchSuggestions(
         .sortedByDescending { it.value.size }
         .map { it.key }
         .filter { normalizeForSearch(it) !in blocked }
+        .forEach { suggestions += it }
+
+    playlists
+        .asSequence()
+        .filter { it.songIds.isNotEmpty() }
+        .sortedByDescending { it.createdAt }
+        .map { it.name.trim() }
+        .filter { it.length > 1 && normalizeForSearch(it) !in blocked }
         .forEach { suggestions += it }
 
     localSongs

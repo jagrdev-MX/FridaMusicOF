@@ -52,6 +52,7 @@ import com.jagr.fridamusic.domain.model.QueueItem
 import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
+import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
@@ -75,6 +76,8 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCollapse: () -> Unit,
+    onNavigateToArtist: (String, String) -> Unit = { _, _ -> },
+    onNavigateToAlbum: (String, String, String) -> Unit = { _, _, _ -> },
     viewModel: LibraryViewModels
 ) {
     val context = LocalContext.current
@@ -87,15 +90,18 @@ fun NowPlayingScreen(
     var showQueueSheet by remember { mutableStateOf(false) }
     var showLyricsSheet by remember { mutableStateOf(false) }
     var showInfoSheet by remember { mutableStateOf(false) }
+    var showOptionsSheet by remember { mutableStateOf(false) }
+    var playlistPickerSong by remember { mutableStateOf<Song?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
     val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
+    val favoriteSongIds by viewModel.favoriteSongIds.collectAsState()
     val totalDuration by viewModel.duration.collectAsState()
 
-    val isLiked = remember(playlists, currentSong) {
-        playlists.find { it.name == "Me gusta" }?.songIds?.contains(currentSong?.id) == true
+    val isLiked = remember(favoriteSongIds, currentSong) {
+        currentSong?.id in favoriteSongIds
     }
 
     val onToggleLike: () -> Unit = {
@@ -160,9 +166,9 @@ fun NowPlayingScreen(
                 onClick = {}
             )
     ) {
-        if (albumArtUrl != null) {
+        if (currentSong != null) {
             AsyncImage(
-                model = albumArtUrl,
+                model = rememberFridaArtworkRequest(albumArtUrl),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().blur(100.dp).alpha(0.6f)
@@ -178,7 +184,11 @@ fun NowPlayingScreen(
                 .navigationBarsPadding()
                 .padding(horizontal = 24.dp)
         ) {
-            NowPlayingTopBar(isYouTube = isYouTube, onCollapse = onCollapse)
+            NowPlayingTopBar(
+                isYouTube = isYouTube,
+                onCollapse = onCollapse,
+                onOptions = { showOptionsSheet = true }
+            )
 
             AlbumArtOrAdSection(
                 albumArtUrl = albumArtUrl,
@@ -194,7 +204,13 @@ fun NowPlayingScreen(
             SongInfoSection(
                 currentSong = currentSong,
                 isLiked = isLiked,
-                onToggleLike = onToggleLike
+                onToggleLike = onToggleLike,
+                onOpenSongDetails = { showInfoSheet = true },
+                onOpenArtist = {
+                    currentSong?.artist?.takeIf { it.isNotBlank() }?.let { artist ->
+                        onNavigateToArtist(artist, albumArtUrl.orEmpty())
+                    }
+                }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -249,11 +265,53 @@ fun NowPlayingScreen(
                 onDismiss = { showInfoSheet = false }
             )
         }
+
+        if (showOptionsSheet && currentSong != null) {
+            ModalBottomSheet(
+                onDismissRequest = { showOptionsSheet = false },
+                sheetState = sheetState,
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+            ) {
+                NowPlayingActionsSheet(
+                    song = currentSong,
+                    albumArtUrl = albumArtUrl,
+                    isLiked = isLiked,
+                    viewModel = viewModel,
+                    onDismiss = { showOptionsSheet = false },
+                    onPickPlaylist = { song ->
+                        showOptionsSheet = false
+                        playlistPickerSong = song
+                    },
+                    onShowDetails = {
+                        showOptionsSheet = false
+                        showInfoSheet = true
+                    },
+                    onNavigateToArtist = onNavigateToArtist,
+                    onNavigateToAlbum = onNavigateToAlbum
+                )
+            }
+        }
+
+        playlistPickerSong?.let { song ->
+            ModalBottomSheet(
+                onDismissRequest = { playlistPickerSong = null },
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                QueuePlaylistPicker(
+                    playlists = playlists,
+                    onDismiss = { playlistPickerSong = null },
+                    onSelect = { playlist ->
+                        viewModel.addSongToPlaylist(playlist, song)
+                        playlistPickerSong = null
+                    }
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun NowPlayingTopBar(isYouTube: Boolean, onCollapse: () -> Unit) {
+private fun NowPlayingTopBar(isYouTube: Boolean, onCollapse: () -> Unit, onOptions: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 32.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -281,7 +339,7 @@ private fun NowPlayingTopBar(isYouTube: Boolean, onCollapse: () -> Unit) {
                 )
             }
         }
-        IconButton(onClick = { }) {
+        IconButton(onClick = onOptions) {
             Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = MaterialTheme.colorScheme.onBackground)
         }
     }
@@ -320,28 +378,25 @@ private fun AlbumArtOrAdSection(
                         shape = RoundedCornerShape(32.dp)
                     )
             ) {
-                if (albumArtUrl != null) {
-                    AsyncImage(
-                        model = albumArtUrl,
-                        contentDescription = stringResource(R.string.album_art),
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.MusicNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.align(Alignment.Center).size(80.dp)
-                    )
-                }
+                AsyncImage(
+                    model = rememberFridaArtworkRequest(albumArtUrl),
+                    contentDescription = stringResource(R.string.album_art),
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SongInfoSection(currentSong: Song?, isLiked: Boolean, onToggleLike: () -> Unit) {
+private fun SongInfoSection(
+    currentSong: Song?,
+    isLiked: Boolean,
+    onToggleLike: () -> Unit,
+    onOpenSongDetails: () -> Unit,
+    onOpenArtist: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -353,14 +408,16 @@ private fun SongInfoSection(currentSong: Song?, isLiked: Boolean, onToggleLike: 
                 style = LiquidTypography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable(enabled = currentSong != null, onClick = onOpenSongDetails)
             )
             Text(
                 text = currentSong?.artist ?: stringResource(R.string.unknown_artist),
                 style = LiquidTypography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable(enabled = currentSong?.artist?.isNotBlank() == true, onClick = onOpenArtist)
             )
         }
         IconButton(onClick = onToggleLike) {
@@ -833,24 +890,12 @@ private fun QueueSongRow(
 
     Row(modifier = rowModifier, verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.Center) {
-            if (!imageUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = imageUrl,
-                    contentDescription = null,
-                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            AsyncImage(
+                model = rememberFridaArtworkRequest(imageUrl),
+                contentDescription = null,
+                modifier = Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
             if (isCurrent) {
                 Box(
                     modifier = Modifier
@@ -1053,6 +1098,90 @@ private fun QueuePlaylistPicker(
                         Text(stringResource(R.string.songs_count, playlist.songIds.size), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     }
                 }
+            }
+        }
+        Spacer(modifier = Modifier.height(18.dp))
+    }
+}
+
+@Composable
+private fun NowPlayingActionsSheet(
+    song: Song,
+    albumArtUrl: String?,
+    isLiked: Boolean,
+    viewModel: LibraryViewModels,
+    onDismiss: () -> Unit,
+    onPickPlaylist: (Song) -> Unit,
+    onShowDetails: () -> Unit,
+    onNavigateToArtist: (String, String) -> Unit,
+    onNavigateToAlbum: (String, String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val actions = buildList {
+        add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
+            onPickPlaylist(song)
+        })
+        add(QueueActionSpec(if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like)) {
+            onDismiss()
+            viewModel.toggleLike(song)
+        })
+        add(QueueActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next)) {
+            onDismiss()
+            viewModel.addSongNext(song)
+        })
+        add(QueueActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
+            onDismiss()
+            viewModel.addSongToQueue(song)
+        })
+        if (song.artist.isNotBlank()) {
+            add(QueueActionSpec(Icons.Default.Person, stringResource(R.string.open_artist)) {
+                onDismiss()
+                onNavigateToArtist(song.artist, albumArtUrl.orEmpty())
+            })
+        }
+        if (song.album.isNotBlank()) {
+            add(QueueActionSpec(Icons.Default.Album, stringResource(R.string.album_label)) {
+                onDismiss()
+                onNavigateToAlbum(song.album, song.artist, albumArtUrl.orEmpty())
+            })
+        }
+        add(QueueActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
+            onDismiss()
+            scope.launch { shareQueueSong(context, song, viewModel.resolveShareUrl(song)) }
+        })
+        add(QueueActionSpec(Icons.Default.Info, stringResource(R.string.details)) {
+            onShowDetails()
+        })
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(song.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+            }
+        }
+        actions.forEach { action ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = action.onClick)
+                    .padding(horizontal = 12.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val color = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                Icon(action.icon, contentDescription = null, tint = color)
+                Spacer(modifier = Modifier.width(14.dp))
+                Text(action.label, color = color, fontWeight = FontWeight.Medium)
             }
         }
         Spacer(modifier = Modifier.height(18.dp))

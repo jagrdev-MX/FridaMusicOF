@@ -34,6 +34,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
 @Composable
@@ -113,7 +114,7 @@ private fun ArtistHeader(
             .height(380.dp)
     ) {
         AsyncImage(
-            model = artistImageUrl,
+            model = rememberFridaArtworkRequest(artistImageUrl),
             contentDescription = stringResource(R.string.artist_image),
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
@@ -234,7 +235,7 @@ private fun PopularSongItem(
                 )
         ) {
             AsyncImage(
-                model = song.artworkUri ?: fallbackImageUrl,
+                model = rememberFridaArtworkRequest(song.artworkUri.toString().ifBlank { fallbackImageUrl }),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -262,23 +263,13 @@ private fun PopularSongItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-
-        IconButton(onClick = { /* TODO: More options */ }) {
-            Icon(
-                imageVector = Icons.Default.MoreHoriz,
-                contentDescription = stringResource(R.string.more_options),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
 @Composable
 private fun ReleaseCard(release: Song) {
     Column(
-        modifier = Modifier
-            .width(140.dp)
-            .clickable { /* TODO: Navegar a la playlist o reproducirla */ }
+        modifier = Modifier.width(140.dp)
     ) {
         Box(
             modifier = Modifier
@@ -297,7 +288,7 @@ private fun ReleaseCard(release: Song) {
                 )
         ) {
             AsyncImage(
-                model = release.artworkUri,
+                model = rememberFridaArtworkRequest(release.artworkUri),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

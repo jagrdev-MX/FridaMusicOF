@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -54,10 +55,11 @@ enum class AppTheme(val displayName: String) { SYSTEM("System Default"), LIGHT("
 
 private const val AUTOPLAY_TARGET_SIZE = 12
 private const val AUTOPLAY_FAST_READY_SIZE = 8
-private const val AUTOPLAY_REMOTE_QUERY_LIMIT = 1
+private const val AUTOPLAY_REMOTE_QUERY_LIMIT = 3
 private const val AUTOPLAY_REMOTE_TIMEOUT_MS = 3_000L
 private const val AUTOPLAY_CACHE_LIMIT = 18
 private const val AUTOPLAY_LOG_TAG = "FridaAutoplay"
+private const val MAX_CONSECUTIVE_PLAYBACK_ERRORS = 6
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
@@ -84,6 +86,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val _queueState = MutableStateFlow(PlaybackQueueState())
     private val _playlistCoverUris = MutableStateFlow<Map<Long, String>>(emptyMap())
     private val _followedArtists = MutableStateFlow(settingsManager.followedArtists)
+    private val _favoriteSongIds = MutableStateFlow<Set<Long>>(emptySet())
 
     val recentHistory = _recentHistory.asStateFlow()
     val fullHistory = _fullHistory.asStateFlow()
@@ -94,6 +97,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val playlistCoverUris = _playlistCoverUris.asStateFlow()
     val followedArtists = _followedArtists.asStateFlow()
+    val favoriteSongIds = _favoriteSongIds.asStateFlow()
 
     val isAutoPlayEnabled = MutableStateFlow(settingsManager.autoplayEnabled)
 
@@ -232,6 +236,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val searchResultsCache = ConcurrentHashMap<String, List<YouTubeResult>>()
     private val autoplayRecommendationCache = ConcurrentHashMap<String, List<QueueItem>>()
     private val recommendationProfileCache = ConcurrentHashMap<String, SongRecommendationProfile>()
+    private val unavailableSongKeys = linkedSetOf<String>()
+    private var consecutivePlaybackErrors = 0
 
     private val notificationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -240,6 +246,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 "ACTION_NEXT" -> skipToNext()
                 "ACTION_PREV" -> skipToPrevious()
                 "ACTION_SEEK" -> seekTo(intent.getLongExtra("SEEK_POSITION", 0L))
+                "ACTION_REPEAT" -> toggleRepeatMode()
+                "ACTION_LIKE" -> _currentSong.value?.let { toggleLike(it) }
             }
         }
     }
@@ -250,10 +258,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             addAction("ACTION_PREV")
             addAction("ACTION_NEXT")
             addAction("ACTION_SEEK")
+            addAction("ACTION_REPEAT")
+            addAction("ACTION_LIKE")
         }
         ContextCompat.registerReceiver(getApplication(), notificationReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
         ensureFavoritesPlaylistExists()
         refreshPlaylistCoverUris()
+        observeFavorites()
         restoreLastPlaybackState()
         loadRecentHistory()
     }
@@ -282,6 +293,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     override fun onPlaybackStateChanged(state: Int) {
                         _playbackState.value = state
                         if (state == Player.STATE_READY) {
+                            consecutivePlaybackErrors = 0
                             _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
                         }
                         if (state == Player.STATE_ENDED) {
@@ -305,6 +317,12 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                                 }
                             }
                         }
+                    }
+                    override fun onPlayerError(error: PlaybackException) {
+                        handlePlaybackFailure(
+                            failedSong = _queueState.value.current?.song ?: _currentSong.value,
+                            cause = error.localizedMessage ?: error.message.orEmpty()
+                        )
                     }
                 })
             }
@@ -456,6 +474,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             return
         }
 
+        unavailableSongKeys.remove(songIdentityKey(selectedSong))
+        consecutivePlaybackErrors = 0
         isShuffleMode.value = shuffle
         settingsManager.shuffleEnabled = shuffle
 
@@ -503,6 +523,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         source != QueueSource.PLAYLIST
 
     private fun playQueueItem(item: QueueItem) {
+        if (isUnavailable(item.song)) {
+            skipToNext()
+            return
+        }
         if (item.song.requiresRemoteExtraction()) {
             playYouTubeSongNow(
                 YouTubeResult(
@@ -526,7 +550,43 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     ): QueueItem = QueueItem(song, source, reason, userInserted)
 
     private fun appendPrevious(previous: List<QueueItem>, current: QueueItem?): List<QueueItem> {
-        return (previous + listOfNotNull(current)).takeLast(50)
+        val playableCurrent = current?.takeUnless { isUnavailable(it.song) }
+        return (previous + listOfNotNull(playableCurrent)).takeLast(50)
+    }
+
+    private fun isUnavailable(song: Song): Boolean =
+        songIdentityKey(song) in unavailableSongKeys
+
+    private fun markUnavailable(song: Song) {
+        unavailableSongKeys += songIdentityKey(song)
+        while (unavailableSongKeys.size > 80) {
+            unavailableSongKeys.remove(unavailableSongKeys.first())
+        }
+    }
+
+    private fun handlePlaybackFailure(failedSong: Song?, cause: String?) {
+        val song = failedSong ?: return
+        markUnavailable(song)
+        consecutivePlaybackErrors += 1
+        _isPlaying.value = false
+        stopProgressUpdate()
+        _errorMessage.value = getApplication<Application>().getString(R.string.song_skipped_unavailable)
+        Log.w(AUTOPLAY_LOG_TAG, "playback failed skipped=${song.title} consecutive=$consecutivePlaybackErrors cause=$cause")
+
+        if (consecutivePlaybackErrors >= MAX_CONSECUTIVE_PLAYBACK_ERRORS) {
+            _queueState.value = _queueState.value.copy(
+                current = null,
+                upNext = _queueState.value.upNext.filterNot { isUnavailable(it.song) },
+                autoplay = _queueState.value.autoplay.filterNot { isUnavailable(it.song) },
+                isAutoplayLoading = false,
+                autoplayError = getApplication<Application>().getString(R.string.queue_autoplay_error)
+            )
+            exoPlayer?.pause()
+            persistQueueState()
+            return
+        }
+
+        skipToNext()
     }
 
     private fun distinctSongs(songs: List<Song>): List<Song> {
@@ -756,7 +816,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     ): List<QueueItem> {
         val excluded = (state.previous.takeLast(20) + listOfNotNull(state.current) + state.upNext.take(AUTOPLAY_FAST_READY_SIZE) + state.autoplay)
             .map { songIdentityKey(it.song) }
-            .toSet()
+            .toMutableSet()
+            .apply { addAll(unavailableSongKeys) }
         val candidates = cached
             .filterNot { item -> songIdentityKey(item.song) in excluded || sameSong(seed, item.song) }
             .mapIndexed { index, item ->
@@ -780,7 +841,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val seen = mutableSetOf<String>()
         val merged = buildList {
             (existing + incoming).forEach { item ->
-                if (seen.add(songIdentityKey(item.song)) && !sameSong(seed, item.song)) add(item)
+                val key = songIdentityKey(item.song)
+                if (key !in unavailableSongKeys && seen.add(key) && !sameSong(seed, item.song)) add(item)
             }
         }
         val candidates = merged.mapIndexed { index, item ->
@@ -817,7 +879,19 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val excluded = excludedContext
             .map { songIdentityKey(it.song) }
             .toMutableSet()
+            .apply { addAll(unavailableSongKeys) }
         val localSongs = _songs.value
+        val localSongsById = localSongs.associateBy { it.id }
+        val playlistSongs = runCatching {
+            playlistDao.getAllPlaylistsOnce()
+                .flatMap { entity ->
+                    entity.songIds.split(",")
+                        .mapNotNull { it.toLongOrNull() }
+                }
+                .distinct()
+                .mapNotNull { id -> localSongsById[id] ?: restorePlaylistSong(id) }
+        }.getOrDefault(emptyList())
+        val favoriteIds = _favoriteSongIds.value
         val context = recommendationContext(state)
         val autoplayHistory = _fullHistory.value.take(300)
         val historyCounts = autoplayHistory.groupingBy { metadataIdentity(it.title, it.artist) }.eachCount()
@@ -877,6 +951,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         localSongs.forEach { song ->
             addCandidate(song, 10, requireContextMatch = true)
+        }
+
+        playlistSongs.forEach { song ->
+            addCandidate(
+                song = song,
+                baseScore = if (song.id in favoriteIds) 24 else 16,
+                reason = getApplication<Application>().getString(R.string.from_your_library),
+                requireContextMatch = song.id !in favoriteIds
+            )
         }
 
         _youtubeSearchResults.value
@@ -1102,6 +1185,25 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             queries += "$artist radio"
             styles.take(2).forEach { style -> queries += "$artist $style mix" }
         }
+        _fullHistory.value
+            .asSequence()
+            .map { primaryArtistName(it.artist) }
+            .filterNotNull()
+            .filter { historyArtist -> artist == null || !historyArtist.equals(artist, ignoreCase = true) }
+            .distinct()
+            .take(2)
+            .forEach { historyArtist ->
+                if (artist != null) queries += "$artist $historyArtist similar songs"
+                queries += "$historyArtist radio"
+            }
+        _followedArtists.value
+            .asSequence()
+            .filter { it.isNotBlank() }
+            .filter { followed -> artist == null || !followed.equals(artist, ignoreCase = true) }
+            .take(2)
+            .forEach { followed ->
+                queries += "$followed latest songs"
+            }
         styles.take(3).forEach { style ->
             queries += "$style similar music ${artist.orEmpty()}".trim()
         }
@@ -1632,14 +1734,26 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         prefetchNextSongInList(result.videoId)
                     }
                 } else {
-                    _errorMessage.value = getApplication<Application>().getString(R.string.no_compatible_audio_streams)
+                    withContext(Dispatchers.Main) {
+                        handlePlaybackFailure(
+                            failedSong = _queueState.value.current?.song,
+                            cause = getApplication<Application>().getString(R.string.no_compatible_audio_streams)
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 if (e !is CancellationException) {
-                    _errorMessage.value = getApplication<Application>().getString(
+                    val message = getApplication<Application>().getString(
                         R.string.audio_extraction_error_format,
                         e.localizedMessage ?: e.message.orEmpty()
                     )
+                    withContext(Dispatchers.Main) {
+                        _errorMessage.value = message
+                        handlePlaybackFailure(
+                            failedSong = _queueState.value.current?.song,
+                            cause = message
+                        )
+                    }
                 }
             } finally {
                 val isActiveExtraction = extractionJob === currentCoroutineContext()[Job]
@@ -1672,11 +1786,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val state = _queueState.value
         val current = state.current
 
-        state.upNext.firstOrNull()?.let { next ->
+        val nextUpIndex = state.upNext.indexOfFirst { !isUnavailable(it.song) }
+        if (nextUpIndex >= 0) {
+            val next = state.upNext[nextUpIndex]
             _queueState.value = state.copy(
                 current = next,
                 previous = appendPrevious(state.previous, current),
-                upNext = state.upNext.drop(1),
+                upNext = state.upNext.drop(nextUpIndex + 1),
                 autoplayError = null
             )
             persistQueueState()
@@ -1684,11 +1800,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             return
         }
 
-        state.autoplay.firstOrNull()?.let { next ->
+        val nextAutoplayIndex = state.autoplay.indexOfFirst { !isUnavailable(it.song) }
+        if (nextAutoplayIndex >= 0) {
+            val next = state.autoplay[nextAutoplayIndex]
             _queueState.value = state.copy(
                 current = next,
                 previous = appendPrevious(state.previous, current),
-                autoplay = state.autoplay.drop(1),
+                upNext = emptyList(),
+                autoplay = state.autoplay.drop(nextAutoplayIndex + 1),
                 autoplayError = null
             )
             persistQueueState()
@@ -1698,7 +1817,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
 
         if (_repeatMode.value == RepeatMode.ALL) {
-            val loop = state.previous + listOfNotNull(current)
+            val loop = (state.previous + listOfNotNull(current)).filterNot { isUnavailable(it.song) }
             val next = loop.firstOrNull()
             if (next != null) {
                 _queueState.value = state.copy(
@@ -1727,12 +1846,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         val state = _queueState.value
         val previous = state.previous
-        val previousItem = previous.lastOrNull()
+        val previousItem = previous.lastOrNull { !isUnavailable(it.song) }
 
         if (previousItem != null) {
+            val previousIndex = previous.indexOfLast { !isUnavailable(it.song) }
             _queueState.value = state.copy(
                 current = previousItem,
-                previous = previous.dropLast(1),
+                previous = previous.take(previousIndex),
                 upNext = listOfNotNull(state.current) + state.upNext,
                 autoplayError = null
             )
@@ -1742,7 +1862,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
 
         if (_repeatMode.value == RepeatMode.ALL) {
-            val loop = listOfNotNull(state.current) + state.upNext
+            val loop = (listOfNotNull(state.current) + state.upNext).filterNot { isUnavailable(it.song) }
             val last = loop.lastOrNull()
             if (last != null && loop.size > 1) {
                 _queueState.value = state.copy(
@@ -1803,6 +1923,20 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     getApplication<Application>().getString(R.string.favorites_playlist_name),
                     getApplication<Application>().getString(R.string.favorites_playlist_description)
                 )
+            }
+        }
+    }
+
+    private fun observeFavorites() {
+        viewModelScope.launch(Dispatchers.IO) {
+            playlists.collect { currentPlaylists ->
+                val favoriteIds = currentPlaylists
+                    .firstOrNull { it.name in favoritePlaylistNames() }
+                    ?.songIds
+                    ?.toSet()
+                    .orEmpty()
+                _favoriteSongIds.value = favoriteIds
+                _currentSong.value?.let { song -> updateNotification(song, _isPlaying.value) }
             }
         }
     }
@@ -2032,6 +2166,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         createdAt = entity.createdAt
                     )
                 )
+                val newFavoriteIds = newIdsString.split(",").filter { it.isNotBlank() }.map { it.toLong() }.toSet()
+                _favoriteSongIds.value = newFavoriteIds
+                withContext(Dispatchers.Main) {
+                    _currentSong.value?.takeIf { sameSong(it, song) }?.let { updateNotification(it, _isPlaying.value) }
+                }
             }
         }
     }
@@ -2223,6 +2362,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         settingsManager.repeatModeName = _repeatMode.value.name
         applyPlayerRepeatMode()
         persistQueueState()
+        _currentSong.value?.let { updateNotification(it, _isPlaying.value) }
     }
 
     fun updateTheme(theme: AppTheme) { _currentTheme.value = theme }
@@ -2303,11 +2443,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private fun updateNotification(song: Song, isPlaying: Boolean) {
         val intent = Intent(getApplication(), MusicService::class.java).apply {
             putExtra("TITLE", song.title)
-            putExtra("ARTIST", song.artist ?: "Unknown Artist")
+            putExtra("ARTIST", song.artist.ifBlank { getApplication<Application>().getString(R.string.unknown_artist) })
             putExtra("IS_PLAYING", isPlaying)
             putExtra("ALBUM_ART_URL", _currentAlbumArt.value ?: "")
             putExtra("CURRENT_POSITION", exoPlayer?.currentPosition ?: _currentPosition.value)
             putExtra("DURATION", exoPlayer?.duration?.takeIf { it > 0 } ?: song.duration)
+            putExtra("REPEAT_MODE", _repeatMode.value.name)
+            putExtra("IS_LIKED", song.id in _favoriteSongIds.value)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getApplication<Application>().startForegroundService(intent)

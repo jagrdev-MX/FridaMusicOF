@@ -12,6 +12,9 @@
     <string name="see_all">Ver todo</string>
     <string name="now_playing">REPRODUCIENDO AHORA</string>
     <string name="top_artists">Artistas principales</string>
+    <string name="quick_picks">Selecciones rápidas</string>
+    <string name="daily_discover">Tu descubrimiento diario</string>
+    <string name="fresh_finds_old_favorites">Nuevos hallazgos y favoritos</string>
     <string name="unknown_artist">Artista desconocido</string>
     <string name="unknown">Desconocido</string>
 
@@ -86,6 +89,7 @@
     <string name="album_label">Álbum</string>
     <string name="history_reload_failed">No se pudo volver a cargar esta canción del historial</string>
     <string name="song_unavailable">Esta canción ya no está disponible en el dispositivo</string>
+    <string name="song_skipped_unavailable">Canción no disponible. Saltando a la siguiente.</string>
     <string name="no_songs_available">No hay canciones disponibles para reproducir</string>
     <string name="youtube_version_not_found">No se encontró una versión en YouTube</string>
     <string name="no_compatible_audio_streams">No se encontraron transmisiones de audio compatibles</string>
@@ -153,6 +157,9 @@
     <string name="like">Me gusta</string>
     <string name="shuffle">Aleatorio</string>
     <string name="repeat">Repetir</string>
+    <string name="repeat_off">Repetición desactivada</string>
+    <string name="repeat_all">Repetir todo</string>
+    <string name="repeat_one">Repetir una</string>
     <string name="previous">Anterior</string>
     <string name="pause">Pausar</string>
     <string name="play">Reproducir</string>
@@ -183,6 +190,7 @@
     <string name="duration_label">Duración</string>
     <string name="source_youtube">YouTube Music (InnerTube)</string>
     <string name="source_local">Dispositivo local</string>
+    <string name="album_tracks_unavailable">Las canciones del álbum aún no están disponibles desde esta fuente.</string>
 
     <!-- Navigation -->
     <string name="nav_home">Inicio</string>

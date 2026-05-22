@@ -66,6 +66,7 @@ fun MainScreen() {
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var libraryReselectSignal by remember { mutableIntStateOf(0) }
+    var libraryHistorySignal by remember { mutableIntStateOf(0) }
     var searchFocusSignal by remember { mutableIntStateOf(0) }
 
     val navController = rememberNavController()
@@ -89,7 +90,12 @@ fun MainScreen() {
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val audioGranted = permissions[Manifest.permission.READ_MEDIA_AUDIO] ?: permissions[Manifest.permission.READ_EXTERNAL_STORAGE] ?: false
+        val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        val audioGranted = permissions[audioPermission] == true
         if (audioGranted) { libraryViewModel.loadSongs() }
     }
 
@@ -167,13 +173,33 @@ fun MainScreen() {
             ) {
                 composable("home") {
                     val songs by libraryViewModel.songs.collectAsState()
+                    val recentHistory by libraryViewModel.recentHistory.collectAsState()
+                    val fullHistory by libraryViewModel.fullHistory.collectAsState()
+                    val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
                     HomeScreen(
                         paddingValues = paddingValues,
                         listState = homeListState,
                         songs = songs,
                         currentSong = currentSong,
+                        recentHistory = recentHistory,
+                        fullHistory = fullHistory,
+                        playlists = playlists,
                         viewModel = libraryViewModel,
                         onSongClick = { libraryViewModel.playSong(it) },
+                        onHistoryClick = { libraryViewModel.playHistoryItem(it) },
+                        onSeeAllHistory = {
+                            libraryHistorySignal++
+                            navController.navigate("library") {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        onNavigateToArtist = { name, url ->
+                            val encName = URLEncoder.encode(name, "UTF-8")
+                            val encUrl = URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
+                            navController.navigate("artist?name=$encName&url=$encUrl")
+                        },
                         onNavigateToSettings = { navController.navigate("settings") }
                     )
                 }
@@ -188,6 +214,12 @@ fun MainScreen() {
                             val encName = URLEncoder.encode(name, "UTF-8")
                             val encUrl = URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
                             navController.navigate("artist?name=$encName&url=$encUrl")
+                        },
+                        onNavigateToAlbum = { title, artist, url ->
+                            val encTitle = URLEncoder.encode(title, "UTF-8")
+                            val encArtist = URLEncoder.encode(artist, "UTF-8")
+                            val encUrl = URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
+                            navController.navigate("album?title=$encTitle&artist=$encArtist&url=$encUrl")
                         }
                     )
                 }
@@ -284,7 +316,33 @@ fun MainScreen() {
                     LibraryScreen(
                         paddingValues = paddingValues,
                         reselectSignal = libraryReselectSignal,
+                        openHistorySignal = libraryHistorySignal,
                         viewModel = libraryViewModel
+                    )
+                }
+
+                composable("album?title={albumTitle}&artist={albumArtist}&url={albumUrl}") { backStackEntry ->
+                    val title = URLDecoder.decode(backStackEntry.arguments?.getString("albumTitle") ?: "", "UTF-8")
+                    val artist = URLDecoder.decode(backStackEntry.arguments?.getString("albumArtist") ?: "", "UTF-8")
+                    val rawUrl = URLDecoder.decode(backStackEntry.arguments?.getString("albumUrl") ?: "", "UTF-8")
+                    val songs by libraryViewModel.songs.collectAsState()
+                    val normalizedAlbum = remember(title) { normalizeRouteArtistName(title) }
+                    val normalizedArtist = remember(artist) { normalizeRouteArtistName(artist) }
+                    val albumSongs = remember(songs, normalizedAlbum, normalizedArtist) {
+                        songs.filter { song ->
+                            normalizeRouteArtistName(song.album) == normalizedAlbum &&
+                                (normalizedArtist.isBlank() || normalizeRouteArtistName(song.artist) == normalizedArtist)
+                        }
+                    }
+
+                    AlbumScreen(
+                        albumTitle = title,
+                        albumArtist = artist,
+                        albumImageUrl = if (rawUrl == "none") "" else rawUrl,
+                        songs = albumSongs,
+                        paddingValues = paddingValues,
+                        viewModel = libraryViewModel,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 
@@ -331,6 +389,19 @@ fun MainScreen() {
                 onToggleRepeat = { libraryViewModel.toggleRepeatMode() },
                 onToggleShuffle = { libraryViewModel.toggleShuffleMode() },
                 onCollapse = { isPlayerExpanded = false },
+                onNavigateToArtist = { name, url ->
+                    isPlayerExpanded = false
+                    val encName = URLEncoder.encode(name, "UTF-8")
+                    val encUrl = URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
+                    navController.navigate("artist?name=$encName&url=$encUrl")
+                },
+                onNavigateToAlbum = { title, artist, url ->
+                    isPlayerExpanded = false
+                    val encTitle = URLEncoder.encode(title, "UTF-8")
+                    val encArtist = URLEncoder.encode(artist, "UTF-8")
+                    val encUrl = URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
+                    navController.navigate("album?title=$encTitle&artist=$encArtist&url=$encUrl")
+                },
                 viewModel = libraryViewModel
             )
         }
