@@ -126,12 +126,12 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 ### Repositorio oficial
 
-**Commits humanos visibles:** 242 · **Commits de automatización:** 22
+**Commits humanos visibles:** 245 · **Commits de automatización:** 27
 
 | Colaborador | Commits | % de contribución humana |
 | --- | ---: | ---: |
-| [@jagrdev-MX](https://github.com/jagrdev-MX) | 205 | 84.7% |
-| [@juliocps25](https://github.com/juliocps25) | 37 | 15.3% |
+| [@jagrdev-MX](https://github.com/jagrdev-MX) | 208 | 84.9% |
+| [@juliocps25](https://github.com/juliocps25) | 37 | 15.1% |
 
 ### Forks con trabajo independiente
 
@@ -143,7 +143,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 > Los porcentajes del repositorio oficial se calculan con commits humanos visibles. Los bots se separan para no distorsionar la métrica. Los forks muestran trabajo independiente que aún no necesariamente fue integrado al proyecto principal.
 
-Última actualización automática (UTC): `2026-05-21`
+Última actualización automática (UTC): `2026-05-22`
 <!-- CONTRIBUTOR-STATS:END -->
 
 ---
@@ -156,6 +156,21 @@ Las contribuciones son bienvenidas. Puedes abrir un **issue** para reportes/mejo
 2. Crea una rama (`feature/mi-mejora`)
 3. Realiza commits con Conventional Commits y, cuando aplique, usa scopes claros por track (`feat(web):`, `fix(android):`, `refactor(telegram-bot):`)
 4. Abre tu pull request
+
+---
+
+
+## License
+Apache License 2.0
+
+## Branding Notice
+FridaMusic TM and Frida Labs TM branding, artwork, assets, visual identity and official releases are reserved.
+
+## Open Source
+Forks and contributions are allowed under Apache 2.0, but official branding and identity remain property of the project ecosystem.
+
+## Organization
+FridaMusic TM is part of the Frida Labs TM ecosystem.
 
 ---
 
