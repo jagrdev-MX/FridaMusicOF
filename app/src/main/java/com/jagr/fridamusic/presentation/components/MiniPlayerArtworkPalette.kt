@@ -10,13 +10,11 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
-import com.jagr.fridamusic.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -44,22 +42,17 @@ internal fun rememberMiniPlayerArtworkPalette(albumArtUrl: String?): State<MiniP
         key2 = darkTheme
     ) {
         value = fallback
-        val artworkData = albumArtUrl.normalizedArtworkData() ?: R.drawable.frida_cover_fallback
+        val normalizedUrl = albumArtUrl?.takeIf { it.isNotBlank() } ?: return@produceState
 
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val request = ImageRequest.Builder(context)
-                    .data(artworkData)
-                    .placeholder(R.drawable.frida_cover_fallback)
-                    .fallback(R.drawable.frida_cover_fallback)
-                    .error(R.drawable.frida_cover_fallback)
+                    .data(normalizedUrl)
                     .allowHardware(false)
                     .size(96)
                     .build()
                 val result = context.imageLoader.execute(request)
-                val drawable = (result as? SuccessResult)?.drawable
-                    ?: ContextCompat.getDrawable(context, R.drawable.frida_cover_fallback)
-                    ?: return@runCatching fallback
+                val drawable = (result as? SuccessResult)?.drawable ?: return@runCatching fallback
                 val bitmap = drawable.toBitmap(
                     width = drawable.intrinsicWidth.coerceAtLeast(1),
                     height = drawable.intrinsicHeight.coerceAtLeast(1)
@@ -77,18 +70,20 @@ internal fun rememberMiniPlayerArtworkPalette(albumArtUrl: String?): State<MiniP
 
 @Composable
 private fun defaultMiniPlayerArtworkPalette(darkTheme: Boolean): MiniPlayerArtworkPalette {
-    val fallbackContainer = if (darkTheme) Color(0xFF12091D) else Color(0xFF1B1026)
-    val fallbackGlowStart = Color(0xFF8F57C7)
-    val fallbackGlowEnd = Color(0xFF3B1D58)
+    val surface = MaterialTheme.colorScheme.surface
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     return MiniPlayerArtworkPalette(
-        container = fallbackContainer,
-        glowStart = fallbackGlowStart,
-        glowEnd = fallbackGlowEnd,
-        onContainer = Color.White,
-        onContainerMuted = Color.White.copy(alpha = 0.72f),
-        border = Color.White.copy(alpha = if (darkTheme) 0.12f else 0.10f),
-        accent = Color.White,
+        container = surface,
+        glowStart = primary,
+        glowEnd = secondary,
+        onContainer = onSurface,
+        onContainerMuted = muted,
+        border = onSurface.copy(alpha = if (darkTheme) 0.10f else 0.08f),
+        accent = primary,
         fromArtwork = false
     )
 }

@@ -123,7 +123,6 @@ import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
-import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.util.Calendar
 import kotlinx.coroutines.launch
@@ -133,7 +132,6 @@ private enum class LibraryTab {
     ALL,
     HISTORY,
     PLAYLISTS,
-    ALBUMS,
     SONGS,
     ARTISTS
 }
@@ -196,7 +194,6 @@ private val LibraryArtworkRadius = 12.dp
 fun LibraryScreen(
     paddingValues: PaddingValues,
     reselectSignal: Int,
-    openHistorySignal: Int = 0,
     viewModel: LibraryViewModels
 ) {
     val songs by viewModel.songs.collectAsState()
@@ -209,7 +206,6 @@ fun LibraryScreen(
         LibraryTab.ALL to stringResource(R.string.all_tab),
         LibraryTab.HISTORY to stringResource(R.string.history_tab),
         LibraryTab.PLAYLISTS to stringResource(R.string.playlists_tab),
-        LibraryTab.ALBUMS to stringResource(R.string.albums_tab),
         LibraryTab.SONGS to stringResource(R.string.songs_tab),
         LibraryTab.ARTISTS to stringResource(R.string.artists_tab)
     )
@@ -226,14 +222,12 @@ fun LibraryScreen(
     val allListState = rememberLazyListState()
     val historyListState = rememberLazyListState()
     val playlistsListState = rememberLazyListState()
-    val albumsListState = rememberLazyListState()
     val songsListState = rememberLazyListState()
     val artistsListState = rememberLazyListState()
     val pageStates = listOf(
         allListState,
         historyListState,
         playlistsListState,
-        albumsListState,
         songsListState,
         artistsListState
     )
@@ -256,11 +250,6 @@ fun LibraryScreen(
         }
     }
     val headerSpacerHeight = with(LocalDensity.current) { headerHeightPx.toDp() }
-    val showScrollShortcut by remember(currentListState) {
-        derivedStateOf {
-            currentListState.firstVisibleItemIndex > 1 || currentListState.firstVisibleItemScrollOffset > 420
-        }
-    }
 
     val savedSortOption = remember {
         runCatching { LibrarySortOption.valueOf(viewModel.settingsManager.librarySortOption) }
@@ -312,16 +301,6 @@ fun LibraryScreen(
             } else {
                 currentListState.animateScrollToItem(0)
             }
-        }
-    }
-
-    LaunchedEffect(openHistorySignal) {
-        if (openHistorySignal > 0) {
-            detail = null
-            pagerState.animateScrollToPage(
-                pagerState.currentPage.nearestPageForTab(LibraryTab.HISTORY.ordinal, tabs.size)
-            )
-            historyListState.animateScrollToItem(0)
         }
     }
 
@@ -566,15 +545,6 @@ fun LibraryScreen(
                     onDelete = { playlistToDelete = it }
                 )
 
-                LibraryTab.ALBUMS -> AlbumsPage(
-                    albums = visibleAlbums,
-                    paddingValues = paddingValues,
-                    listState = albumsListState,
-                    headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel,
-                    onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) }
-                )
-
                 LibraryTab.SONGS -> SongsPage(
                     songs = visibleSongs,
                     paddingValues = paddingValues,
@@ -632,45 +602,6 @@ fun LibraryScreen(
                     bottom = paddingValues.calculateBottomPadding() + 20.dp
                 )
         )
-
-        if (detail == null) {
-            LibraryScrollShortcut(
-                visible = showScrollShortcut,
-                bottomPadding = paddingValues.calculateBottomPadding() + 92.dp,
-                onClick = { scope.launch { currentListState.animateScrollToItem(0) } },
-                modifier = Modifier.align(Alignment.BottomEnd)
-            )
-        }
-    }
-}
-
-@Composable
-private fun LibraryScrollShortcut(
-    visible: Boolean,
-    bottomPadding: Dp,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn() + slideInVertically { it / 2 },
-        modifier = modifier.padding(end = 22.dp, bottom = bottomPadding)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(46.dp)
-                .liquidGlassEffect(23.dp)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.42f), CircleShape)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowUp,
-                contentDescription = stringResource(R.string.back_to_top),
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(28.dp)
-            )
-        }
     }
 }
 
@@ -1072,22 +1003,18 @@ private fun PlaylistsPage(
 private fun AlbumsPage(
     albums: List<LibraryAlbum>,
     paddingValues: PaddingValues,
-    listState: LazyListState,
-    headerSpacerHeight: Dp,
     viewModel: LibraryViewModels,
     onOpenAlbum: (LibraryAlbum) -> Unit
 ) {
     LazyColumn(
-        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = 20.dp,
             end = 20.dp,
-            bottom = paddingValues.calculateBottomPadding() + 140.dp
+            bottom = paddingValues.calculateBottomPadding() + 20.dp
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
         item { SectionHeader(text = stringResource(R.string.albums_tab)) }
 
         if (albums.isEmpty()) {
@@ -1678,7 +1605,7 @@ private fun DetailPageShell(
     ) {
         if (!backgroundArtUrl.isNullOrBlank()) {
             AsyncImage(
-                model = rememberFridaArtworkRequest(backgroundArtUrl),
+                model = backgroundArtUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -1845,7 +1772,7 @@ private fun SmartCollectionCover(
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 AsyncImage(
-                    model = rememberFridaArtworkRequest(coverModels.first()),
+                    model = coverModels.first(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -1864,7 +1791,7 @@ private fun SmartCollectionCover(
                     Row(Modifier.weight(1f)) {
                         row.forEach { model ->
                             AsyncImage(
-                                model = rememberFridaArtworkRequest(model),
+                                model = model,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -1946,7 +1873,7 @@ private fun SmartCollectionThumbnail(
         when {
             coverModels.size == 1 -> {
                 AsyncImage(
-                    model = rememberFridaArtworkRequest(coverModels.first()),
+                    model = coverModels.first(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -1959,7 +1886,7 @@ private fun SmartCollectionThumbnail(
                         Row(Modifier.weight(1f)) {
                             row.forEach { model ->
                                 AsyncImage(
-                                    model = rememberFridaArtworkRequest(model),
+                                    model = model,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
@@ -2021,12 +1948,21 @@ private fun DetailSongCover(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        AsyncImage(
-            model = rememberFridaArtworkRequest(imageUrl),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
+        if (imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(84.dp)
+            )
+        }
     }
 }
 
@@ -2134,7 +2070,7 @@ private fun ArtistAlbumChip(
         ) {
             if (imageUrl != null) {
                 AsyncImage(
-                    model = rememberFridaArtworkRequest(imageUrl),
+                    model = imageUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -2227,7 +2163,7 @@ private fun ArtistSongCard(
         ) {
             if (imageUrl != null) {
                 AsyncImage(
-                    model = rememberFridaArtworkRequest(imageUrl),
+                    model = imageUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -2333,7 +2269,7 @@ private fun RelatedArtistCard(
         ) {
             if (imageUrl != null) {
                 AsyncImage(
-                    model = rememberFridaArtworkRequest(imageUrl),
+                    model = imageUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -2897,12 +2833,14 @@ private fun LibraryAlbumCard(
             .liquidGlassEffect(16.dp)
             .clickable(onClick = onOpen)
     ) {
-        AsyncImage(
-            model = rememberFridaArtworkRequest(imageUrl),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().alpha(0.8f)
-        )
+        if (imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().alpha(0.8f)
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -2975,12 +2913,21 @@ private fun LibrarySongItem(
                 .clip(RoundedCornerShape(LibraryArtworkRadius))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            AsyncImage(
-                model = rememberFridaArtworkRequest(imageUrl),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    Icons.Default.MusicNote,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
@@ -3131,12 +3078,21 @@ private fun HistorySongItem(
                 .clip(RoundedCornerShape(LibraryArtworkRadius))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            AsyncImage(
-                model = rememberFridaArtworkRequest(item.artworkUrl),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (!item.artworkUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = item.artworkUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    Icons.Default.History,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
@@ -3308,12 +3264,16 @@ private fun ArtistListItem(
                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
         ) {
-            AsyncImage(
-                model = rememberFridaArtworkRequest(imageUrl),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
