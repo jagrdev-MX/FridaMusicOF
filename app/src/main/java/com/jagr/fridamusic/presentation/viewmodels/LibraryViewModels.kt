@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -54,10 +55,15 @@ enum class AppTheme(val displayName: String) { SYSTEM("System Default"), LIGHT("
 
 private const val AUTOPLAY_TARGET_SIZE = 12
 private const val AUTOPLAY_FAST_READY_SIZE = 8
-private const val AUTOPLAY_REMOTE_QUERY_LIMIT = 1
-private const val AUTOPLAY_REMOTE_TIMEOUT_MS = 3_000L
+private const val AUTOPLAY_REMOTE_QUERY_LIMIT = 4
+private const val AUTOPLAY_REMOTE_TIMEOUT_MS = 4_000L
 private const val AUTOPLAY_CACHE_LIMIT = 18
+private const val AUTOPLAY_PREFETCH_LIMIT = 4
+private const val AUTOPLAY_PREPARED_UP_NEXT_SIZE = 4
+private const val AUTOPLAY_PREFETCH_GRACE_ATTEMPTS = 8
+private const val AUTOPLAY_PREFETCH_GRACE_DELAY_MS = 50L
 private const val AUTOPLAY_LOG_TAG = "FridaAutoplay"
+private val YOUTUBE_VIDEO_ID_PATTERN = Regex("[A-Za-z0-9_-]{11}")
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
 
@@ -81,12 +87,16 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
     private val _fullHistory =
         MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
+    private val _mostPlayedHistory =
+        MutableStateFlow<List<PlaybackHistoryEntity>>(emptyList())
     private val _queueState = MutableStateFlow(PlaybackQueueState())
     private val _playlistCoverUris = MutableStateFlow<Map<Long, String>>(emptyMap())
     private val _followedArtists = MutableStateFlow(settingsManager.followedArtists)
+    private val _blacklistedSongIds = MutableStateFlow(settingsManager.blacklistedSongIds)
 
     val recentHistory = _recentHistory.asStateFlow()
     val fullHistory = _fullHistory.asStateFlow()
+    val mostPlayedHistory = _mostPlayedHistory.asStateFlow()
     val searchHistory = _searchHistory.asStateFlow()
     val queueState = _queueState.asStateFlow()
     val manualQueue = _queueState
@@ -94,6 +104,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val playlistCoverUris = _playlistCoverUris.asStateFlow()
     val followedArtists = _followedArtists.asStateFlow()
+    val blacklistedSongIds = _blacklistedSongIds.asStateFlow()
 
     val isAutoPlayEnabled = MutableStateFlow(settingsManager.autoplayEnabled)
 
@@ -228,10 +239,21 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var profileWarmupJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
     private val audioStreamCache = ConcurrentHashMap<String, String>()
+    private val audioDurationCache = ConcurrentHashMap<String, Long>()
     private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
     private val searchResultsCache = ConcurrentHashMap<String, List<YouTubeResult>>()
+    private val autoplayRemoteSearchCache = ConcurrentHashMap<String, List<YouTubeResult>>()
     private val autoplayRecommendationCache = ConcurrentHashMap<String, List<QueueItem>>()
     private val recommendationProfileCache = ConcurrentHashMap<String, SongRecommendationProfile>()
+    private val failedAutoplayItems = mutableSetOf<String>()
+    private val unavailableAutoplayVideoIds = ConcurrentHashMap.newKeySet<String>()
+    private val rejectedAutoplayVideoIds = ConcurrentHashMap.newKeySet<String>()
+    private val readyAutoplayVideoIds = ConcurrentHashMap.newKeySet<String>()
+    private val autoplayPrefetchInFlight = ConcurrentHashMap.newKeySet<String>()
+    private var autoplayAnchorSong: Song? = null
+    private var currentPlaybackConfirmed = false
+    private var historyRecordedForCurrentAttempt = false
+    private var preferPrefetchedAutoplayNext = false
 
     private val notificationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -276,7 +298,12 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _isPlaying.value = isPlaying
-                        if (isPlaying) startProgressUpdate() else stopProgressUpdate()
+                        if (isPlaying) {
+                            confirmCurrentPlayback()
+                            startProgressUpdate()
+                        } else {
+                            stopProgressUpdate()
+                        }
                         _currentSong.value?.let { updateNotification(it, isPlaying) }
                     }
                     override fun onPlaybackStateChanged(state: Int) {
@@ -305,6 +332,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                                 }
                             }
                         }
+                    }
+                    override fun onPlayerError(error: PlaybackException) {
+                        val failedSong = _currentSong.value
+                        if (failedSong != null && recoverFromFailedAutoplay(failedSong, "player:${error.errorCode}")) {
+                            return
+                        }
+                        Log.w(AUTOPLAY_LOG_TAG, "playback failed current=${failedSong?.title.orEmpty()} code=${error.errorCode}", error)
                     }
                 })
             }
@@ -392,6 +426,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         _errorMessage.value = null
         saveCurrentPlaybackState()
+        _currentSong.value = song
+        syncQueueCurrentSong(song)
 
         exoPlayer?.apply {
             setMediaItem(MediaItem.fromUri(song.uri))
@@ -400,19 +436,6 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             play()
         }
 
-        _currentSong.value = song
-        syncQueueCurrentSong(song)
-        viewModelScope.launch {
-            playbackHistoryRepository.addToHistory(
-                PlaybackHistoryEntity(
-                    songId = song.uri.toString(),
-                    title = song.title,
-                    artist = song.artist,
-                    artworkUrl = song.artworkUri.toString()
-                )
-            )
-            loadHistory()
-        }
         maybeRefreshAutoplayRecommendations()
         _isPlaying.value = true
         startProgressUpdate()
@@ -423,7 +446,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch(Dispatchers.IO) {
             val url = if (hasPreloadedArt) song.artworkUri.toString() else getSongImageUrl(song)
-            val lyrics = fetchLyrics(song.artist, song.title)
+            val lyrics = settingsManager.localLyrics(song.id) ?: fetchLyrics(song.artist, song.title)
 
             withContext(Dispatchers.Main) {
                 _currentAlbumArt.value = url
@@ -441,6 +464,26 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private suspend fun loadHistory() {
         _recentHistory.value = playbackHistoryRepository.getRecentHistory(10)
         _fullHistory.value = playbackHistoryRepository.getFullHistory()
+        _mostPlayedHistory.value = playbackHistoryRepository.getMostPlayed(20)
+    }
+
+    private fun confirmCurrentPlayback() {
+        val song = _currentSong.value ?: return
+        currentPlaybackConfirmed = true
+        if (historyRecordedForCurrentAttempt) return
+        historyRecordedForCurrentAttempt = true
+        Log.i(AUTOPLAY_LOG_TAG, "confirmed playback song=${song.title}")
+        viewModelScope.launch {
+            playbackHistoryRepository.addToHistory(
+                PlaybackHistoryEntity(
+                    songId = song.uri.toString(),
+                    title = song.title,
+                    artist = song.artist,
+                    artworkUrl = song.artworkUri.toString()
+                )
+            )
+            loadHistory()
+        }
     }
 
     private fun startQueueSession(
@@ -450,7 +493,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         sourceName: String? = null,
         shuffle: Boolean = false
     ) {
-        val selectedSong = startSong ?: songs.firstOrNull()
+        val playableSongs = songs.filterNot(::isBlacklisted)
+        val selectedSong = startSong?.takeUnless(::isBlacklisted) ?: playableSongs.firstOrNull()
         if (selectedSong == null) {
             _errorMessage.value = getApplication<Application>().getString(R.string.no_songs_available)
             return
@@ -458,15 +502,26 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         isShuffleMode.value = shuffle
         settingsManager.shuffleEnabled = shuffle
+        failedAutoplayItems.clear()
+        currentPlaybackConfirmed = false
+        historyRecordedForCurrentAttempt = false
+        preferPrefetchedAutoplayNext = false
+        autoplayAnchorSong = selectedSong
 
-        val distinctSongs = distinctSongs(songs.ifEmpty { listOf(selectedSong) })
-        val startIndex = distinctSongs.indexOfFirst { sameSong(it, selectedSong) }.coerceAtLeast(0)
+        val sessionSongs = if (source == QueueSource.PLAYLIST) {
+            playableSongs.ifEmpty { listOf(selectedSong) }
+        } else {
+            distinctSongs(playableSongs.ifEmpty { listOf(selectedSong) })
+        }
+        val startIndex = sessionSongs.indexOfFirst { sameSong(it, selectedSong) }.coerceAtLeast(0)
         val ordered = if (shuffle) {
-            listOf(distinctSongs[startIndex]) + distinctSongs
+            listOf(sessionSongs[startIndex]) + sessionSongs
                 .filterIndexed { index, _ -> index != startIndex }
                 .shuffled()
+        } else if (source == QueueSource.PLAYLIST) {
+            sessionSongs.drop(startIndex)
         } else {
-            distinctSongs.drop(startIndex) + distinctSongs.take(startIndex)
+            sessionSongs.drop(startIndex) + sessionSongs.take(startIndex)
         }
         val queueSongs = diversifyQueueSongs(ordered, source)
 
@@ -477,6 +532,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             upNext = queueSongs.drop(1).map { queueItem(it, source, reason = sourceName) },
             source = source,
             sourceName = sourceName
+        )
+        Log.i(
+            AUTOPLAY_LOG_TAG,
+            "queue source=$source name=${sourceName.orEmpty()} shuffle=$shuffle current=${current.song.title} next=${_queueState.value.upNext.take(5).joinToString(" | ") { it.song.title }}"
         )
         persistQueueState()
         playQueueItem(current)
@@ -503,6 +562,46 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         source != QueueSource.PLAYLIST
 
     private fun playQueueItem(item: QueueItem) {
+        currentPlaybackConfirmed = false
+        historyRecordedForCurrentAttempt = false
+        val waitForPrefetch = preferPrefetchedAutoplayNext &&
+            item.source == QueueSource.AUTOPLAY &&
+            item.song.data in autoplayPrefetchInFlight
+        preferPrefetchedAutoplayNext = false
+
+        if (waitForPrefetch) {
+            viewModelScope.launch {
+                var remainingAttempts = AUTOPLAY_PREFETCH_GRACE_ATTEMPTS
+                while (item.song.data in autoplayPrefetchInFlight && remainingAttempts > 0) {
+                    delay(AUTOPLAY_PREFETCH_GRACE_DELAY_MS)
+                    remainingAttempts--
+                }
+                val current = _queueState.value.current
+                if (current != null &&
+                    current.source == item.source &&
+                    songIdentityKey(current.song) == songIdentityKey(item.song)
+                ) {
+                    startQueueItemPlayback(item)
+                }
+            }
+            return
+        }
+        startQueueItemPlayback(item)
+    }
+
+    private fun startQueueItemPlayback(item: QueueItem) {
+        if (item.source == QueueSource.AUTOPLAY && !isAllowedAutoplayCandidate(item.song)) {
+            recoverFromFailedAutoplay(item.song, "policy:context")
+            return
+        }
+        if (item.source == QueueSource.AUTOPLAY && item.song.data in rejectedAutoplayVideoIds) {
+            recoverFromFailedAutoplay(item.song, "policy:duration")
+            return
+        }
+        if (item.source == QueueSource.AUTOPLAY && item.song.data in unavailableAutoplayVideoIds) {
+            recoverFromFailedAutoplay(item.song, "prefetch:no_stream")
+            return
+        }
         if (item.song.requiresRemoteExtraction()) {
             playYouTubeSongNow(
                 YouTubeResult(
@@ -510,12 +609,44 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     title = item.song.title,
                     artist = item.song.artist,
                     thumbnailUrl = item.song.artworkUri.toString(),
-                    type = ResultType.SONG
-                )
+                    type = ResultType.SONG,
+                    durationMs = item.song.duration
+                ),
+                trustVideoId = item.source == QueueSource.AUTOPLAY
             )
         } else {
             playSongNow(item.song, toggleIfSame = false)
         }
+    }
+
+    private fun recoverFromFailedAutoplay(failedSong: Song, reason: String): Boolean {
+        val current = _queueState.value.current ?: return false
+        if (current.source != QueueSource.AUTOPLAY ||
+            songIdentityKey(current.song) != songIdentityKey(failedSong)
+        ) {
+            return false
+        }
+
+        val failedKey = songIdentityKey(current.song)
+        if (!failedAutoplayItems.add(failedKey)) return false
+
+        Log.w(AUTOPLAY_LOG_TAG, "skip failed autoplay song=${current.song.title} reason=$reason")
+        exoPlayer?.stop()
+        _isPlaying.value = false
+        preferPrefetchedAutoplayNext = true
+        skipToNext()
+        return true
+    }
+
+    private fun handleRemotePlaybackFailure(result: YouTubeResult, message: String) {
+        val current = _queueState.value.current
+        if (current != null &&
+            current.song.data == result.videoId &&
+            recoverFromFailedAutoplay(current.song, message)
+        ) {
+            return
+        }
+        _errorMessage.value = message
     }
 
     private fun queueItem(
@@ -526,7 +657,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     ): QueueItem = QueueItem(song, source, reason, userInserted)
 
     private fun appendPrevious(previous: List<QueueItem>, current: QueueItem?): List<QueueItem> {
-        return (previous + listOfNotNull(current)).takeLast(50)
+        if (!currentPlaybackConfirmed || current == null) return previous
+        return (previous + current).takeLast(50)
     }
 
     private fun distinctSongs(songs: List<Song>): List<Song> {
@@ -553,7 +685,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             title = result.title,
             artist = result.artist,
             data = result.videoId,
-            duration = 0L,
+            duration = result.durationMs,
             albumId = 0L,
             uri = Uri.parse("https://music.youtube.com/watch?v=${result.videoId}"),
             artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
@@ -591,13 +723,17 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val seed = _queueState.value.current?.song ?: _currentSong.value ?: return
         val initialState = _queueState.value
         if (!force && initialState.autoplay.size >= AUTOPLAY_FAST_READY_SIZE) return
-        val cacheKey = autoplayCacheKey(seed)
+        if (initialState.current?.source != QueueSource.AUTOPLAY || autoplayAnchorSong == null) {
+            autoplayAnchorSong = seed
+        }
+        val anchorSeed = autoplayAnchorSong ?: seed
+        val cacheKey = autoplayCacheKey(anchorSeed)
         val cachedRecommendations = autoplayRecommendationCache[cacheKey]
-            ?.let { filterAutoplayForState(it, seed, initialState) }
+            ?.let { filterAutoplayForState(it, seed, initialState, anchorSeed) }
             .orEmpty()
         Log.i(
             AUTOPLAY_LOG_TAG,
-            "refresh force=$force playFirst=$playFirstWhenReady seed=${seed.title} upNext=${initialState.upNext.size} autoplay=${initialState.autoplay.size} cached=${cachedRecommendations.size}"
+            "refresh force=$force playFirst=$playFirstWhenReady seed=${seed.title} anchor=${anchorSeed.title} upNext=${initialState.upNext.size} autoplay=${initialState.autoplay.size} cached=${cachedRecommendations.size}"
         )
 
         recommendationJob?.cancel()
@@ -609,7 +745,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         val nextAutoplay = mergeAutoplayRecommendations(
                             existing = if (force) emptyList() else _queueState.value.autoplay,
                             incoming = cachedRecommendations,
-                            seed = seed
+                            seed = seed,
+                            anchorSeed = anchorSeed,
+                            state = _queueState.value
                         )
                         _queueState.value = _queueState.value.copy(
                             autoplay = nextAutoplay,
@@ -617,6 +755,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                             autoplayError = null
                         )
                         persistQueueState()
+                        prefetchAutoplayCandidates(nextAutoplay, skipFirst = playFirstWhenReady)
                         if (playFirstWhenReady) {
                             skipToNext()
                         }
@@ -631,6 +770,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
                 val instantRecommendations = generateAutoplayRecommendations(
                     seed = seed,
+                    anchorSeed = anchorSeed,
                     state = initialState,
                     allowRemote = false
                 )
@@ -641,7 +781,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         val nextAutoplay = mergeAutoplayRecommendations(
                             existing = if (force) emptyList() else _queueState.value.autoplay,
                             incoming = instantRecommendations,
-                            seed = seed
+                            seed = seed,
+                            anchorSeed = anchorSeed,
+                            state = _queueState.value
                         )
                         _queueState.value = _queueState.value.copy(
                             autoplay = nextAutoplay,
@@ -649,6 +791,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                             autoplayError = null
                         )
                         persistQueueState()
+                        prefetchAutoplayCandidates(nextAutoplay, skipFirst = playFirstWhenReady)
                         if (playFirstWhenReady) {
                             skipToNext()
                         }
@@ -662,6 +805,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
                 val recommendations = generateAutoplayRecommendations(
                     seed = seed,
+                    anchorSeed = anchorSeed,
                     state = initialState,
                     allowRemote = true
                 ).ifEmpty { cachedRecommendations.ifEmpty { instantRecommendations } }
@@ -671,7 +815,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     val nextAutoplay = mergeAutoplayRecommendations(
                         existing = if (force) emptyList() else _queueState.value.autoplay,
                         incoming = recommendations,
-                        seed = seed
+                        seed = seed,
+                        anchorSeed = anchorSeed,
+                        state = _queueState.value
                     )
                     _queueState.value = _queueState.value.copy(
                         autoplay = nextAutoplay,
@@ -683,6 +829,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         }
                     )
                     persistQueueState()
+                    prefetchAutoplayCandidates(nextAutoplay, skipFirst = playFirstWhenReady)
 
                     if (playFirstWhenReady && nextAutoplay.isNotEmpty()) {
                         skipToNext()
@@ -752,12 +899,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private fun filterAutoplayForState(
         cached: List<QueueItem>,
         seed: Song,
-        state: PlaybackQueueState
+        state: PlaybackQueueState,
+        anchorSeed: Song
     ): List<QueueItem> {
         val excluded = (state.previous.takeLast(20) + listOfNotNull(state.current) + state.upNext.take(AUTOPLAY_FAST_READY_SIZE) + state.autoplay)
             .map { songIdentityKey(it.song) }
             .toSet()
         val candidates = cached
+            .filter { item -> isAllowedAutoplayCandidate(item.song, anchorSeed) }
+            .filterNot { item -> isKnownBlockedAutoplayCandidate(item.song) }
             .filterNot { item -> songIdentityKey(item.song) in excluded || sameSong(seed, item.song) }
             .mapIndexed { index, item ->
                 RecommendationCandidate(
@@ -768,19 +918,27 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 )
             }
 
-        return selectDiverseRecommendations(candidates, seed)
+        return selectDiverseRecommendations(candidates, anchorSeed, autoplayReservedSongs(state))
             .map { queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason) }
     }
 
     private fun mergeAutoplayRecommendations(
         existing: List<QueueItem>,
         incoming: List<QueueItem>,
-        seed: Song
+        seed: Song,
+        anchorSeed: Song,
+        state: PlaybackQueueState
     ): List<QueueItem> {
         val seen = mutableSetOf<String>()
         val merged = buildList {
             (existing + incoming).forEach { item ->
-                if (seen.add(songIdentityKey(item.song)) && !sameSong(seed, item.song)) add(item)
+                if (seen.add(songIdentityKey(item.song)) &&
+                    !sameSong(seed, item.song) &&
+                    isAllowedAutoplayCandidate(item.song, anchorSeed) &&
+                    !isKnownBlockedAutoplayCandidate(item.song)
+                ) {
+                    add(item)
+                }
             }
         }
         val candidates = merged.mapIndexed { index, item ->
@@ -792,7 +950,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             )
         }
 
-        return selectDiverseRecommendations(candidates, seed)
+        return selectDiverseRecommendations(candidates, anchorSeed, autoplayReservedSongs(state))
             .map { queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason) }
     }
 
@@ -805,12 +963,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private suspend fun generateAutoplayRecommendations(
         seed: Song,
+        anchorSeed: Song,
         state: PlaybackQueueState,
         allowRemote: Boolean
     ): List<QueueItem> = withContext(Dispatchers.IO) {
         val generateStartedAt = System.currentTimeMillis()
-        Log.i(AUTOPLAY_LOG_TAG, "generate start allowRemote=$allowRemote seed=${seed.title} source=${state.source} upNext=${state.upNext.size}")
-        val seedProfile = songProfile(seed)
+        Log.i(AUTOPLAY_LOG_TAG, "generate start allowRemote=$allowRemote seed=${seed.title} anchor=${anchorSeed.title} source=${state.source} upNext=${state.upNext.size}")
+        val seedProfile = songProfile(anchorSeed)
+        val currentProfile = songProfile(seed)
         val immediateUpNext = state.upNext.take(AUTOPLAY_FAST_READY_SIZE)
         val excludedContext = state.previous.takeLast(20) + listOfNotNull(state.current) + immediateUpNext + state.autoplay
         val activeBaseContext = state.previous.takeLast(8) + immediateUpNext + state.autoplay
@@ -818,7 +978,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             .map { songIdentityKey(it.song) }
             .toMutableSet()
         val localSongs = _songs.value
-        val context = recommendationContext(state)
+        val context = recommendationContext(state, anchorSeed)
+        val reservedAutoplaySongs = autoplayReservedSongs(state)
         val autoplayHistory = _fullHistory.value.take(300)
         val historyCounts = autoplayHistory.groupingBy { metadataIdentity(it.title, it.artist) }.eachCount()
         val recentMetadataKeys = autoplayHistory.take(12).map { metadataIdentity(it.title, it.artist) }.toSet()
@@ -836,7 +997,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val candidates = LinkedHashMap<String, RecommendationCandidate>()
 
         fun isSeedProfile(profile: SongRecommendationProfile): Boolean =
-            profile.identityKey == seedProfile.identityKey || profile.metadataKey == seedProfile.metadataKey
+            profile.identityKey == seedProfile.identityKey ||
+                profile.metadataKey == seedProfile.metadataKey ||
+                profile.identityKey == currentProfile.identityKey ||
+                profile.metadataKey == currentProfile.metadataKey
 
         fun isContextMatch(profile: SongRecommendationProfile): Boolean {
             if (profile.styles.intersect(seedProfile.styles).isNotEmpty()) return true
@@ -853,6 +1017,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             val profile = songProfile(song)
             val key = profile.identityKey
             if (key in excluded || isSeedProfile(profile)) return
+            if (!isAllowedAutoplayCandidate(song, anchorSeed)) {
+                Log.i(AUTOPLAY_LOG_TAG, "reject autoplay song=${song.title} anchor=${anchorSeed.title}")
+                return
+            }
             if (requireContextMatch && !isContextMatch(profile)) return
             val score = recommendationScore(
                 seed = seedProfile,
@@ -870,23 +1038,21 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     song = song,
                     profile = profile,
                     score = score,
-                    reason = reason ?: recommendationReason(seed, song)
+                    reason = reason ?: recommendationReason(anchorSeed, song)
                 )
             }
         }
 
-        localSongs.forEach { song ->
-            addCandidate(song, 10, requireContextMatch = true)
+        if (state.source == QueueSource.SEARCH || state.source == QueueSource.ARTIST) {
+            _youtubeSearchResults.value
+                .filter { it.type == ResultType.SONG && YOUTUBE_VIDEO_ID_PATTERN.matches(it.videoId) }
+                .forEachIndexed { index, result ->
+                    val song = resultToSong(result)
+                    addCandidate(song, (22 - index).coerceAtLeast(8))
+                }
         }
 
-        _youtubeSearchResults.value
-            .filter { it.type == ResultType.SONG }
-            .forEachIndexed { index, result ->
-                val song = resultToSong(result)
-                addCandidate(song, (12 - index).coerceAtLeast(0))
-            }
-
-        val fastSelected = selectDiverseRecommendations(candidates.values.toList(), seed)
+        val fastSelected = selectDiverseRecommendations(candidates.values.toList(), anchorSeed, reservedAutoplaySongs)
         if (fastSelected.size >= AUTOPLAY_FAST_READY_SIZE || (!allowRemote && fastSelected.isNotEmpty())) {
             Log.i(
                 AUTOPLAY_LOG_TAG,
@@ -898,36 +1064,47 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
 
         if (allowRemote && fastSelected.size < AUTOPLAY_FAST_READY_SIZE) {
-            recommendationQueries(seed)
+            recommendationQueries(anchorSeed, context)
                 .take(AUTOPLAY_REMOTE_QUERY_LIMIT)
-                .forEach { query ->
-                    val results = cachedRecommendationSearch(query)
+                .map { query ->
+                    async {
+                        query to cachedAutoplayRemoteSearch(query)
+                    }
+                }
+                .awaitAll()
+                .forEach { (query, results) ->
                     Log.i(AUTOPLAY_LOG_TAG, "remote query='$query' results=${results.size}")
                     results
                         .filter { it.type == ResultType.SONG }
-                        .take(10)
+                        .take(AUTOPLAY_TARGET_SIZE)
                         .forEachIndexed { index, result ->
                             addCandidate(
                                 song = resultToSong(result),
-                                baseScore = (22 - index).coerceAtLeast(4),
-                                reason = query
+                                baseScore = (30 - index).coerceAtLeast(12)
                             )
                         }
                 }
         }
 
-        val selected = selectDiverseRecommendations(candidates.values.toList(), seed)
-        if (selected.isNotEmpty()) {
+        val selected = selectDiverseRecommendations(candidates.values.toList(), anchorSeed, reservedAutoplaySongs)
+        if (selected.size >= AUTOPLAY_FAST_READY_SIZE) {
             return@withContext selected.map {
                 queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason)
             }
+        }
+
+        if (!allowRemote) {
+            return@withContext emptyList()
         }
 
         val libraryReason = getApplication<Application>().getString(R.string.from_your_library)
         val libraryFallback = localSongs
             .mapNotNull {
                 val profile = songProfile(it)
-                if (profile.identityKey in excluded || isSeedProfile(profile)) return@mapNotNull null
+                if (profile.identityKey in excluded ||
+                    isSeedProfile(profile) ||
+                    !isAllowedAutoplayCandidate(it, anchorSeed)
+                ) return@mapNotNull null
                 RecommendationCandidate(
                     song = it,
                     profile = profile,
@@ -945,18 +1122,25 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             }
             .filter { it.score >= 12 }
 
-        val fallbackSelected = selectDiverseRecommendations(libraryFallback, seed)
-        Log.i(AUTOPLAY_LOG_TAG, "generate fallback allowRemote=$allowRemote candidates=${libraryFallback.size} selected=${fallbackSelected.size} seed=${seed.title}")
+        val fallbackSelected = selectDiverseRecommendations(
+            selected + libraryFallback,
+            anchorSeed,
+            reservedAutoplaySongs
+        )
+        Log.i(
+            AUTOPLAY_LOG_TAG,
+            "generate fallback allowRemote=$allowRemote remote=${selected.size} local=${libraryFallback.size} selected=${fallbackSelected.size} seed=${seed.title}"
+        )
         fallbackSelected
             .take(AUTOPLAY_FAST_READY_SIZE)
             .map { queueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason) }
     }
 
-    private fun recommendationContext(state: PlaybackQueueState): RecommendationContext {
+    private fun recommendationContext(state: PlaybackQueueState, anchorSeed: Song): RecommendationContext {
         val contextSongs = (
-            listOfNotNull(state.current?.song) +
-                state.previous.takeLast(8).map { it.song } +
-                state.upNext.take(40).map { it.song }
+            listOf(anchorSeed) +
+                state.previous.filter { it.source != QueueSource.AUTOPLAY }.takeLast(8).map { it.song } +
+                state.upNext.filter { it.source != QueueSource.AUTOPLAY }.take(40).map { it.song }
             )
         val contextProfiles = contextSongs.map(::songProfile)
         val sourceTokens = expandedSearchTokens(normalizeSearchText(state.sourceName.orEmpty()))
@@ -966,6 +1150,30 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             artists = contextProfiles.map { it.primaryArtist }.filter { it.isNotBlank() }.toSet()
         )
     }
+
+    private fun isAllowedAutoplayCandidate(song: Song, anchorSeed: Song? = autoplayAnchorSong): Boolean {
+        if (!AutoplayDiversity.isAutoplayTrackCandidate(song)) return false
+        val anchor = anchorSeed ?: return true
+        val anchorProfile = songProfile(anchor)
+        val candidateProfile = songProfile(song)
+        if (!AutoplayDiversity.isCompatibleWithAnchor(anchorProfile.styles, candidateProfile.styles)) return false
+        if (!AutoplayDiversity.hasCoreStyle(anchorProfile.styles) ||
+            AutoplayDiversity.hasCoreStyle(candidateProfile.styles)
+        ) return true
+
+        val samePrimaryArtist = anchorProfile.primaryArtist.isNotBlank() &&
+            anchorProfile.primaryArtist == candidateProfile.primaryArtist
+        val relatedTitle = anchorProfile.titleBase.isNotBlank() &&
+            candidateProfile.titleBase.isNotBlank() &&
+            (candidateProfile.titleBase.contains(anchorProfile.titleBase) ||
+                anchorProfile.titleBase.contains(candidateProfile.titleBase))
+        val sharedTokens = anchorProfile.tokens.intersect(candidateProfile.tokens).size >= 2
+        return samePrimaryArtist || relatedTitle || sharedTokens
+    }
+
+    private fun isKnownBlockedAutoplayCandidate(song: Song): Boolean =
+        song.requiresRemoteExtraction() &&
+            (song.data in unavailableAutoplayVideoIds || song.data in rejectedAutoplayVideoIds)
 
     private fun songProfile(song: Song): SongRecommendationProfile {
         val key = songIdentityKey(song)
@@ -986,35 +1194,20 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         return profile
     }
 
-    private suspend fun cachedRecommendationSearch(query: String): List<YouTubeResult> = withContext(Dispatchers.IO) {
+    private suspend fun cachedAutoplayRemoteSearch(query: String): List<YouTubeResult> = withContext(Dispatchers.IO) {
         val cacheKey = normalizeSearchText(query)
-        searchResultsCache[cacheKey]?.let { return@withContext it }
+        autoplayRemoteSearchCache[cacheKey]?.let { return@withContext it }
 
-        val merged = withTimeoutOrNull(AUTOPLAY_REMOTE_TIMEOUT_MS) {
-            supervisorScope {
-                val deezerResults = async {
-                    withTimeoutOrNull(AUTOPLAY_REMOTE_TIMEOUT_MS) {
-                        runCatching { DeezerApi.search(query) }.getOrDefault(emptyList())
-                    }.orEmpty()
-                }
-                val youtubeResults = async {
-                    withTimeoutOrNull(AUTOPLAY_REMOTE_TIMEOUT_MS) {
-                        runCatching { YouTube.search(query) }.getOrDefault(emptyList())
-                    }.orEmpty()
-                }
-
-                mergeSearchResults(
-                    query = query,
-                    groups = listOf(deezerResults.await(), youtubeResults.await())
-                )
-            }
+        val remoteSongs = withTimeoutOrNull(AUTOPLAY_REMOTE_TIMEOUT_MS) {
+            runCatching { YouTube.search(query) }.getOrDefault(emptyList())
+                .filter { it.type == ResultType.SONG }
         }.orEmpty()
-        if (merged.isEmpty()) {
+        if (remoteSongs.isEmpty()) {
             Log.i(AUTOPLAY_LOG_TAG, "remote timeout/empty query='$query'")
         }
-        if (searchResultsCache.size > 24) searchResultsCache.clear()
-        searchResultsCache[cacheKey] = merged
-        merged
+        if (autoplayRemoteSearchCache.size > 24) autoplayRemoteSearchCache.clear()
+        autoplayRemoteSearchCache[cacheKey] = remoteSongs
+        remoteSongs
     }
 
     private fun recommendationScore(
@@ -1091,20 +1284,33 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun recommendationQueries(seed: Song): List<String> {
+    private fun recommendationQueries(seed: Song, context: RecommendationContext): List<String> {
         val artist = primaryArtistName(seed.artist)
-        val styles = styleTokens(seed)
+        val styles = (styleTokens(seed) + context.styles).toList()
         val variants = variantTokens(seed)
         val queries = LinkedHashSet<String>()
 
+        queries += "${seed.title} ${seed.artist}".trim()
+        when {
+            "funk" in styles -> {
+                queries += "brazilian funk montagem phonk songs"
+                queries += "funk phonk similar songs"
+            }
+            "phonk" in styles -> {
+                queries += "phonk funk similar songs"
+                queries += "drift phonk songs"
+            }
+            "trap" in styles -> queries += "trap phonk similar songs"
+            "jazz" in styles -> queries += "jazz soul similar songs"
+        }
         if (artist != null) {
-            queries += "$artist similar songs"
-            queries += "$artist radio"
-            styles.take(2).forEach { style -> queries += "$artist $style mix" }
+            styles.take(2).forEach { style -> queries += "$artist $style songs" }
+            queries += "$artist songs"
         }
         styles.take(3).forEach { style ->
-            queries += "$style similar music ${artist.orEmpty()}".trim()
+            queries += "$style similar songs ${artist.orEmpty()}".trim()
         }
+        if (styles.size >= 2) queries += "${styles[0]} ${styles[1]} songs"
         if ("slowed" in variants) queries += "slowed reverb similar songs ${artist.orEmpty()}".trim()
         if ("sped" in variants) queries += "sped up nightcore similar songs ${artist.orEmpty()}".trim()
         if (queries.isEmpty() && artist != null) queries += "$artist related songs"
@@ -1122,11 +1328,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
     private fun selectDiverseRecommendations(
         candidates: List<RecommendationCandidate>,
-        seed: Song
+        seed: Song,
+        reservedSongs: List<Song> = emptyList()
     ): List<RecommendationCandidate> {
         val artistCounts = mutableMapOf<String, Int>()
         val titleBaseCounts = mutableMapOf<String, Int>()
         val seedBaseTitle = songProfile(seed).titleBase
+        val selectedFamilies = reservedSongs.toMutableList()
         val sorted = candidates.sortedWith(
             compareByDescending<RecommendationCandidate> { it.score }
                 .thenBy { stableSearchRank(seed.title, it.profile.identityKey) }
@@ -1134,6 +1342,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val selected = mutableListOf<RecommendationCandidate>()
 
         sorted.forEach { candidate ->
+            if (selectedFamilies.any { song ->
+                    AutoplayDiversity.isSameTitleFamily(song.title, candidate.song.title)
+                }
+            ) return@forEach
+
             val artist = candidate.profile.primaryArtist.ifBlank { candidate.profile.artist }
             val count = artistCounts[artist] ?: 0
             val lastTwoSameArtist = selected.takeLast(2).all {
@@ -1151,12 +1364,18 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             if (baseTitle.isNotBlank() && (baseCount >= maxPerBase || lastSameBase)) return@forEach
 
             selected += candidate
+            selectedFamilies += candidate.song
             if (artist.isNotBlank()) artistCounts[artist] = count + 1
             if (baseTitle.isNotBlank()) titleBaseCounts[baseTitle] = baseCount + 1
             if (selected.size >= AUTOPLAY_TARGET_SIZE) return selected
         }
 
         return selected
+    }
+
+    private fun autoplayReservedSongs(state: PlaybackQueueState): List<Song> = buildList {
+        state.current?.takeIf { it.source == QueueSource.AUTOPLAY }?.song?.let(::add)
+        addAll(state.upNext.filter { it.source == QueueSource.AUTOPLAY }.map { it.song })
     }
 
     private fun recommendationTokens(song: Song): Set<String> = songProfile(song).tokens
@@ -1346,7 +1565,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun playPlaylist(playlist: Playlist, shuffle: Boolean = false) {
-        val playlistSongs = songsForPlaylist(playlist)
+        playPlaylistSongs(playlist, songsForPlaylist(playlist), shuffle)
+    }
+
+    fun playPlaylistSongs(playlist: Playlist, playlistSongs: List<Song>, shuffle: Boolean = false) {
         startQueueSession(
             songs = playlistSongs,
             startSong = playlistSongs.firstOrNull(),
@@ -1364,6 +1586,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             sourceName = getApplication<Application>().getString(R.string.library),
             shuffle = shuffle
         )
+    }
+
+    fun shuffleLibrary() {
+        playSongs(_songs.value, shuffle = true)
     }
 
     fun playSongFromLibrary(song: Song) {
@@ -1412,6 +1638,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun addSongNext(song: Song) {
+        if (isBlacklisted(song)) return
         if (_queueState.value.current == null) {
             startQueueSession(listOf(song), song, QueueSource.USER)
         } else {
@@ -1423,6 +1650,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun addSongToQueue(song: Song) {
+        if (isBlacklisted(song)) return
         if (_queueState.value.current == null) {
             startQueueSession(listOf(song), song, QueueSource.USER)
         } else {
@@ -1434,7 +1662,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun addPlaylistToQueue(playlist: Playlist) {
-        val queuedSongs = songsForPlaylist(playlist)
+        addPlaylistSongsToQueue(playlist, songsForPlaylist(playlist))
+    }
+
+    fun addPlaylistSongsToQueue(playlist: Playlist, queuedSongs: List<Song>) {
         addSongsToQueue(queuedSongs, QueueSource.PLAYLIST, playlist.name)
     }
 
@@ -1443,12 +1674,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     private fun addSongsToQueue(collection: List<Song>, source: QueueSource, sourceName: String?) {
-        if (collection.isEmpty()) return
+        val playableSongs = collection.filterNot(::isBlacklisted)
+        if (playableSongs.isEmpty()) return
         if (_queueState.value.current == null) {
-            startQueueSession(collection, collection.firstOrNull(), source, sourceName)
+            startQueueSession(playableSongs, playableSongs.firstOrNull(), source, sourceName)
         } else {
             _queueState.value = _queueState.value.copy(
-                upNext = _queueState.value.upNext + collection.map {
+                upNext = _queueState.value.upNext + playableSongs.map {
                     queueItem(it, source, reason = sourceName, userInserted = true)
                 }
             )
@@ -1457,7 +1689,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     suspend fun resolveShareUrl(song: Song): String? = withContext(Dispatchers.IO) {
-        val videoId = song.data.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
+        val videoId = song.data.takeIf { YOUTUBE_VIDEO_ID_PATTERN.matches(it) }
             ?: runCatching {
                 YouTube.search("${song.title} ${song.artist} audio")
                     .firstOrNull { it.type == ResultType.SONG }
@@ -1491,17 +1723,26 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         val item = state.upNext.getOrNull(index) ?: return
         _queueState.value = state.copy(
             current = item,
-            previous = (state.previous + listOfNotNull(state.current) + state.upNext.take(index)).takeLast(50),
+            previous = appendPrevious(state.previous, state.current),
             upNext = state.upNext.drop(index + 1),
             autoplayError = null
         )
         persistQueueState()
         playQueueItem(item)
+        if (
+            item.source == QueueSource.AUTOPLAY &&
+            _queueState.value.current?.let { current ->
+                songIdentityKey(current.song) == songIdentityKey(item.song)
+            } == true
+        ) {
+            maybeRefreshAutoplayRecommendations()
+        }
     }
 
     fun playAutoplayItem(index: Int) {
         val state = _queueState.value
         val item = state.autoplay.getOrNull(index) ?: return
+        Log.i(AUTOPLAY_LOG_TAG, "select autoplay song=${item.song.title}")
         _queueState.value = state.copy(
             current = item,
             previous = appendPrevious(state.previous, state.current),
@@ -1510,7 +1751,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         )
         persistQueueState()
         playQueueItem(item)
-        maybeRefreshAutoplayRecommendations()
+        if (_queueState.value.current?.let { current -> songIdentityKey(current.song) == songIdentityKey(item.song) } == true) {
+            maybeRefreshAutoplayRecommendations()
+        }
     }
 
     fun replayPrevious(index: Int) {
@@ -1556,7 +1799,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         persistQueueState()
     }
 
-    private fun playYouTubeSongNow(result: YouTubeResult) {
+    private fun playYouTubeSongNow(result: YouTubeResult, trustVideoId: Boolean = false) {
         extractionJob?.cancel()
 
         val newExtractionJob = viewModelScope.launch(Dispatchers.IO) {
@@ -1564,7 +1807,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             _errorMessage.value = null
 
             try {
-                var realYtId = deezerToYoutubeMap[result.videoId]
+                var realYtId = result.videoId.takeIf { trustVideoId && YOUTUBE_VIDEO_ID_PATTERN.matches(it) }
+                    ?: deezerToYoutubeMap[result.videoId]
 
                 if (realYtId == null) {
                     val ytMatch = YouTube.search("${result.title} ${result.artist} audio").firstOrNull { it.type == ResultType.SONG }
@@ -1575,12 +1819,25 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
                 val cachedUrl = audioStreamCache[realYtId]
                 if (cachedUrl != null) {
+                    val cachedDurationMs = audioDurationCache[realYtId] ?: result.durationMs
+                    if (trustVideoId &&
+                        !AutoplayDiversity.isAutoplayTrackCandidate(
+                            "${result.title} ${result.artist}",
+                            cachedDurationMs
+                        )
+                    ) {
+                        rejectedAutoplayVideoIds.add(result.videoId)
+                        withContext(Dispatchers.Main) {
+                            handleRemotePlaybackFailure(result, "Blocked autoplay long-form content")
+                        }
+                        return@launch
+                    }
                     val virtualSong = Song(
                         id = result.videoId.hashCode().toLong(),
                         title = result.title,
                         artist = result.artist,
                         data = result.videoId,
-                        duration = 1000L,
+                        duration = cachedDurationMs.coerceAtLeast(1000L),
                         albumId = 0L,
                         uri = Uri.parse(cachedUrl),
                         artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
@@ -1605,23 +1862,38 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
 
                 if (!isActive) return@launch
+                val streamDurationMs = streamInfo.duration * 1000L
+                if (trustVideoId &&
+                    !AutoplayDiversity.isAutoplayTrackCandidate(
+                        "${result.title} ${result.artist}",
+                        streamDurationMs
+                    )
+                ) {
+                    rejectedAutoplayVideoIds.add(result.videoId)
+                    withContext(Dispatchers.Main) {
+                        handleRemotePlaybackFailure(result, "Blocked autoplay long-form content")
+                    }
+                    return@launch
+                }
 
                 val audioStream = streamInfo.audioStreams
                     .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
                     .maxByOrNull { it.bitrate }
                     ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+                val audioUrl = audioStream?.url?.takeIf { it.isNotBlank() }
 
-                if (audioStream != null) {
-                    audioStreamCache[realYtId] = audioStream.url ?: ""
+                if (audioUrl != null) {
+                    audioStreamCache[realYtId] = audioUrl
+                    audioDurationCache[realYtId] = streamDurationMs
 
                     val virtualSong = Song(
                         id = result.videoId.hashCode().toLong(),
                         title = result.title,
                         artist = result.artist,
                         data = result.videoId,
-                        duration = streamInfo.duration * 1000L,
+                        duration = streamDurationMs,
                         albumId = 0L,
-                        uri = Uri.parse(audioStream.url ?: ""),
+                        uri = Uri.parse(audioUrl),
                         artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
                     )
                     rememberPlaylistSong(virtualSong)
@@ -1632,14 +1904,27 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         prefetchNextSongInList(result.videoId)
                     }
                 } else {
-                    _errorMessage.value = getApplication<Application>().getString(R.string.no_compatible_audio_streams)
+                    if (trustVideoId) {
+                        unavailableAutoplayVideoIds.add(result.videoId)
+                    }
+                    withContext(Dispatchers.Main) {
+                        handleRemotePlaybackFailure(
+                            result,
+                            getApplication<Application>().getString(R.string.no_compatible_audio_streams)
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 if (e !is CancellationException) {
-                    _errorMessage.value = getApplication<Application>().getString(
-                        R.string.audio_extraction_error_format,
-                        e.localizedMessage ?: e.message.orEmpty()
-                    )
+                    withContext(Dispatchers.Main) {
+                        handleRemotePlaybackFailure(
+                            result,
+                            getApplication<Application>().getString(
+                                R.string.audio_extraction_error_format,
+                                e.localizedMessage ?: e.message.orEmpty()
+                            )
+                        )
+                    }
                 }
             } finally {
                 val isActiveExtraction = extractionJob === currentCoroutineContext()[Job]
@@ -1669,6 +1954,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun skipToNext() {
+        promoteReadyAutoplayToUpNext()
         val state = _queueState.value
         val current = state.current
 
@@ -1681,6 +1967,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             )
             persistQueueState()
             playQueueItem(next)
+            if (next.source == QueueSource.AUTOPLAY &&
+                _queueState.value.current?.let { currentItem ->
+                    songIdentityKey(currentItem.song) == songIdentityKey(next.song)
+                } == true
+            ) {
+                maybeRefreshAutoplayRecommendations()
+            }
             return
         }
 
@@ -1693,7 +1986,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             )
             persistQueueState()
             playQueueItem(next)
-            maybeRefreshAutoplayRecommendations()
+            if (_queueState.value.current?.let { currentItem -> songIdentityKey(currentItem.song) == songIdentityKey(next.song) } == true) {
+                maybeRefreshAutoplayRecommendations()
+            }
             return
         }
 
@@ -1778,6 +2073,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun loadSongs() {
         viewModelScope.launch(Dispatchers.IO) {
             val audioFiles = repository.getAudioFiles(filterVoiceNotes.value)
+                .filterNot(::isBlacklisted)
             _songs.value = audioFiles
             warmRecommendationProfiles(audioFiles)
         }
@@ -2035,6 +2331,39 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             }
         }
     }
+
+    fun toggleBlacklist(song: Song) {
+        val key = song.id.toString()
+        val updated = _blacklistedSongIds.value.toMutableSet().apply {
+            if (!add(key)) remove(key)
+        }
+        _blacklistedSongIds.value = updated
+        settingsManager.blacklistedSongIds = updated
+        if (key in updated) {
+            _queueState.value = _queueState.value.copy(
+                upNext = _queueState.value.upNext.filterNot { it.song.id == song.id },
+                autoplay = _queueState.value.autoplay.filterNot { it.song.id == song.id }
+            )
+            persistQueueState()
+        }
+        loadSongs()
+    }
+
+    fun isSongBlacklisted(song: Song): Boolean = isBlacklisted(song)
+
+    fun saveLocalLyrics(song: Song, lyrics: String) {
+        val storedLyrics = lyrics.trim().takeIf { it.isNotBlank() }
+        settingsManager.setLocalLyrics(song.id, storedLyrics)
+        if (sameSong(_currentSong.value, song)) {
+            _currentSong.value = _currentSong.value?.copy(lyrics = storedLyrics)
+            _lyricsLines.value = storedLyrics?.let(LyricsParser::parseLrc).orEmpty()
+        }
+    }
+
+    fun localLyrics(song: Song): String = settingsManager.localLyrics(song.id).orEmpty()
+
+    private fun isBlacklisted(song: Song): Boolean =
+        song.id.toString() in _blacklistedSongIds.value
 
     fun searchYouTube(query: String) {
         val cleanQuery = query.trim()
@@ -2301,24 +2630,26 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private fun stopProgressUpdate() { progressJob?.cancel() }
 
     private fun updateNotification(song: Song, isPlaying: Boolean) {
-        val intent = Intent(getApplication(), MusicService::class.java).apply {
-            putExtra("TITLE", song.title)
-            putExtra("ARTIST", song.artist ?: "Unknown Artist")
-            putExtra("IS_PLAYING", isPlaying)
-            putExtra("ALBUM_ART_URL", _currentAlbumArt.value ?: "")
-            putExtra("CURRENT_POSITION", exoPlayer?.currentPosition ?: _currentPosition.value)
-            putExtra("DURATION", exoPlayer?.duration?.takeIf { it > 0 } ?: song.duration)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            getApplication<Application>().startForegroundService(intent)
-        } else {
-            getApplication<Application>().startService(intent)
+        viewModelScope.launch(Dispatchers.Main.immediate) {
+            val intent = Intent(getApplication(), MusicService::class.java).apply {
+                putExtra("TITLE", song.title)
+                putExtra("ARTIST", song.artist ?: "Unknown Artist")
+                putExtra("IS_PLAYING", isPlaying)
+                putExtra("ALBUM_ART_URL", _currentAlbumArt.value ?: "")
+                putExtra("CURRENT_POSITION", exoPlayer?.currentPosition ?: _currentPosition.value)
+                putExtra("DURATION", exoPlayer?.duration?.takeIf { it > 0 } ?: song.duration)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                getApplication<Application>().startForegroundService(intent)
+            } else {
+                getApplication<Application>().startService(intent)
+            }
         }
     }
 
     suspend fun getSongImageUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val preloadedArtwork = song.artworkUri.toString()
-            .takeIf { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+            .takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() }
         if (preloadedArtwork != null) return@withContext preloadedArtwork
 
         val cacheKey = "song_${song.id}"
@@ -2517,25 +2848,139 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         } catch (e: Exception) { return@withContext null }
     }
 
-    private fun prefetchYouTubeAudio(videoId: String) {
-        if (audioStreamCache.containsKey(videoId)) return
+    private fun prefetchAutoplayCandidates(items: List<QueueItem>, skipFirst: Boolean) {
+        val candidates = items.asSequence()
+            .drop(if (skipFirst) 1 else 0)
+            .filter { it.source == QueueSource.AUTOPLAY && it.song.requiresRemoteExtraction() }
+            .toList()
+        candidates
+            .filter { audioStreamCache.containsKey(it.song.data) }
+            .forEach { readyAutoplayVideoIds.add(it.song.data) }
+        candidates.asSequence()
+            .map { it.song.data }
+            .filter { YOUTUBE_VIDEO_ID_PATTERN.matches(it) }
+            .distinct()
+            .filterNot {
+                it in unavailableAutoplayVideoIds ||
+                    it in rejectedAutoplayVideoIds ||
+                    audioStreamCache.containsKey(it)
+            }
+            .take(AUTOPLAY_PREFETCH_LIMIT)
+            .forEach { prefetchYouTubeAudio(it, identifyUnavailable = true) }
+        promoteReadyAutoplayToUpNext()
+    }
+
+    private fun prefetchYouTubeAudio(videoId: String, identifyUnavailable: Boolean = false) {
+        if (audioStreamCache.containsKey(videoId) ||
+            videoId in unavailableAutoplayVideoIds ||
+            videoId in rejectedAutoplayVideoIds ||
+            !autoplayPrefetchInFlight.add(videoId)
+        ) {
+            return
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val videoUrl = "https://www.youtube.com/watch?v=$videoId"
                 val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+                val durationMs = streamInfo.duration * 1000L
+                if (identifyUnavailable &&
+                    !AutoplayDiversity.isAutoplayTrackCandidate("", durationMs)
+                ) {
+                    rejectedAutoplayVideoIds.add(videoId)
+                    withContext(Dispatchers.Main) {
+                        discardBlockedAutoplayCandidate(videoId, "duration=${durationMs / 1000L}s")
+                    }
+                    return@launch
+                }
                 val audioStream = streamInfo.audioStreams
                     .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
                     .maxByOrNull { it.bitrate }
                     ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+                val audioUrl = audioStream?.url?.takeIf { it.isNotBlank() }
 
-                if (audioStream?.url != null) {
-                    audioStreamCache[videoId] = audioStream.url ?: ""
+                if (audioUrl != null) {
+                    audioStreamCache[videoId] = audioUrl
+                    audioDurationCache[videoId] = durationMs
+                    Log.i(AUTOPLAY_LOG_TAG, "prefetch ready id=$videoId")
+                    if (identifyUnavailable) {
+                        readyAutoplayVideoIds.add(videoId)
+                        withContext(Dispatchers.Main) {
+                            promoteReadyAutoplayToUpNext()
+                        }
+                    }
+                } else if (identifyUnavailable) {
+                    unavailableAutoplayVideoIds.add(videoId)
+                    Log.i(AUTOPLAY_LOG_TAG, "prefetch unavailable id=$videoId")
+                    withContext(Dispatchers.Main) {
+                        discardBlockedAutoplayCandidate(videoId, "no_stream")
+                    }
                 }
-            } catch (e: Exception) {
-
+            } catch (_: Exception) {
+                // A temporary extraction failure should remain retryable when selected.
+            } finally {
+                autoplayPrefetchInFlight.remove(videoId)
             }
         }
+    }
+
+    private fun discardBlockedAutoplayCandidate(videoId: String, reason: String) {
+        val state = _queueState.value
+        val nextAutoplay = state.autoplay.filterNot { it.song.data == videoId }
+        val nextUpNext = state.upNext.filterNot {
+            it.source == QueueSource.AUTOPLAY && it.song.data == videoId
+        }
+        if (nextAutoplay.size == state.autoplay.size && nextUpNext.size == state.upNext.size) return
+        _queueState.value = state.copy(autoplay = nextAutoplay, upNext = nextUpNext)
+        persistQueueState()
+        Log.i(AUTOPLAY_LOG_TAG, "discard autoplay id=$videoId reason=$reason")
+        promoteReadyAutoplayToUpNext()
+        prefetchAutoplayCandidates(_queueState.value.autoplay, skipFirst = false)
+    }
+
+    private fun promoteReadyAutoplayToUpNext() {
+        val state = _queueState.value
+        if (state.upNext.any { it.source != QueueSource.AUTOPLAY }) return
+
+        val existingIds = state.upNext.map { songIdentityKey(it.song) }.toSet()
+        val openSlots = (AUTOPLAY_PREPARED_UP_NEXT_SIZE - state.upNext.size).coerceAtLeast(0)
+        if (openSlots == 0) return
+
+        val protectedFamilies = state.upNext.map { it.song }.toMutableList()
+        val hasPendingRemote = state.autoplay.any { item ->
+            item.song.requiresRemoteExtraction() &&
+                item.song.data !in readyAutoplayVideoIds &&
+                item.song.data !in unavailableAutoplayVideoIds &&
+                item.song.data !in rejectedAutoplayVideoIds
+        }
+        val promoted = buildList {
+            state.autoplay.forEach { item ->
+                if (size >= openSlots) return@forEach
+                val isRemoteReady = item.song.requiresRemoteExtraction() &&
+                    item.song.data in readyAutoplayVideoIds
+                val isLocalFallbackReady = !item.song.requiresRemoteExtraction() && !hasPendingRemote
+                val isReady = isRemoteReady || isLocalFallbackReady
+                val duplicatesFamily = protectedFamilies.any { queuedSong ->
+                    AutoplayDiversity.isSameTitleFamily(queuedSong.title, item.song.title)
+                }
+                if (isReady &&
+                    !duplicatesFamily &&
+                    songIdentityKey(item.song) !in existingIds
+                ) {
+                    add(item)
+                    protectedFamilies += item.song
+                }
+            }
+        }
+        if (promoted.isEmpty()) return
+
+        val promotedIds = promoted.map { songIdentityKey(it.song) }.toSet()
+        _queueState.value = state.copy(
+            upNext = state.upNext + promoted,
+            autoplay = state.autoplay.filterNot { songIdentityKey(it.song) in promotedIds }
+        )
+        persistQueueState()
+        Log.i(AUTOPLAY_LOG_TAG, "promote autoplay upNext=${promoted.joinToString(" | ") { it.song.title }}")
     }
 
     private fun prefetchNextSongInList(currentVideoId: String) {

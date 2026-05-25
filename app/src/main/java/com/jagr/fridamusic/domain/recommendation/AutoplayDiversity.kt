@@ -4,6 +4,8 @@ import com.jagr.fridamusic.domain.model.Song
 import java.text.Normalizer
 
 object AutoplayDiversity {
+    const val MAX_AUTOPLAY_TRACK_DURATION_MS = 12 * 60 * 1000L
+
     private val variantGroups = linkedMapOf(
         "slowed" to listOf("super slowed", "ultra slowed", "slowed and reverb", "slowed reverb", "slow reverb", "slowed"),
         "sped" to listOf("sped up", "speed up", "nightcore"),
@@ -80,10 +82,38 @@ object AutoplayDiversity {
         "latin" to listOf("reggaeton", "salsa", "bachata", "corrido", "latin"),
         "pop" to listOf("pop", "dance pop", "synth pop"),
         "dance" to listOf("dance", "club", "party"),
-        "aggressive" to listOf("aggressive", "rage", "hard", "gym", "workout")
+        "aggressive" to listOf("aggressive", "rage", "hard", "gym", "workout"),
+        "jazz" to listOf("jazz", "bebop", "swing"),
+        "soul" to listOf("soul", "motown"),
+        "blues" to listOf("blues"),
+        "classical" to listOf("classical", "symphony", "orchestra"),
+        "country" to listOf("country", "bluegrass"),
+        "reggae" to listOf("reggae", "dancehall")
     )
 
     private val variantPhrases = variantGroups.values.flatten().sortedByDescending { it.length }
+    private val coreStyleGroups = setOf(
+        "phonk", "funk", "anime", "lofi", "trap", "rap", "rock", "metal",
+        "electronic", "latin", "pop", "dance", "jazz", "soul", "blues",
+        "classical", "country", "reggae"
+    )
+    private val compatibleStyles = mapOf(
+        "phonk" to setOf("phonk", "funk", "trap", "electronic"),
+        "funk" to setOf("funk", "phonk", "dance", "electronic"),
+        "trap" to setOf("trap", "phonk", "rap", "electronic"),
+        "rap" to setOf("rap", "trap"),
+        "jazz" to setOf("jazz", "soul", "blues"),
+        "soul" to setOf("soul", "jazz", "blues"),
+        "rock" to setOf("rock", "metal"),
+        "metal" to setOf("metal", "rock")
+    )
+    private val continuousContentRegex = Regex(
+        "\\b(24\\s*7|radio|livestream|live\\s+stream|full\\s+album|continuous|nonstop|non\\s+stop|therapy|study\\s+music|sleep\\s+music|background\\s+music|hours?|hrs?)\\b"
+    )
+    private val titleFamilyNoiseWords = setOf(
+        "montagem", "music", "song", "audio", "video", "official", "feat", "ft",
+        "featuring", "com", "con", "and", "with", "the", "do", "da", "de", "del"
+    )
 
     fun baseTitleKey(song: Song): String = baseTitleKey(song.title)
 
@@ -119,6 +149,41 @@ object AutoplayDiversity {
         return styleGroups.mapNotNullTo(linkedSetOf()) { (style, aliases) ->
             style.takeIf { aliases.any { alias -> phraseRegex(alias).containsMatchIn(normalized) } }
         }
+    }
+
+    fun isAutoplayTrackCandidate(song: Song): Boolean =
+        isAutoplayTrackCandidate("${song.title} ${song.artist} ${song.album}", song.duration)
+
+    fun isAutoplayTrackCandidate(text: String, durationMs: Long = 0L): Boolean {
+        if (durationMs > MAX_AUTOPLAY_TRACK_DURATION_MS) return false
+        val normalized = normalizeLoose(text).replace(Regex("\\bradio\\s+edit\\b"), " ")
+        return !continuousContentRegex.containsMatchIn(normalized)
+    }
+
+    fun isCompatibleWithAnchor(anchorStyles: Set<String>, candidateStyles: Set<String>): Boolean {
+        val anchorCore = anchorStyles.intersect(coreStyleGroups)
+        val candidateCore = candidateStyles.intersect(coreStyleGroups)
+        if (anchorCore.isEmpty() || candidateCore.isEmpty()) return true
+
+        val allowed = anchorCore.flatMapTo(linkedSetOf()) { style ->
+            compatibleStyles[style] ?: setOf(style)
+        }
+        return candidateCore.all { it in allowed }
+    }
+
+    fun hasCoreStyle(styles: Set<String>): Boolean = styles.any { it in coreStyleGroups }
+
+    fun isSameTitleFamily(firstTitle: String, secondTitle: String): Boolean {
+        val firstBase = baseTitleKey(firstTitle)
+        val secondBase = baseTitleKey(secondTitle)
+        if (firstBase.isBlank() || secondBase.isBlank()) return false
+        if (firstBase == secondBase) return true
+
+        val firstTokens = titleFamilyTokens(firstBase)
+        val secondTokens = titleFamilyTokens(secondBase)
+        if (firstTokens.isEmpty() || secondTokens.isEmpty()) return false
+        val sharedCount = firstTokens.intersect(secondTokens).size
+        return sharedCount >= 2 || (minOf(firstTokens.size, secondTokens.size) == 1 && sharedCount == 1)
     }
 
     fun diversifySequence(
@@ -175,6 +240,10 @@ object AutoplayDiversity {
 
     private fun phraseRegex(phrase: String): Regex =
         Regex("\\b${Regex.escape(phrase)}\\b")
+
+    private fun titleFamilyTokens(baseTitle: String): Set<String> =
+        baseTitle.split(" ")
+            .filterTo(linkedSetOf()) { token -> token.length >= 3 && token !in titleFamilyNoiseWords }
 
     private fun normalizeLoose(value: String?): String {
         val withoutMarks = Normalizer.normalize(value.orEmpty(), Normalizer.Form.NFD)

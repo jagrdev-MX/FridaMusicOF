@@ -299,41 +299,13 @@ private fun AlbumArtThumb(
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (albumArtUrl != null) {
-            SubcomposeAsyncImage(
-                model = albumArtUrl,
-                contentDescription = stringResource(R.string.album_art),
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-                loading = { AlbumArtFallback(hasSong = hasSong, hasError = hasError) },
-                error = { AlbumArtFallback(hasSong = hasSong, hasError = true) }
-            )
-        } else {
-            AlbumArtFallback(hasSong = hasSong, hasError = hasError)
-        }
+        FridaArtworkImage(
+            model = albumArtUrl,
+            contentDescription = stringResource(R.string.album_art),
+            modifier = Modifier.fillMaxSize(),
+            shape = RoundedCornerShape(8.dp)
+        )
     }
-}
-
-@Composable
-private fun AlbumArtFallback(
-    hasSong: Boolean,
-    hasError: Boolean
-) {
-    val iconColor by animateColorAsState(
-        targetValue = when {
-            hasError -> MaterialTheme.colorScheme.error
-            hasSong -> MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
-            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
-        },
-        label = "album-art-fallback-color"
-    )
-
-    Icon(
-        imageVector = if (hasError) Icons.Default.ErrorOutline else Icons.Default.MusicNote,
-        contentDescription = null,
-        tint = iconColor,
-        modifier = Modifier.size(22.dp)
-    )
 }
 
 @Composable

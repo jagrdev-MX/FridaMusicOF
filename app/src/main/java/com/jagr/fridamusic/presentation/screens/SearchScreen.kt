@@ -1,6 +1,5 @@
 package com.jagr.fridamusic.presentation.screens
 
-import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -115,6 +114,7 @@ import com.jagr.fridamusic.data.remote.innertube.ResultType
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
 import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
@@ -1405,21 +1405,13 @@ private fun SearchArtworkBox(
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        if (!imageUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
-                modifier = Modifier.size(25.dp)
-            )
-        }
+        FridaArtworkImage(
+            model = imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            shape = shape,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -1543,7 +1535,12 @@ private fun SearchActionsSheet(
                     onDismiss()
                     scope.launch {
                         val remoteUrl = hit.remoteResult?.videoId?.let { "https://music.youtube.com/watch?v=$it" }
-                        shareSearchSong(context, song, remoteUrl ?: viewModel.resolveShareUrl(song))
+                        val fallbackUrl = remoteUrl ?: if (song.hasLocalAudioToShare()) {
+                            null
+                        } else {
+                            viewModel.resolveShareUrl(song)
+                        }
+                        shareSearchSong(context, song, fallbackUrl)
                     }
                 })
                 add(SearchActionSpec(Icons.Default.Info, stringResource(R.string.details)) {
@@ -2457,32 +2454,7 @@ private fun shareSearchSong(
     song: Song,
     fallbackUrl: String?
 ) {
-    val text = buildString {
-        append(song.title)
-        if (song.artist.isNotBlank()) append(" - ${song.artist}")
-        if (song.album.isNotBlank()) append("\n${song.album}")
-        if (!fallbackUrl.isNullOrBlank()) append("\n$fallbackUrl")
-    }
-    val canShareAudioFile = song.uri.scheme == "content" || song.uri.scheme == "file"
-    val intent = if (canShareAudioFile) {
-        Intent(Intent.ACTION_SEND).apply {
-            type = "audio/*"
-            clipData = ClipData.newUri(context.contentResolver, song.title, song.uri)
-            putExtra(Intent.EXTRA_STREAM, song.uri)
-            putExtra(Intent.EXTRA_TITLE, song.title)
-            putExtra(Intent.EXTRA_SUBJECT, song.title)
-            putExtra(Intent.EXTRA_TEXT, text)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-    } else {
-        Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TITLE, song.title)
-            putExtra(Intent.EXTRA_SUBJECT, song.title)
-            putExtra(Intent.EXTRA_TEXT, fallbackUrl ?: text)
-        }
-    }
-    context.startActivity(Intent.createChooser(intent, context.getString(R.string.share)))
+    shareSongAudioOrLink(context, song, fallbackUrl)
 }
 
 private fun sharePlaylist(

@@ -13,5 +13,6 @@ data class PlaybackHistoryEntity(
     val artist: String,
     val artworkUrl: String?,
 
-    val playedAt: Long = System.currentTimeMillis()
+    val playedAt: Long = System.currentTimeMillis(),
+    val playCount: Int = 1
 )

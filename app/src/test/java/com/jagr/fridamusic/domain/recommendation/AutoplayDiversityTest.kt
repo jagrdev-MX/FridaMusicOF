@@ -1,6 +1,7 @@
 package com.jagr.fridamusic.domain.recommendation
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -55,5 +56,41 @@ class AutoplayDiversityTest {
         assertEquals("Night Run", diversified[1])
         assertEquals("Skyline Funk", diversified[2])
         assertEquals("Night Run Remix", diversified[3])
+    }
+
+    @Test
+    fun autoplayTrackCandidate_rejectsRadiosAndLongContinuousContent() {
+        assertFalse(AutoplayDiversity.isAutoplayTrackCandidate("24/7 jazz / funk / soul radio"))
+        assertFalse(AutoplayDiversity.isAutoplayTrackCandidate("Funk mix", 80 * 60 * 1000L))
+        assertTrue(AutoplayDiversity.isAutoplayTrackCandidate("Montagem Monarca - Radio Edit"))
+    }
+
+    @Test
+    fun compatibleWithAnchor_rejectsGenreDriftFromFunkToSoulOrJazz() {
+        assertTrue(AutoplayDiversity.isCompatibleWithAnchor(setOf("funk"), setOf("funk", "phonk")))
+        assertFalse(AutoplayDiversity.isCompatibleWithAnchor(setOf("funk"), setOf("funk", "soul")))
+        assertFalse(AutoplayDiversity.isCompatibleWithAnchor(setOf("funk"), setOf("jazz")))
+    }
+
+    @Test
+    fun sameTitleFamily_groupsMashupsAndVersionsWithoutGroupingDifferentMontagens() {
+        assertTrue(
+            AutoplayDiversity.isSameTitleFamily(
+                "MONTAGEM MONARCA",
+                "MONTAGEM ALQUIMIA x MONTAGEM MONARCA - Mashup - h6itam"
+            )
+        )
+        assertTrue(
+            AutoplayDiversity.isSameTitleFamily(
+                "MONTAGEM MONARCA",
+                "h6itam - MONTAGEM MONARCA (SUPER SLOWED) | Visualizer"
+            )
+        )
+        assertFalse(
+            AutoplayDiversity.isSameTitleFamily(
+                "MONTAGEM MONARCA",
+                "MONTAGEM ALQUIMIA (SLOWED)"
+            )
+        )
     }
 }

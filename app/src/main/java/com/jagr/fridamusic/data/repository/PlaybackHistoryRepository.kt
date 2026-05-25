@@ -8,12 +8,23 @@ class PlaybackHistoryRepository(
 ) {
 
     suspend fun addToHistory(history: PlaybackHistoryEntity) {
-        dao.deleteDuplicateEntries(
+        val existing = dao.findSongHistory(
             songId = history.songId,
             title = history.title,
             artist = history.artist
         )
-        dao.insertHistory(history)
+        if (existing == null) {
+            dao.insertHistory(history)
+        } else {
+            dao.updateHistory(
+                existing.copy(
+                    songId = history.songId,
+                    artworkUrl = history.artworkUrl,
+                    playedAt = history.playedAt,
+                    playCount = existing.playCount + 1
+                )
+            )
+        }
         dao.trimHistory()
     }
 
@@ -23,6 +34,10 @@ class PlaybackHistoryRepository(
 
     suspend fun getFullHistory(): List<PlaybackHistoryEntity> {
         return dao.getAllHistory()
+    }
+
+    suspend fun getMostPlayed(limit: Int = 20): List<PlaybackHistoryEntity> {
+        return dao.getMostPlayed(limit)
     }
 
     suspend fun clearHistory() {

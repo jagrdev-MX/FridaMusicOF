@@ -93,8 +93,11 @@ object YouTube {
                             val title = videoRenderer["title"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
                             val artist = videoRenderer["ownerText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
                             val thumbnail = videoRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
+                            val durationMs = videoRenderer["lengthText"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content
+                                ?.let(::durationTextToMillis)
+                                ?: 0L
 
-                            results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG))
+                            results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG, durationMs))
 
                         } else if (channelRenderer != null) {
                             val channelId = channelRenderer["channelId"]?.jsonPrimitive?.content ?: continue
@@ -141,8 +144,9 @@ object YouTube {
                             val title = obj["title"]?.jsonPrimitive?.content ?: "Unknown Title"
                             val artist = obj["uploaderName"]?.jsonPrimitive?.content ?: "Unknown Artist"
                             val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
+                            val durationMs = obj["duration"]?.jsonPrimitive?.longOrNull?.times(1000L) ?: 0L
 
-                            results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG))
+                            results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG, durationMs))
                         }
                     }
                     "channel" -> {
@@ -170,6 +174,12 @@ object YouTube {
 
     private fun emptyJsonArray() = JsonArray(emptyList())
 
+    private fun durationTextToMillis(duration: String): Long {
+        val parts = duration.split(":").mapNotNull { it.trim().toLongOrNull() }
+        if (parts.isEmpty()) return 0L
+        return parts.fold(0L) { total, part -> total * 60L + part } * 1000L
+    }
+
     suspend fun getTranscript(videoId: String): String? {
         return null
     }
@@ -182,5 +192,6 @@ data class YouTubeResult(
     val title: String,
     val artist: String,
     val thumbnailUrl: String = "",
-    val type: ResultType = ResultType.SONG
+    val type: ResultType = ResultType.SONG,
+    val durationMs: Long = 0L
 )

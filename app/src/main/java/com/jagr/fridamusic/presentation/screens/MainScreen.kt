@@ -112,8 +112,8 @@ fun MainScreen() {
     }
 
     LaunchedEffect(currentRoute) {
-        if (currentRoute in setOf("home", "search", "library")) {
-            selectedTopLevelRoute = currentRoute
+        if (currentRoute in setOf("home", "search", "library") || currentRoute.startsWith("library/")) {
+            selectedTopLevelRoute = if (currentRoute.startsWith("library")) "library" else currentRoute
         }
     }
 
@@ -174,7 +174,8 @@ fun MainScreen() {
                         currentSong = currentSong,
                         viewModel = libraryViewModel,
                         onSongClick = { libraryViewModel.playSong(it) },
-                        onNavigateToSettings = { navController.navigate("settings") }
+                        onNavigateToSettings = { navController.navigate("settings") },
+                        onOpenLibrarySection = { section -> navController.navigate("library/$section") }
                     )
                 }
 
@@ -284,7 +285,17 @@ fun MainScreen() {
                     LibraryScreen(
                         paddingValues = paddingValues,
                         reselectSignal = libraryReselectSignal,
-                        viewModel = libraryViewModel
+                        viewModel = libraryViewModel,
+                        initialSection = null
+                    )
+                }
+
+                composable("library/{section}") { backStackEntry ->
+                    LibraryScreen(
+                        paddingValues = paddingValues,
+                        reselectSignal = libraryReselectSignal,
+                        viewModel = libraryViewModel,
+                        initialSection = backStackEntry.arguments?.getString("section")
                     )
                 }
 

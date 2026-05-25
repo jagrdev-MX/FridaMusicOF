@@ -30,10 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 
 @Composable
@@ -74,7 +74,8 @@ fun ArtistScreen(
                         index = index + 1,
                         song = song,
                         fallbackImageUrl = artistImageUrl,
-                        onClick = { onPlaySong(song) }
+                        onClick = { onPlaySong(song) },
+                        onPlayAction = { onPlaySong(song) }
                     )
                 }
             }
@@ -91,7 +92,7 @@ fun ArtistScreen(
                         modifier = Modifier.padding(bottom = 24.dp)
                     ) {
                         items(popularReleases) { release ->
-                            ReleaseCard(release = release)
+                            ReleaseCard(release = release, onClick = { onPlaySong(release) })
                         }
                     }
                 }
@@ -112,11 +113,12 @@ private fun ArtistHeader(
             .fillMaxWidth()
             .height(380.dp)
     ) {
-        AsyncImage(
+        FridaArtworkImage(
             model = artistImageUrl,
             contentDescription = stringResource(R.string.artist_image),
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            shape = RoundedCornerShape(0.dp)
         )
 
         Box(
@@ -201,7 +203,8 @@ private fun PopularSongItem(
     index: Int,
     song: Song,
     fallbackImageUrl: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onPlayAction: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -233,11 +236,12 @@ private fun PopularSongItem(
                     shape = RoundedCornerShape(8.dp)
                 )
         ) {
-            AsyncImage(
+            FridaArtworkImage(
                 model = song.artworkUri ?: fallbackImageUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(8.dp)
             )
         }
 
@@ -263,10 +267,10 @@ private fun PopularSongItem(
             )
         }
 
-        IconButton(onClick = { /* TODO: More options */ }) {
+        IconButton(onClick = onPlayAction) {
             Icon(
-                imageVector = Icons.Default.MoreHoriz,
-                contentDescription = stringResource(R.string.more_options),
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = stringResource(R.string.play_now),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -274,11 +278,11 @@ private fun PopularSongItem(
 }
 
 @Composable
-private fun ReleaseCard(release: Song) {
+private fun ReleaseCard(release: Song, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .width(140.dp)
-            .clickable { /* TODO: Navegar a la playlist o reproducirla */ }
+            .clickable(onClick = onClick)
     ) {
         Box(
             modifier = Modifier
@@ -296,11 +300,12 @@ private fun ReleaseCard(release: Song) {
                     shape = RoundedCornerShape(16.dp)
                 )
         ) {
-            AsyncImage(
+            FridaArtworkImage(
                 model = release.artworkUri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(16.dp)
             )
         }
         Spacer(modifier = Modifier.height(12.dp))

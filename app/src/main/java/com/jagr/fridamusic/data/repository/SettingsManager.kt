@@ -82,9 +82,38 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("library_sort_reversed", false)
         set(value) = prefs.edit().putBoolean("library_sort_reversed", value).apply()
 
+    var albumGridCount: Int
+        get() = prefs.getInt("album_grid_count", 2).coerceIn(1, 4)
+        set(value) = prefs.edit().putInt("album_grid_count", value.coerceIn(1, 4)).apply()
+
+    var artistGridCount: Int
+        get() = prefs.getInt("artist_grid_count", 3).coerceIn(1, 4)
+        set(value) = prefs.edit().putInt("artist_grid_count", value.coerceIn(1, 4)).apply()
+
+    var playlistGridCount: Int
+        get() = prefs.getInt("playlist_grid_count", 2).coerceIn(1, 4)
+        set(value) = prefs.edit().putInt("playlist_grid_count", value.coerceIn(1, 4)).apply()
+
     var saveLibrarySort: Boolean
         get() = prefs.getBoolean("save_library_sort", false)
         set(value) = prefs.edit().putBoolean("save_library_sort", value).apply()
+
+    var blacklistedSongIds: Set<String>
+        get() = prefs.getStringSet("blacklisted_song_ids", emptySet())?.toSet().orEmpty()
+        set(value) = prefs.edit().putStringSet("blacklisted_song_ids", value).apply()
+
+    fun localLyrics(songId: Long): String? =
+        prefs.getString("local_lyrics_$songId", null)
+
+    fun setLocalLyrics(songId: Long, lyrics: String?) {
+        val editor = prefs.edit()
+        if (lyrics.isNullOrBlank()) {
+            editor.remove("local_lyrics_$songId")
+        } else {
+            editor.putString("local_lyrics_$songId", lyrics)
+        }
+        editor.apply()
+    }
 
     fun playlistCoverUri(playlistId: Long): String? =
         prefs.getString("playlist_cover_$playlistId", null)

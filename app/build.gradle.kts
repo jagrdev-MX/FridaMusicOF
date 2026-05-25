@@ -73,6 +73,8 @@ dependencies {
     implementation(libs.androidx.palette)
     implementation(libs.haze)
     implementation(libs.androidx.junit)
+    testImplementation(libs.junit)
+    androidTestImplementation("androidx.test:runner:1.5.2")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
     implementation("com.google.android.ump:user-messaging-platform:3.1.0")
 

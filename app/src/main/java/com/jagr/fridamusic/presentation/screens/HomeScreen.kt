@@ -11,13 +11,18 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -35,6 +40,9 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.presentation.components.FridaArtworkImage
+import com.jagr.fridamusic.presentation.components.FridaEmptyState
+import com.jagr.fridamusic.presentation.components.FridaSectionHeader
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.util.Calendar
@@ -47,8 +55,33 @@ fun HomeScreen(
     currentSong: Song?,
     viewModel: LibraryViewModels,
     onSongClick: (Song) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onOpenLibrarySection: (String) -> Unit
 ) {
+    val history by viewModel.fullHistory.collectAsState()
+    val playlists by viewModel.playlists.collectAsState(initial = emptyList())
+    val favorites = remember(playlists) {
+        playlists.firstOrNull { it.name == "Favorites" || it.name == "Me gusta" }
+    }
+    val favoriteSongs = remember(favorites, songs) {
+        val ids = favorites?.songIds.orEmpty().toSet()
+        songs.filter { it.id in ids }
+    }
+    val recentlyAdded = remember(songs) { songs.sortedByDescending { it.dateAdded }.take(10) }
+    val historySongs = remember(history, songs) {
+        history.mapNotNull { entry ->
+            songs.firstOrNull { song ->
+                song.uri.toString() == entry.songId ||
+                    (song.title == entry.title && song.artist == entry.artist)
+            }
+        }.distinctBy { it.id }
+    }
+    val recentAlbums = remember(historySongs) {
+        historySongs.distinctBy { it.album.ifBlank { it.albumId.toString() } }.take(10)
+    }
+    val recentArtists = remember(historySongs) {
+        historySongs.distinctBy { it.artist }.take(10)
+    }
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -64,6 +97,41 @@ fun HomeScreen(
             WelcomeSection(onProfileClick = onNavigateToSettings)
         }
 
+        item {
+            QuickAccessSection(
+                onHistory = { onOpenLibrarySection("HISTORY") },
+                onFavorites = { onOpenLibrarySection("FAVORITES") },
+                onMostPlayed = { onOpenLibrarySection("MOST_PLAYED") },
+                onShuffle = { viewModel.shuffleLibrary() }
+            )
+        }
+
+        item {
+            HomeSongCarousel(
+                title = stringResource(R.string.recently_added_songs),
+                songs = recentlyAdded,
+                viewModel = viewModel,
+                onSongClick = onSongClick
+            )
+        }
+
+        item {
+            HomeSongCarousel(
+                title = stringResource(R.string.recently_played_albums),
+                songs = recentAlbums,
+                viewModel = viewModel,
+                onSongClick = onSongClick
+            )
+        }
+
+        item {
+            HomeArtistCarousel(
+                songs = recentArtists,
+                viewModel = viewModel,
+                onSongClick = onSongClick
+            )
+        }
+
         if (songs.isNotEmpty()) {
             item {
                 RecentlyPlayedSection(
@@ -77,7 +145,172 @@ fun HomeScreen(
             item {
                 TopArtistsSection(songs = songs, viewModel = viewModel)
             }
+        } else {
+            item {
+                FridaEmptyState(
+                    title = stringResource(R.string.no_local_songs),
+                    subtitle = stringResource(R.string.library_empty_hint)
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun QuickAccessSection(
+    onHistory: () -> Unit,
+    onFavorites: () -> Unit,
+    onMostPlayed: () -> Unit,
+    onShuffle: () -> Unit
+) {
+    val actions = listOf(
+        Triple(Icons.Default.History, stringResource(R.string.history_tab), onHistory),
+        Triple(Icons.Default.Favorite, stringResource(R.string.favorites_playlist_name), onFavorites),
+        Triple(Icons.Default.TrendingUp, stringResource(R.string.most_played), onMostPlayed),
+        Triple(Icons.Default.Shuffle, stringResource(R.string.shuffle), onShuffle)
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        actions.forEach { (icon, label, action) ->
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f))
+                    .clickable(onClick = action)
+                    .padding(horizontal = 6.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = label,
+                    style = LiquidTypography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeSongCarousel(
+    title: String,
+    songs: List<Song>,
+    viewModel: LibraryViewModels,
+    onSongClick: (Song) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        FridaSectionHeader(title = title)
+        if (songs.isEmpty()) {
+            Text(
+                text = stringResource(R.string.nothing_played_yet),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = LiquidTypography.bodySmall
+            )
+            return@Column
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            itemsIndexed(songs) { _, song ->
+                HomeMediaCard(song = song, viewModel = viewModel, onClick = { onSongClick(song) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeArtistCarousel(
+    songs: List<Song>,
+    viewModel: LibraryViewModels,
+    onSongClick: (Song) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        FridaSectionHeader(title = stringResource(R.string.recent_artists))
+        if (songs.isEmpty()) {
+            Text(
+                text = stringResource(R.string.nothing_played_yet),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = LiquidTypography.bodySmall
+            )
+            return@Column
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            itemsIndexed(songs) { _, song ->
+                val artwork by produceState<String?>(null, song) { value = viewModel.getSongImageUrl(song) }
+                Column(
+                    modifier = Modifier.width(92.dp).clickable { onSongClick(song) },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    FridaArtworkImage(
+                        model = artwork,
+                        contentDescription = song.artist,
+                        modifier = Modifier.size(84.dp),
+                        shape = CircleShape
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        song.artist,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = LiquidTypography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeMediaCard(
+    song: Song,
+    viewModel: LibraryViewModels,
+    onClick: () -> Unit
+) {
+    val artwork by produceState<String?>(null, song) { value = viewModel.getSongImageUrl(song) }
+    Column(
+        modifier = Modifier.width(146.dp).clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Box {
+            FridaArtworkImage(
+                model = artwork,
+                contentDescription = song.title,
+                modifier = Modifier.size(146.dp),
+                shape = RoundedCornerShape(18.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.play))
+            }
+        }
+        Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = LiquidTypography.bodySmall)
+        Text(
+            song.artist.ifBlank { stringResource(R.string.unknown_artist) },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = LiquidTypography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -163,14 +396,12 @@ private fun RecentlyPlayedSection(
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { onSongClick(mainSong) }
             ) {
-                if (mainSongImageUrl != null) {
-                    AsyncImage(
-                        model = mainSongImageUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                FridaArtworkImage(
+                    model = mainSongImageUrl,
+                    contentDescription = mainSong.title,
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(20.dp)
+                )
 
                 Box(
                     modifier = Modifier
@@ -251,11 +482,12 @@ private fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifi
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
-            if (imageUrl != null) {
-                AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            } else {
-                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-            }
+            FridaArtworkImage(
+                model = imageUrl,
+                contentDescription = song.title,
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(8.dp)
+            )
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -296,11 +528,12 @@ private fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewMo
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(90.dp)) {
         Box(modifier = Modifier.size(80.dp).clip(CircleShape).border(2.dp, if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.Transparent, CircleShape).padding(4.dp)) {
             Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                if (imageUrl != null) {
-                    AsyncImage(model = imageUrl, contentDescription = name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                } else {
-                    Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
-                }
+                FridaArtworkImage(
+                    model = imageUrl,
+                    contentDescription = name,
+                    modifier = Modifier.fillMaxSize(),
+                    shape = CircleShape
+                )
             }
         }
         Spacer(modifier = Modifier.height(12.dp))

@@ -114,7 +114,7 @@ class MusicService : Service() {
             }
 
             if (bitmap == null) {
-                bitmap = BitmapFactory.decodeResource(resources, android.R.drawable.ic_media_play)
+                bitmap = BitmapFactory.decodeResource(resources, R.drawable.frida_artwork_fallback)
             }
 
             mediaSession.setMetadata(
@@ -174,7 +174,7 @@ class MusicService : Service() {
         if (bitmap != null) {
             builder.setLargeIcon(bitmap)
         } else {
-            val defaultBitmap = BitmapFactory.decodeResource(resources, android.R.drawable.ic_media_play)
+            val defaultBitmap = BitmapFactory.decodeResource(resources, R.drawable.frida_artwork_fallback)
             builder.setLargeIcon(defaultBitmap)
         }
 
