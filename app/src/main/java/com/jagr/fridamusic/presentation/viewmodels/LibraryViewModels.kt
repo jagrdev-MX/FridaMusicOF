@@ -1624,17 +1624,74 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     fun playYouTubeSong(result: YouTubeResult) {
-        val song = resultToSong(result)
-        val related = _youtubeSearchResults.value
-            .filter { it.type == ResultType.SONG }
-            .map(::resultToSong)
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Buscar ID de YouTube en el mapa
+            var ytId = deezerToYoutubeMap[result.videoId]
+            if (ytId == null) {
+                val ytMatch = YouTube.search("${result.title} ${result.artist} audio").firstOrNull { it.type == ResultType.SONG }
+                ytId = ytMatch?.videoId
+                if (ytId != null) deezerToYoutubeMap[result.videoId] = ytId
+            }
 
-        startQueueSession(
-            songs = related.ifEmpty { listOf(song) },
-            startSong = song,
-            source = QueueSource.SEARCH,
-            sourceName = result.artist.takeIf { it.isNotBlank() }
-        )
+            // 2. Revisar si la URL del audio está en caché
+            val cachedAudioUrl = ytId?.let { audioStreamCache[it] }
+
+            withContext(Dispatchers.Main) {
+                if (cachedAudioUrl != null) {
+                    // 3. Reproducción Instantánea (Caché First)
+                    val virtualSong = Song(
+                        id = result.videoId.hashCode().toLong(),
+                        title = result.title,
+                        artist = result.artist,
+                        data = result.videoId,
+                        duration = 1000L, // Truco para evitar congelamiento
+                        albumId = 0L,
+                        uri = Uri.parse(cachedAudioUrl),
+                        artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
+                    )
+
+                    _currentSong.value = virtualSong
+                    _currentAlbumArt.value = result.thumbnailUrl
+                    _isPlaying.value = true
+                    
+                    exoPlayer?.setMediaItem(MediaItem.fromUri(virtualSong.uri))
+                    exoPlayer?.prepare()
+                    exoPlayer?.play()
+
+                    // Corrutina para actualizar la duración real
+                    launch {
+                        delay(800)
+                        _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
+                    }
+
+                    // Configurar la cola en segundo plano
+                    val related = _youtubeSearchResults.value
+                        .filter { it.type == ResultType.SONG }
+                        .map(::resultToSong)
+                    
+                    _queueState.value = PlaybackQueueState(
+                        current = QueueItem(virtualSong, QueueSource.SEARCH, reason = result.artist),
+                        upNext = related.filterNot { it.data == result.videoId }.map { QueueItem(it, QueueSource.SEARCH) },
+                        source = QueueSource.SEARCH,
+                        sourceName = result.artist
+                    )
+                    persistQueueState()
+                } else {
+                    // 4. Método de respaldo: Extracción estándar
+                    val song = resultToSong(result)
+                    val related = _youtubeSearchResults.value
+                        .filter { it.type == ResultType.SONG }
+                        .map(::resultToSong)
+
+                    startQueueSession(
+                        songs = related.ifEmpty { listOf(song) },
+                        startSong = song,
+                        source = QueueSource.SEARCH,
+                        sourceName = result.artist.takeIf { it.isNotBlank() }
+                    )
+                }
+            }
+        }
     }
 
     fun addSongNext(song: Song) {
@@ -2374,44 +2431,50 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             return
         }
 
-        val cacheKey = normalizeSearchText(cleanQuery)
-        searchResultsCache[cacheKey]?.let { cachedResults ->
-            searchJob?.cancel()
-            _youtubeSearchResults.value = cachedResults
-            _isSearching.value = false
-            return
-        }
-
         searchJob?.cancel()
-
         searchJob = viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             try {
-                delay(120)
-                if (!isActive) return@launch
+                // Paso 1: Obtener resultados de Deezer inmediatamente
+                val deezerResults = DeezerApi.search(cleanQuery)
+                withContext(Dispatchers.Main) {
+                    _youtubeSearchResults.value = deezerResults
+                    _isSearching.value = false // Llenar interfaz al instante
+                }
 
-                val deezerResults = async { DeezerApi.search(cleanQuery) }
-                val youtubeResults = async { YouTube.search(cleanQuery) }
-
-                val results = mergeSearchResults(
-                    query = cleanQuery,
-                    groups = listOf(
-                        deezerResults.await(),
-                        youtubeResults.await()
-                    )
-                )
-
-                if (isActive) {
-                    if (searchResultsCache.size > 24) searchResultsCache.clear()
-                    searchResultsCache[cacheKey] = results
-                    _youtubeSearchResults.value = results
+                // Paso 3: Trabajador Silencioso para los primeros 5 resultados
+                launch(Dispatchers.IO) {
+                    deezerResults.take(5).forEach { result ->
+                        try {
+                            // Buscar secretamente en YouTube
+                            val ytMatch = YouTube.search("${result.title} ${result.artist} audio")
+                                .firstOrNull { it.type == ResultType.SONG }
+                            
+                            if (ytMatch != null) {
+                                deezerToYoutubeMap[result.videoId] = ytMatch.videoId
+                                
+                                // Extraer URL de audio con NewPipe
+                                val videoUrl = "https://www.youtube.com/watch?v=${ytMatch.videoId}"
+                                val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+                                val audioStream = streamInfo.audioStreams
+                                    .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
+                                    .maxByOrNull { it.bitrate }
+                                    ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+                                
+                                val streamUrl = audioStream?.url
+                                if (streamUrl != null) {
+                                    audioStreamCache[ytMatch.videoId] = streamUrl
+                                    audioDurationCache[ytMatch.videoId] = streamInfo.duration * 1000L
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("SilentWorker", "Error pre-fetching ${result.title}: ${e.message}")
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 if (e !is CancellationException) {
                     _youtubeSearchResults.value = emptyList()
-                }
-            } finally {
-                if (isActive) {
                     withContext(Dispatchers.Main) { _isSearching.value = false }
                 }
             }

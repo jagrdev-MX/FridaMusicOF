@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,13 @@ import com.jagr.fridamusic.R
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.AppTheme
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+
+val betaTestersList = listOf(
+    "Vicente Contreras",
+    "Tester Beta",
+    "Dev Colaborador",
+    "Usuario Gamma"
+)
 
 @Composable
 fun SettingsScreen(
@@ -90,6 +99,22 @@ fun SettingsScreen(
             item {
                 SettingsSection(title = stringResource(R.string.about)) {
                     AppInfoItem()
+                }
+            }
+
+            item {
+                SettingsSection(title = "Agradecimientos Especiales") {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        items(betaTestersList) { testerName ->
+                            BetaTesterItem(testerName)
+                        }
+                    }
                 }
             }
 
@@ -206,6 +231,29 @@ fun SettingsScreen(
                 modifier = Modifier.size(32.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun BetaTesterItem(name: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = name,
+            style = LiquidTypography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 

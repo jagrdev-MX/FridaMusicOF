@@ -15,7 +15,7 @@ object DeezerApi {
             val builtUri = Uri.parse("https://api.deezer.com/search")
                 .buildUpon()
                 .appendQueryParameter("q", query)
-                .appendQueryParameter("limit", "12")
+                .appendQueryParameter("limit", "15")
                 .build()
 
             val url = URL(builtUri.toString())
@@ -43,14 +43,9 @@ object DeezerApi {
                 val artistName = track.getJSONObject("artist").getString("name")
 
                 val album = track.getJSONObject("album")
-                val albumId = album.optLong("id", 0L).toString()
-                val albumTitle = album.optString("title", "")
                 val imageUrl = album.optString("cover_xl", album.optString("cover_big", ""))
 
                 results.add(YouTubeResult(id, title, artistName, imageUrl, ResultType.SONG))
-                if (albumId != "0" && albumTitle.isNotBlank()) {
-                    results.add(YouTubeResult("deezer-album-$albumId", albumTitle, artistName, imageUrl, ResultType.ALBUM))
-                }
             }
             return results
         } catch (e: Exception) {
