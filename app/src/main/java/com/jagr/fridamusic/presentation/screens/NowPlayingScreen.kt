@@ -26,7 +26,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -95,6 +94,10 @@ fun NowPlayingScreen(
     val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
     val totalDuration by viewModel.duration.collectAsState()
+    val dismissAdForPlaybackOverlay: () -> Unit = {
+        showAd = false
+        adExplicitlyClosed = true
+    }
 
     val isLiked = remember(playlists, currentSong) {
         playlists.find { it.name == "Me gusta" }?.songIds?.contains(currentSong?.id) == true
@@ -111,6 +114,7 @@ fun NowPlayingScreen(
         if (currentSong.data != lastAdSongId) {
             adExplicitlyClosed = false
             if (adManager.canShowAdNow()) {
+                adManager.preloadNativeAd()
                 showAd = true
                 lastAdSongId = currentSong.data
             } else {
@@ -166,7 +170,8 @@ fun NowPlayingScreen(
             model = albumArtUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().blur(100.dp).alpha(0.6f)
+            requestSizePx = 192,
+            modifier = Modifier.fillMaxSize().alpha(0.22f)
         )
 
         Box(modifier = Modifier.fillMaxSize().background(bgGradient))
@@ -218,9 +223,18 @@ fun NowPlayingScreen(
 
             BottomActionsSection(
                 hasAnyLyrics = hasAnyLyrics,
-                onOpenQueue = { showQueueSheet = true },
-                onOpenLyrics = { showLyricsSheet = true },
-                onOpenInfo = { showInfoSheet = true }
+                onOpenQueue = {
+                    dismissAdForPlaybackOverlay()
+                    showQueueSheet = true
+                },
+                onOpenLyrics = {
+                    dismissAdForPlaybackOverlay()
+                    showLyricsSheet = true
+                },
+                onOpenInfo = {
+                    dismissAdForPlaybackOverlay()
+                    showInfoSheet = true
+                }
             )
         }
 
@@ -343,37 +357,40 @@ private fun AlbumArtOrAdSection(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
-        if (showAd && !adExplicitlyClosed) {
-            SpotifyNativeAd(onClose = onCloseAd, onAdFailed = onAdFailed)
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
-                    .blur(30.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.linearGradient(
-                            listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), Color.Transparent)
-                        ),
-                        shape = RoundedCornerShape(32.dp)
-                    )
-            ) {
-                FridaArtworkImage(
-                    model = albumArtUrl,
-                    contentDescription = stringResource(R.string.album_art),
-                    modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(32.dp),
-                    contentScale = ContentScale.Crop
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(32.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), Color.Transparent)
+                    ),
+                    shape = RoundedCornerShape(32.dp)
                 )
-            }
+        ) {
+            FridaArtworkImage(
+                model = albumArtUrl,
+                contentDescription = stringResource(R.string.album_art),
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(32.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
+
+        if (showAd && !adExplicitlyClosed) {
+            SpotifyNativeAd(
+                modifier = Modifier.fillMaxSize(),
+                onClose = onCloseAd,
+                onAdFailed = onAdFailed
+            )
         }
     }
 }
@@ -658,7 +675,11 @@ private fun QueueBottomSheet(
                 if (queueState.previous.isNotEmpty()) {
                     item { QueueSectionTitle(stringResource(R.string.queue_previous)) }
                     val previousOffset = (queueState.previous.size - 6).coerceAtLeast(0)
-                    itemsIndexed(queueState.previous.takeLast(6), key = { index, item -> "previous_${previousOffset + index}_${item.song.id}" }) { index, item ->
+                    itemsIndexed(
+                        items = queueState.previous.takeLast(6),
+                        key = { index, item -> "previous_${previousOffset + index}_${item.song.id}" },
+                        contentType = { _, _ -> "queue_song_row" }
+                    ) { index, item ->
                         val realIndex = previousOffset + index
                         QueueSongRow(
                             item = item,
@@ -697,7 +718,11 @@ private fun QueueBottomSheet(
                         )
                     }
                 } else {
-                    itemsIndexed(queueState.upNext, key = { index, item -> "next_${index}_${item.song.id}" }) { index, item ->
+                    itemsIndexed(
+                        items = queueState.upNext,
+                        key = { index, item -> "next_${index}_${item.song.id}" },
+                        contentType = { _, _ -> "queue_song_row" }
+                    ) { index, item ->
                         QueueSongRow(
                             item = item,
                             imageUrl = queueArtworkUrl(item.song, null),
@@ -724,7 +749,11 @@ private fun QueueBottomSheet(
                         item { QueueEmptyState(text = stringResource(R.string.queue_autoplay_empty), loading = false) }
                     }
                     else -> {
-                        itemsIndexed(queueState.autoplay, key = { index, item -> "autoplay_${index}_${item.song.id}" }) { index, item ->
+                        itemsIndexed(
+                            items = queueState.autoplay,
+                            key = { index, item -> "autoplay_${index}_${item.song.id}" },
+                            contentType = { _, _ -> "queue_song_row" }
+                        ) { index, item ->
                             QueueSongRow(
                                 item = item,
                                 imageUrl = queueArtworkUrl(item.song, null),
@@ -945,7 +974,7 @@ private fun QueueSongRow(
                 contentDescription = null,
                 modifier = Modifier.size(46.dp),
                 shape = RoundedCornerShape(10.dp),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Fit
             )
             if (isCurrent) {
                 Box(
@@ -1204,7 +1233,11 @@ private fun LyricsBottomSheet(
                     contentPadding = PaddingValues(vertical = 64.dp),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    itemsIndexed(lyricsLines) { index, line ->
+                    itemsIndexed(
+                        items = lyricsLines,
+                        key = { index, line -> "${index}_${line.startTime}_${line.content.hashCode()}" },
+                        contentType = { _, _ -> "lyric_line" }
+                    ) { index, line ->
                         val isActive = index == activeLineIndex
                         val color by animateColorAsState(
                             targetValue = if (isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),

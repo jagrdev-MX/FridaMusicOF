@@ -174,7 +174,6 @@ fun MainScreen() {
                         paddingValues = paddingValues,
                         listState = homeListState,
                         songs = songs,
-                        currentSong = currentSong,
                         viewModel = libraryViewModel,
                         onSongClick = { libraryViewModel.playSong(it) },
                         onNavigateToSettings = { navController.navigate("settings") },

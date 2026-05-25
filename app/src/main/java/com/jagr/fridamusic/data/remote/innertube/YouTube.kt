@@ -6,12 +6,22 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.*
-import java.util.*
+import java.text.Normalizer
+import java.util.concurrent.ConcurrentHashMap
 
 import io.ktor.client.engine.cio.*
 
 object YouTube {
+    private const val SEARCH_CACHE_TTL_MS = 10 * 60 * 1000L
+    private const val SEARCH_CACHE_LIMIT = 40
+
+    private data class CachedSearch(
+        val results: List<YouTubeResult>,
+        val cachedAtMs: Long
+    )
+
     private val client = HttpClient(CIO) {
         install(HttpTimeout) {
             requestTimeoutMillis = 3_000
@@ -33,7 +43,39 @@ object YouTube {
         "https://piped-api.lunar.icu"
     )
 
+    private val searchCache = ConcurrentHashMap<String, CachedSearch>()
+    private val searchesInFlight = ConcurrentHashMap<String, CompletableDeferred<List<YouTubeResult>>>()
+
     suspend fun search(query: String): List<YouTubeResult> {
+        val trimmedQuery = query.trim()
+        if (trimmedQuery.isBlank()) return emptyList()
+        val cacheKey = normalizeSearchKey(trimmedQuery)
+        val now = System.currentTimeMillis()
+        searchCache[cacheKey]
+            ?.takeIf { now - it.cachedAtMs <= SEARCH_CACHE_TTL_MS }
+            ?.let { return it.results }
+
+        val pending = CompletableDeferred<List<YouTubeResult>>()
+        val existing = searchesInFlight.putIfAbsent(cacheKey, pending)
+        if (existing != null) return existing.await()
+
+        return try {
+            val results = searchUncached(trimmedQuery)
+            if (results.isNotEmpty()) {
+                if (searchCache.size >= SEARCH_CACHE_LIMIT) searchCache.clear()
+                searchCache[cacheKey] = CachedSearch(results, System.currentTimeMillis())
+            }
+            pending.complete(results)
+            results
+        } catch (error: Throwable) {
+            pending.completeExceptionally(error)
+            throw error
+        } finally {
+            searchesInFlight.remove(cacheKey, pending)
+        }
+    }
+
+    private suspend fun searchUncached(query: String): List<YouTubeResult> {
         for (baseUrl in PIPED_INSTANCES) {
             try {
                 val url = "$baseUrl/search"
@@ -68,6 +110,13 @@ object YouTube {
             emptyList()
         }
     }
+
+    private fun normalizeSearchKey(value: String): String =
+        Normalizer.normalize(value, Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .lowercase()
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
     private fun parseHTMLResults(response: JsonObject): List<YouTubeResult> {
         val results = mutableListOf<YouTubeResult>()

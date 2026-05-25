@@ -53,10 +53,16 @@ fun SpotifyNativeAd(
     }
 
     DisposableEffect(Unit) {
-        android.util.Log.d("SpotifyNativeAd", "Loading native ad...")
-        adManager.loadNativeAd(
-            onLoaded = {
-                nativeAd = it
+        var disposed = false
+        android.util.Log.d("SpotifyNativeAd", "Loading or consuming native test ad...")
+        adManager.loadOrConsumeNativeAd(
+            onLoaded = { loadedAd ->
+                if (disposed) {
+                    loadedAd.destroy()
+                    return@loadOrConsumeNativeAd
+                }
+                nativeAd?.destroy()
+                nativeAd = loadedAd
                 isLoaded = true
                 onAdLoaded()
                 adManager.markAdShown()
@@ -67,7 +73,9 @@ fun SpotifyNativeAd(
             }
         )
         onDispose {
+            disposed = true
             nativeAd?.destroy()
+            nativeAd = null
         }
     }
 

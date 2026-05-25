@@ -91,6 +91,7 @@ fun VitreaBottomNavigation(
         if (albumArtUrl != null) {
             val request = ImageRequest.Builder(context)
                 .data(albumArtUrl)
+                .size(96)
                 .allowHardware(false) // Obligatorio para que Palette pueda leer los píxeles
                 .build()
 

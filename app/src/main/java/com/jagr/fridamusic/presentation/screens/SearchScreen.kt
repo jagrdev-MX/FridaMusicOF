@@ -80,6 +80,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -119,8 +120,10 @@ import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.Normalizer
 import kotlin.math.min
 
@@ -194,6 +197,22 @@ private data class SearchRecentCard(
     val key: String
 )
 
+private data class SearchRankingInputs(
+    val query: String,
+    val songs: List<Song>,
+    val onlineResults: List<YouTubeResult>,
+    val history: List<PlaybackHistoryEntity>,
+    val playlists: List<Playlist>
+)
+
+private data class SearchComputedResults(
+    val query: String = "",
+    val songHits: List<SearchSongHit> = emptyList(),
+    val artistHits: List<SearchArtistHit> = emptyList(),
+    val albumHits: List<SearchAlbumHit> = emptyList(),
+    val playlistHits: List<SearchPlaylistHit> = emptyList()
+)
+
 private sealed interface SearchActionTarget {
     data class SongTarget(val hit: SearchSongHit) : SearchActionTarget
     data class ArtistTarget(val hit: SearchArtistHit) : SearchActionTarget
@@ -235,19 +254,49 @@ fun SearchScreen(
     val followedArtists by viewModel.followedArtists.collectAsState()
 
     val query = activeQuery.trim()
-    val songHits = remember(query, songs, onlineResults, fullHistory) {
-        buildSongHits(query, songs, onlineResults, fullHistory).take(SEARCH_TAB_LIMIT)
+    val rankingInputs = remember(query, songs, onlineResults, fullHistory, playlists) {
+        SearchRankingInputs(query, songs, onlineResults, fullHistory, playlists)
     }
+    val computedResults by produceState(SearchComputedResults(), rankingInputs) {
+        value = if (rankingInputs.query.isBlank()) {
+            SearchComputedResults()
+        } else {
+            withContext(Dispatchers.Default) {
+                SearchComputedResults(
+                    query = rankingInputs.query,
+                    songHits = buildSongHits(
+                        rankingInputs.query,
+                        rankingInputs.songs,
+                        rankingInputs.onlineResults,
+                        rankingInputs.history
+                    ).take(SEARCH_TAB_LIMIT),
+                    artistHits = buildArtistHits(
+                        rankingInputs.query,
+                        rankingInputs.songs,
+                        rankingInputs.onlineResults
+                    ).take(SEARCH_TAB_LIMIT),
+                    albumHits = buildAlbumHits(
+                        rankingInputs.query,
+                        rankingInputs.songs,
+                        rankingInputs.onlineResults
+                    ).take(SEARCH_TAB_LIMIT),
+                    playlistHits = buildPlaylistHits(
+                        rankingInputs.query,
+                        rankingInputs.playlists,
+                        rankingInputs.songs,
+                        rankingInputs.onlineResults
+                    ).take(SEARCH_TAB_LIMIT)
+                )
+            }
+        }
+    }
+    val displayedResults = computedResults.takeIf { it.query == query } ?: SearchComputedResults()
+    val songHits = displayedResults.songHits
     val searchQueueSongs = remember(songHits) { songHits.map { it.song } }
-    val artistHits = remember(query, songs, onlineResults) {
-        buildArtistHits(query, songs, onlineResults).take(SEARCH_TAB_LIMIT)
-    }
-    val albumHits = remember(query, songs, onlineResults) {
-        buildAlbumHits(query, songs, onlineResults).take(SEARCH_TAB_LIMIT)
-    }
-    val playlistHits = remember(query, playlists, songs, onlineResults) {
-        buildPlaylistHits(query, playlists, songs, onlineResults).take(SEARCH_TAB_LIMIT)
-    }
+    val artistHits = displayedResults.artistHits
+    val albumHits = displayedResults.albumHits
+    val playlistHits = displayedResults.playlistHits
+    val isRankingResults = query.isNotBlank() && computedResults.query != query
     val hasResults = songHits.isNotEmpty() || artistHits.isNotEmpty() || albumHits.isNotEmpty() || playlistHits.isNotEmpty()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val showingResults = query.isNotBlank()
@@ -400,7 +449,7 @@ fun SearchScreen(
                     item { SearchStartState() }
                 }
             } else {
-                if (isSearching && !hasResults) {
+                if ((isSearching || isRankingResults) && !hasResults) {
                     item {
                         SearchLoadingState()
                     }
@@ -538,7 +587,7 @@ fun SearchScreen(
                     }
                 }
 
-                if (!isSearching && !hasResults && selectedTab == SearchTab.ALL) {
+                if (!isSearching && !isRankingResults && !hasResults && selectedTab == SearchTab.ALL) {
                     item {
                         EmptySearchState(query)
                     }
@@ -1408,7 +1457,7 @@ private fun SearchArtworkBox(
         FridaArtworkImage(
             model = imageUrl,
             contentDescription = null,
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Fit,
             shape = shape,
             modifier = Modifier.fillMaxSize()
         )

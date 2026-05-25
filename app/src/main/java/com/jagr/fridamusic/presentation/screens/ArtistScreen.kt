@@ -239,7 +239,7 @@ private fun PopularSongItem(
             FridaArtworkImage(
                 model = song.artworkUri ?: fallbackImageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(8.dp)
             )
@@ -280,9 +280,7 @@ private fun PopularSongItem(
 @Composable
 private fun ReleaseCard(release: Song, onClick: () -> Unit) {
     Column(
-        modifier = Modifier
-            .width(140.dp)
-            .clickable(onClick = onClick)
+        modifier = Modifier.width(140.dp).clickable(onClick = onClick)
     ) {
         Box(
             modifier = Modifier
@@ -303,7 +301,7 @@ private fun ReleaseCard(release: Song, onClick: () -> Unit) {
             FridaArtworkImage(
                 model = release.artworkUri,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(16.dp)
             )

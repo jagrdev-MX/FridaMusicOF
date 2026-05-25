@@ -20,12 +20,31 @@ import com.jagr.fridamusic.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MusicService : Service() {
 
+    private data class NotificationState(
+        val title: String,
+        val artist: String,
+        val isPlaying: Boolean,
+        val position: Long,
+        val duration: Long
+    )
+
     private lateinit var mediaSession: MediaSessionCompat
-    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(serviceJob + Dispatchers.IO)
+    private var artworkJob: Job? = null
+    private var cachedArtworkUrl: String? = null
+    private var cachedArtwork: Bitmap? = null
+    private var latestNotificationState: NotificationState? = null
+    private val fallbackArtwork: Bitmap by lazy(LazyThreadSafetyMode.NONE) {
+        BitmapFactory.decodeResource(resources, R.drawable.frida_artwork_fallback)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -72,69 +91,78 @@ class MusicService : Service() {
         val title = intent.getStringExtra("TITLE") ?: "Unknown"
         val artist = intent.getStringExtra("ARTIST") ?: "Unknown"
         val isPlaying = intent.getBooleanExtra("IS_PLAYING", false)
-        val albumArtUrl = intent.getStringExtra("ALBUM_ART_URL")
+        val albumArtUrl = intent.getStringExtra("ALBUM_ART_URL")?.takeIf { it.isNotBlank() }
         val currentPosition = intent.getLongExtra("CURRENT_POSITION", 0L)
         val duration = intent.getLongExtra("DURATION", 0L)
+        val notificationState = NotificationState(title, artist, isPlaying, currentPosition, duration)
+        latestNotificationState = notificationState
+        val immediateArtwork = cachedArtwork.takeIf { albumArtUrl == cachedArtworkUrl } ?: fallbackArtwork
+        publishNotification(notificationState, immediateArtwork, enterForeground = true)
 
-        val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
-        mediaSession.setPlaybackState(
-            PlaybackStateCompat.Builder()
-                .setState(state, currentPosition, if (isPlaying) 1f else 0f)
-                .setActions(
-                    PlaybackStateCompat.ACTION_PLAY or
-                            PlaybackStateCompat.ACTION_PAUSE or
-                            PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                            PlaybackStateCompat.ACTION_SEEK_TO
-                )
-                .build()
-        )
-
-        // Show initial notification immediately
-        val initialNotification = buildNotification(title, artist, isPlaying, null)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(1, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(1, initialNotification)
-        }
-
-        serviceScope.launch {
-            var bitmap: Bitmap? = null
+        if (albumArtUrl != cachedArtworkUrl) {
+            cachedArtworkUrl = albumArtUrl
+            cachedArtwork = null
+            artworkJob?.cancel()
             if (albumArtUrl != null) {
-                try {
-                    val request = ImageRequest.Builder(this@MusicService)
-                        .data(albumArtUrl)
-                        .size(600)
-                        .build()
-                    val result = this@MusicService.imageLoader.execute(request)
-                    bitmap = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                artworkJob = serviceScope.launch {
+                    val bitmap = runCatching {
+                        val request = ImageRequest.Builder(this@MusicService)
+                            .data(albumArtUrl)
+                            .size(320)
+                            .build()
+                        val result = this@MusicService.imageLoader.execute(request)
+                        (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                    }.getOrNull() ?: return@launch
+
+                    withContext(Dispatchers.Main.immediate) {
+                        if (cachedArtworkUrl != albumArtUrl) return@withContext
+                        cachedArtwork = bitmap
+                        latestNotificationState?.let { latest ->
+                            publishNotification(latest, bitmap, enterForeground = false)
+                        }
+                    }
                 }
             }
-
-            if (bitmap == null) {
-                bitmap = BitmapFactory.decodeResource(resources, R.drawable.frida_artwork_fallback)
-            }
-
-            mediaSession.setMetadata(
-                MediaMetadataCompat.Builder()
-                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
-                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
-                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
-                    .build()
-            )
-
-            val notification = buildNotification(title, artist, isPlaying, bitmap)
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.notify(1, notification)
         }
 
         return START_STICKY
     }
 
-    private fun buildNotification(title: String, artist: String, isPlaying: Boolean, bitmap: Bitmap?): android.app.Notification {
+    private fun publishNotification(state: NotificationState, bitmap: Bitmap, enterForeground: Boolean) {
+        val playbackState = if (state.isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+        mediaSession.setPlaybackState(
+            PlaybackStateCompat.Builder()
+                .setState(playbackState, state.position, if (state.isPlaying) 1f else 0f)
+                .setActions(
+                    PlaybackStateCompat.ACTION_PLAY or
+                        PlaybackStateCompat.ACTION_PAUSE or
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                        PlaybackStateCompat.ACTION_SEEK_TO
+                )
+                .build()
+        )
+        mediaSession.setMetadata(
+            MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, state.title)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, state.artist)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, state.duration)
+                .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
+                .build()
+        )
+        val notification = buildNotification(state.title, state.artist, state.isPlaying, bitmap)
+        if (enterForeground) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(1, notification)
+            }
+        } else {
+            getSystemService(NotificationManager::class.java).notify(1, notification)
+        }
+    }
+
+    private fun buildNotification(title: String, artist: String, isPlaying: Boolean, bitmap: Bitmap): android.app.Notification {
         val openAppIntent = Intent(this, Class.forName("$packageName.MainActivity")).apply {
             this.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -171,14 +199,7 @@ class MusicService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
 
-        if (bitmap != null) {
-            builder.setLargeIcon(bitmap)
-        } else {
-            val defaultBitmap = BitmapFactory.decodeResource(resources, R.drawable.frida_artwork_fallback)
-            builder.setLargeIcon(defaultBitmap)
-        }
-
-        return builder.build()
+        return builder.setLargeIcon(bitmap).build()
     }
 
     private fun createNotificationChannel() {
@@ -190,6 +211,8 @@ class MusicService : Service() {
     }
 
     override fun onDestroy() {
+        artworkJob?.cancel()
+        serviceScope.cancel()
         super.onDestroy()
         mediaSession.isActive = false
         mediaSession.release()

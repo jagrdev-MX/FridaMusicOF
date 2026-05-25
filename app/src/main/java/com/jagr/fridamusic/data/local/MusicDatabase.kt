@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlaylistEntity::class,
         PlaybackHistoryEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -31,7 +31,7 @@ abstract class MusicDatabase : RoomDatabase() {
                     MusicDatabase::class.java,
                     "music_database"
                 )
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigration(false)
                     .build()
 
@@ -45,6 +45,15 @@ abstract class MusicDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE playback_history ADD COLUMN playCount INTEGER NOT NULL DEFAULT 1"
                 )
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_history_songId` ON `playback_history` (`songId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_history_title_artist` ON `playback_history` (`title`, `artist`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_history_playedAt` ON `playback_history` (`playedAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_history_playCount_playedAt` ON `playback_history` (`playCount`, `playedAt`)")
             }
         }
     }

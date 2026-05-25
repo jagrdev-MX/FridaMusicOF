@@ -143,6 +143,7 @@ import com.jagr.fridamusic.presentation.components.FridaEmptyState
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.util.Calendar
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.min
 
@@ -263,6 +264,7 @@ fun LibraryScreen(
 
     var searchVisible by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    var appliedSearchQuery by rememberSaveable { mutableStateOf("") }
     var showSortSheet by rememberSaveable { mutableStateOf(false) }
     var showCreateSheet by rememberSaveable { mutableStateOf(false) }
     var detail by remember { mutableStateOf<LibraryDetail?>(null) }
@@ -342,7 +344,16 @@ fun LibraryScreen(
         detail = null
     }
 
-    val normalizedQuery = searchQuery.trim()
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isBlank()) {
+            appliedSearchQuery = ""
+        } else {
+            delay(180)
+            appliedSearchQuery = searchQuery.trim()
+        }
+    }
+
+    val normalizedQuery = appliedSearchQuery
 
     val visibleSongs = remember(songs, normalizedQuery, activeSort, appliedReversed) {
         songs
@@ -411,11 +422,10 @@ fun LibraryScreen(
             .sortedArtists(activeSort, appliedReversed)
     }
     val mostPlayedSongs = remember(mostPlayedHistory, songs) {
+        val songsByUri = songs.associateBy { it.uri.toString() }
+        val songsByMetadata = songs.associateBy { "${it.title}\u0000${it.artist}" }
         mostPlayedHistory.mapNotNull { item ->
-            songs.firstOrNull { song ->
-                song.uri.toString() == item.songId ||
-                    (song.title == item.title && song.artist == item.artist)
-            }
+            songsByUri[item.songId] ?: songsByMetadata["${item.title}\u0000${item.artist}"]
         }
     }
     val favoritesName = stringResource(R.string.favorites_playlist_name)
@@ -1020,7 +1030,11 @@ private fun SongsPage(
                 )
             }
         } else {
-            items(songs, key = { "local_${it.id}" }) { song ->
+            items(
+                items = songs,
+                key = { "local_${it.id}" },
+                contentType = { "song_row" }
+            ) { song ->
                 LibrarySongItem(
                     song = song,
                     viewModel = viewModel,
@@ -1072,7 +1086,11 @@ private fun HistoryPage(
         } else {
             sections.forEach { section ->
                 item { SectionHeader(text = stringResource(section.titleRes)) }
-                items(section.items, key = { "history_${it.id}" }) { item ->
+                items(
+                    items = section.items,
+                    key = { "history_${it.id}" },
+                    contentType = { "history_row" }
+                ) { item ->
                     HistorySongItem(
                         item = item,
                         songs = songs,
@@ -1101,6 +1119,7 @@ private fun PlaylistsPage(
 ) {
     var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.playlistGridCount) }
     var showGridSheet by rememberSaveable { mutableStateOf(false) }
+    val rows = remember(playlists, columns) { playlists.chunked(columns) }
     val favoritesName = stringResource(R.string.favorites_playlist_name)
     val favorites = playlists.firstOrNull {
         it.name == favoritesName || it.name == "Favorites" || it.name == "Me gusta"
@@ -1149,7 +1168,11 @@ private fun PlaylistsPage(
             if (playlists.isEmpty()) {
                 item { FridaEmptyState(title = stringResource(R.string.no_playlists)) }
             } else {
-                items(playlists.chunked(columns), key = { row -> row.joinToString("_") { it.id.toString() } }) { row ->
+                items(
+                    items = rows,
+                    key = { row -> row.joinToString("_") { it.id.toString() } },
+                    contentType = { "playlist_grid_row" }
+                ) { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         row.forEach { playlist ->
                             PlaylistGridCard(
@@ -1193,6 +1216,7 @@ private fun AlbumsPage(
 ) {
     var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.albumGridCount) }
     var showGridSheet by rememberSaveable { mutableStateOf(false) }
+    val rows = remember(albums, columns) { albums.chunked(columns) }
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -1222,8 +1246,9 @@ private fun AlbumsPage(
                 item { FridaEmptyState(title = stringResource(R.string.no_albums)) }
             } else {
                 items(
-                    albums.chunked(columns),
-                    key = { row -> row.joinToString("_") { it.id.toString() } }
+                    items = rows,
+                    key = { row -> row.joinToString("_") { it.id.toString() } },
+                    contentType = { "album_grid_row" }
                 ) { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1267,6 +1292,7 @@ private fun ArtistsPage(
 ) {
     var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.artistGridCount) }
     var showGridSheet by rememberSaveable { mutableStateOf(false) }
+    val rows = remember(artists, columns) { artists.chunked(columns) }
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -1291,7 +1317,11 @@ private fun ArtistsPage(
             if (artists.isEmpty()) {
                 item { FridaEmptyState(title = stringResource(R.string.no_artists)) }
             } else {
-                items(artists.chunked(columns), key = { row -> row.joinToString("_") { it.name } }) { row ->
+                items(
+                    items = rows,
+                    key = { row -> row.joinToString("_") { it.name } },
+                    contentType = { "artist_grid_row" }
+                ) { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         row.forEach { artist ->
                             ArtistGridCard(
@@ -2203,7 +2233,7 @@ private fun DetailPageShell(
         FridaArtworkImage(
             model = backgroundArtUrl,
             contentDescription = null,
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxSize()
                 .blur(40.dp)
@@ -2369,7 +2399,7 @@ private fun SmartCollectionCover(
                 FridaArtworkImage(
                     model = coverModels.first(),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2388,7 +2418,7 @@ private fun SmartCollectionCover(
                             FridaArtworkImage(
                                 model = model,
                                 contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                                contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxSize()
@@ -2470,7 +2500,7 @@ private fun SmartCollectionThumbnail(
                 FridaArtworkImage(
                     model = coverModels.first(),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2483,7 +2513,7 @@ private fun SmartCollectionThumbnail(
                                 FridaArtworkImage(
                                     model = model,
                                     contentDescription = null,
-                                    contentScale = ContentScale.Crop,
+                                    contentScale = ContentScale.Fit,
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxSize()
@@ -2547,7 +2577,7 @@ private fun DetailSongCover(
         FridaArtworkImage(
             model = overrideModel ?: imageUrl,
             contentDescription = null,
-            contentScale = ContentScale.Crop,
+            contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
             shape = shape
         )
@@ -2645,9 +2675,7 @@ private fun ArtistAlbumChip(
     }
 
     Column(
-        modifier = Modifier
-            .width(140.dp)
-            .clickable(onClick = onClick),
+        modifier = Modifier.width(140.dp).clickable(onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
@@ -2659,7 +2687,7 @@ private fun ArtistAlbumChip(
             FridaArtworkImage(
                 model = imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(18.dp)
             )
@@ -2709,11 +2737,7 @@ private fun ArtistSongShelf(
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             items(songs, key = { "artist_shelf_song_${it.id}_$title" }) { song ->
-                ArtistSongCard(
-                    song = song,
-                    viewModel = viewModel,
-                    playlists = playlists
-                )
+                ArtistSongCard(song = song, viewModel = viewModel, playlists = playlists)
             }
         }
     }
@@ -2730,9 +2754,7 @@ private fun ArtistSongCard(
     }
 
     Column(
-        modifier = Modifier
-            .width(150.dp)
-            .clickable { viewModel.playSong(song) },
+        modifier = Modifier.width(150.dp).clickable { viewModel.playSong(song) },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
@@ -2744,7 +2766,7 @@ private fun ArtistSongCard(
             FridaArtworkImage(
                 model = imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(18.dp)
             )
@@ -2827,9 +2849,7 @@ private fun RelatedArtistCard(
     }
 
     Column(
-        modifier = Modifier
-            .width(130.dp)
-            .clickable(onClick = onOpen),
+        modifier = Modifier.width(130.dp).clickable(onClick = onOpen),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -3981,7 +4001,7 @@ private fun ArtistListItem(
             FridaArtworkImage(
                 model = imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
                 shape = CircleShape
             )

@@ -45,6 +45,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
+import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.text.Normalizer
@@ -62,10 +63,23 @@ private const val AUTOPLAY_PREFETCH_LIMIT = 4
 private const val AUTOPLAY_PREPARED_UP_NEXT_SIZE = 4
 private const val AUTOPLAY_PREFETCH_GRACE_ATTEMPTS = 8
 private const val AUTOPLAY_PREFETCH_GRACE_DELAY_MS = 50L
+private const val UPCOMING_QUEUE_PREFETCH_SIZE = 2
+private const val ARTWORK_LOOKUP_RETRY_DELAY_MS = 5 * 60 * 1000L
+private const val INITIAL_PROFILE_WARMUP_LIMIT = 24
+private const val RECOMMENDATION_PROFILE_WARMUP_DELAY_MS = 1_000L
+private const val SEARCH_RESULTS_CACHE_TTL_MS = 10 * 60 * 1000L
+private const val SEARCH_RESULTS_CACHE_LIMIT = 20
+private const val SEARCH_STREAM_PREFETCH_LIMIT = 2
+private const val METADATA_NETWORK_TIMEOUT_MS = 4_000
+private const val PLAYBACK_UI_PROGRESS_INTERVAL_MS = 500L
 private const val AUTOPLAY_LOG_TAG = "FridaAutoplay"
 private val YOUTUBE_VIDEO_ID_PATTERN = Regex("[A-Za-z0-9_-]{11}")
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
+    private data class SearchCacheEntry(
+        val results: List<YouTubeResult>,
+        val cachedAtMs: Long
+    )
 
     private val repository = AudioRepository(application)
     val settingsManager = SettingsManager(application)
@@ -238,19 +252,24 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var recommendationJob: Job? = null
     private var profileWarmupJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
+    private val imageUrlMisses = ConcurrentHashMap<String, Long>()
+    private val imageUrlLookups = ConcurrentHashMap<String, Deferred<String?>>()
     private val audioStreamCache = ConcurrentHashMap<String, String>()
     private val audioDurationCache = ConcurrentHashMap<String, Long>()
     private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
-    private val searchResultsCache = ConcurrentHashMap<String, List<YouTubeResult>>()
+    private val searchResultsCache = ConcurrentHashMap<String, SearchCacheEntry>()
     private val autoplayRemoteSearchCache = ConcurrentHashMap<String, List<YouTubeResult>>()
     private val autoplayRecommendationCache = ConcurrentHashMap<String, List<QueueItem>>()
     private val recommendationProfileCache = ConcurrentHashMap<String, SongRecommendationProfile>()
     private val failedAutoplayItems = mutableSetOf<String>()
+    private val failedQueueRetryCounts = ConcurrentHashMap<String, Int>()
+    private val queuePrefetchInFlight = ConcurrentHashMap.newKeySet<String>()
     private val unavailableAutoplayVideoIds = ConcurrentHashMap.newKeySet<String>()
     private val rejectedAutoplayVideoIds = ConcurrentHashMap.newKeySet<String>()
     private val readyAutoplayVideoIds = ConcurrentHashMap.newKeySet<String>()
     private val autoplayPrefetchInFlight = ConcurrentHashMap.newKeySet<String>()
     private var autoplayAnchorSong: Song? = null
+    private var activeSearchKey: String? = null
     private var currentPlaybackConfirmed = false
     private var historyRecordedForCurrentAttempt = false
     private var preferPrefetchedAutoplayNext = false
@@ -335,7 +354,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     }
                     override fun onPlayerError(error: PlaybackException) {
                         val failedSong = _currentSong.value
-                        if (failedSong != null && recoverFromFailedAutoplay(failedSong, "player:${error.errorCode}")) {
+                        if (failedSong != null && recoverFromFailedQueueItem(failedSong, "player:${error.errorCode}")) {
                             return
                         }
                         Log.w(AUTOPLAY_LOG_TAG, "playback failed current=${failedSong?.title.orEmpty()} code=${error.errorCode}", error)
@@ -428,6 +447,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         saveCurrentPlaybackState()
         _currentSong.value = song
         syncQueueCurrentSong(song)
+        val preloadedArtwork = song.artworkUri.toString()
+            .takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() && it.startsWith("http") }
+        _currentAlbumArt.value = preloadedArtwork
 
         exoPlayer?.apply {
             setMediaItem(MediaItem.fromUri(song.uri))
@@ -441,11 +463,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         startProgressUpdate()
         updateNotification(song, true)
 
-        val hasPreloadedArt = song.artworkUri != Uri.EMPTY && song.artworkUri.toString().startsWith("http")
-        _currentAlbumArt.value = if (hasPreloadedArt) song.artworkUri.toString() else null
-
         viewModelScope.launch(Dispatchers.IO) {
-            val url = if (hasPreloadedArt) song.artworkUri.toString() else getSongImageUrl(song)
+            val url = preloadedArtwork ?: getSongImageUrl(song)
             val lyrics = settingsManager.localLyrics(song.id) ?: fetchLyrics(song.artist, song.title)
 
             withContext(Dispatchers.Main) {
@@ -470,6 +489,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private fun confirmCurrentPlayback() {
         val song = _currentSong.value ?: return
         currentPlaybackConfirmed = true
+        failedQueueRetryCounts.remove(songIdentityKey(song))
         if (historyRecordedForCurrentAttempt) return
         historyRecordedForCurrentAttempt = true
         Log.i(AUTOPLAY_LOG_TAG, "confirmed playback song=${song.title}")
@@ -479,7 +499,8 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     songId = song.uri.toString(),
                     title = song.title,
                     artist = song.artist,
-                    artworkUrl = song.artworkUri.toString()
+                    artworkUrl = _currentAlbumArt.value
+                        ?: song.artworkUri.toString().takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() }
                 )
             )
             loadHistory()
@@ -503,6 +524,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         isShuffleMode.value = shuffle
         settingsManager.shuffleEnabled = shuffle
         failedAutoplayItems.clear()
+        failedQueueRetryCounts.clear()
         currentPlaybackConfirmed = false
         historyRecordedForCurrentAttempt = false
         preferPrefetchedAutoplayNext = false
@@ -538,6 +560,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             "queue source=$source name=${sourceName.orEmpty()} shuffle=$shuffle current=${current.song.title} next=${_queueState.value.upNext.take(5).joinToString(" | ") { it.song.title }}"
         )
         persistQueueState()
+        prefetchUpcomingQueueItems(_queueState.value.upNext)
         playQueueItem(current)
     }
 
@@ -638,11 +661,53 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         return true
     }
 
+    private fun recoverFromFailedQueueItem(failedSong: Song, reason: String): Boolean {
+        if (recoverFromFailedAutoplay(failedSong, reason)) return true
+
+        val state = _queueState.value
+        val failedItem = state.current ?: return false
+        if (songIdentityKey(failedItem.song) != songIdentityKey(failedSong)) return false
+
+        val next = state.upNext.firstOrNull() ?: return false
+        val failedKey = songIdentityKey(failedItem.song)
+        val retryCount = failedQueueRetryCounts[failedKey] ?: 0
+        val shouldRetryAfterNext = !currentPlaybackConfirmed &&
+            failedItem.song.requiresRemoteExtraction() &&
+            retryCount == 0
+        if (shouldRetryAfterNext) {
+            failedQueueRetryCounts[failedKey] = retryCount + 1
+        }
+
+        val remaining = state.upNext.drop(1).filterNot { songIdentityKey(it.song) == failedKey }
+        _queueState.value = state.copy(
+            current = next,
+            previous = appendPrevious(state.previous, failedItem),
+            upNext = buildList {
+                if (shouldRetryAfterNext) add(failedItem)
+                addAll(remaining)
+            },
+            autoplayError = null
+        )
+        persistQueueState()
+        Log.w(
+            AUTOPLAY_LOG_TAG,
+            "skip unavailable queue song=${failedItem.song.title} reason=$reason retryAfterNext=$shouldRetryAfterNext next=${next.song.title}"
+        )
+        exoPlayer?.stop()
+        _isPlaying.value = false
+        if (shouldRetryAfterNext) {
+            prefetchQueuedRemoteSong(failedItem.song)
+        }
+        prefetchUpcomingQueueItems(_queueState.value.upNext)
+        playQueueItem(next)
+        return true
+    }
+
     private fun handleRemotePlaybackFailure(result: YouTubeResult, message: String) {
         val current = _queueState.value.current
         if (current != null &&
             current.song.data == result.videoId &&
-            recoverFromFailedAutoplay(current.song, message)
+            recoverFromFailedQueueItem(current.song, message)
         ) {
             return
         }
@@ -1571,7 +1636,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun playPlaylistSongs(playlist: Playlist, playlistSongs: List<Song>, shuffle: Boolean = false) {
         startQueueSession(
             songs = playlistSongs,
-            startSong = playlistSongs.firstOrNull(),
+            startSong = if (shuffle) playlistSongs.randomOrNull() else playlistSongs.firstOrNull(),
             source = QueueSource.PLAYLIST,
             sourceName = playlist.name,
             shuffle = shuffle
@@ -1581,7 +1646,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun playSongs(collection: List<Song>, shuffle: Boolean = false) {
         startQueueSession(
             songs = collection,
-            startSong = collection.firstOrNull(),
+            startSong = if (shuffle) collection.randomOrNull() else collection.firstOrNull(),
             source = QueueSource.LIBRARY,
             sourceName = getApplication<Application>().getString(R.string.library),
             shuffle = shuffle
@@ -2023,6 +2088,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                 autoplayError = null
             )
             persistQueueState()
+            prefetchUpcomingQueueItems(_queueState.value.upNext)
             playQueueItem(next)
             if (next.source == QueueSource.AUTOPLAY &&
                 _queueState.value.current?.let { currentItem ->
@@ -2139,11 +2205,13 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private fun warmRecommendationProfiles(songs: List<Song>) {
         profileWarmupJob?.cancel()
         profileWarmupJob = viewModelScope.launch(Dispatchers.Default) {
+            delay(RECOMMENDATION_PROFILE_WARMUP_DELAY_MS)
             val startedAt = System.currentTimeMillis()
-            songs.forEach { songProfile(it) }
+            val warmupSongs = songs.take(INITIAL_PROFILE_WARMUP_LIMIT)
+            warmupSongs.forEach { songProfile(it) }
             Log.i(
                 AUTOPLAY_LOG_TAG,
-                "profile warmup songs=${songs.size} cached=${recommendationProfileCache.size} took=${System.currentTimeMillis() - startedAt}ms"
+                "profile warmup songs=${warmupSongs.size}/${songs.size} cached=${recommendationProfileCache.size} took=${System.currentTimeMillis() - startedAt}ms"
             )
         }
     }
@@ -2425,60 +2493,78 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     fun searchYouTube(query: String) {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) {
+            activeSearchKey = null
             searchJob?.cancel()
             _youtubeSearchResults.value = emptyList()
             _isSearching.value = false
             return
         }
 
+        val searchKey = normalizeSearchText(cleanQuery)
+        activeSearchKey = searchKey
         searchJob?.cancel()
+        _isSearching.value = true
         searchJob = viewModelScope.launch(Dispatchers.IO) {
-            _isSearching.value = true
             try {
-                // Paso 1: Obtener resultados de Deezer inmediatamente
-                val deezerResults = DeezerApi.search(cleanQuery)
-                withContext(Dispatchers.Main) {
-                    _youtubeSearchResults.value = deezerResults
-                    _isSearching.value = false // Llenar interfaz al instante
+                val cached = searchResultsCache[searchKey]
+                    ?.takeIf { System.currentTimeMillis() - it.cachedAtMs <= SEARCH_RESULTS_CACHE_TTL_MS }
+                    ?.results
+                val results = cached ?: DeezerApi.search(cleanQuery).also { loaded ->
+                    if (loaded.isNotEmpty()) {
+                        if (searchResultsCache.size >= SEARCH_RESULTS_CACHE_LIMIT) searchResultsCache.clear()
+                        searchResultsCache[searchKey] = SearchCacheEntry(loaded, System.currentTimeMillis())
+                    }
                 }
-
-                // Paso 3: Trabajador Silencioso para los primeros 5 resultados
-                launch(Dispatchers.IO) {
-                    deezerResults.take(5).forEach { result ->
-                        try {
-                            // Buscar secretamente en YouTube
-                            val ytMatch = YouTube.search("${result.title} ${result.artist} audio")
-                                .firstOrNull { it.type == ResultType.SONG }
-                            
-                            if (ytMatch != null) {
-                                deezerToYoutubeMap[result.videoId] = ytMatch.videoId
-                                
-                                // Extraer URL de audio con NewPipe
-                                val videoUrl = "https://www.youtube.com/watch?v=${ytMatch.videoId}"
-                                val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
-                                val audioStream = streamInfo.audioStreams
-                                    .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
-                                    .maxByOrNull { it.bitrate }
-                                    ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
-                                
-                                val streamUrl = audioStream?.url
-                                if (streamUrl != null) {
-                                    audioStreamCache[ytMatch.videoId] = streamUrl
-                                    audioDurationCache[ytMatch.videoId] = streamInfo.duration * 1000L
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.e("SilentWorker", "Error pre-fetching ${result.title}: ${e.message}")
+                currentCoroutineContext().ensureActive()
+                withContext(Dispatchers.Main) {
+                    if (activeSearchKey == searchKey) {
+                        _youtubeSearchResults.value = results
+                        _isSearching.value = false
+                    }
+                }
+                prefetchSearchStreams(results)
+            } catch (e: Exception) {
+                if (e !is CancellationException) {
+                    withContext(Dispatchers.Main) {
+                        if (activeSearchKey == searchKey) {
+                            _youtubeSearchResults.value = emptyList()
+                            _isSearching.value = false
                         }
                     }
                 }
-            } catch (e: Exception) {
-                if (e !is CancellationException) {
-                    _youtubeSearchResults.value = emptyList()
-                    withContext(Dispatchers.Main) { _isSearching.value = false }
-                }
             }
         }
+    }
+
+    private suspend fun prefetchSearchStreams(results: List<YouTubeResult>) {
+        results.asSequence()
+            .filter { it.type == ResultType.SONG }
+            .take(SEARCH_STREAM_PREFETCH_LIMIT)
+            .forEach { result ->
+                currentCoroutineContext().ensureActive()
+                try {
+                    val ytMatch = YouTube.search("${result.title} ${result.artist} audio")
+                        .firstOrNull { it.type == ResultType.SONG }
+                        ?: return@forEach
+                    deezerToYoutubeMap[result.videoId] = ytMatch.videoId
+
+                    val streamInfo = StreamInfo.getInfo(
+                        ServiceList.YouTube,
+                        "https://www.youtube.com/watch?v=${ytMatch.videoId}"
+                    )
+                    val audioStream = streamInfo.audioStreams
+                        .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
+                        .maxByOrNull { it.bitrate }
+                        ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+                    audioStream?.url?.takeIf { it.isNotBlank() }?.let { streamUrl ->
+                        audioStreamCache[ytMatch.videoId] = streamUrl
+                        audioDurationCache[ytMatch.videoId] = streamInfo.duration * 1000L
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.d(AUTOPLAY_LOG_TAG, "search prefetch unavailable title=${result.title}")
+                }
+            }
     }
 
     private data class RankedSearchResult(
@@ -2685,7 +2771,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     }
                 }
 
-                delay(250)
+                delay(PLAYBACK_UI_PROGRESS_INTERVAL_MS)
             }
         }
     }
@@ -2715,12 +2801,25 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             .takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() }
         if (preloadedArtwork != null) return@withContext preloadedArtwork
 
-        val cacheKey = "song_${song.id}"
-        if (imageUrlCache.containsKey(cacheKey)) return@withContext imageUrlCache[cacheKey]
+        val cacheKey = "song_${songArtworkMetadataKey(song)}"
+        resolveArtworkUrl(cacheKey) {
+            fetchAlbumArt(song.title, song.artist, requireTrackMatch = true)
+        }
+    }
 
-        val url = fetchAlbumArt(song.title, song.artist, requireTrackMatch = true)
-        if (url != null) imageUrlCache[cacheKey] = url
-        return@withContext url
+    suspend fun getHistoryImageUrl(history: PlaybackHistoryEntity): String? = withContext(Dispatchers.IO) {
+        history.artworkUrl
+            ?.takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() }
+            ?.let { return@withContext it }
+
+        _songs.value.firstOrNull { song ->
+            song.uri.toString() == history.songId ||
+                metadataIdentity(song.title, song.artist) == metadataIdentity(history.title, history.artist)
+        }?.let { return@withContext getSongImageUrl(it) }
+
+        resolveArtworkUrl("history_${metadataIdentity(history.title, history.artist)}") {
+            fetchAlbumArt(history.title, history.artist, requireTrackMatch = true)
+        }
     }
 
     suspend fun getDistinctSongImageUrls(
@@ -2749,11 +2848,34 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     suspend fun getArtistImageUrl(artistName: String): String? = withContext(Dispatchers.IO) {
-        val cacheKey = "artist_$artistName"
-        if (imageUrlCache.containsKey(cacheKey)) return@withContext imageUrlCache[cacheKey]
-        val url = fetchAlbumArt(artistName, "", requireTrackMatch = false)
-        if (url != null) imageUrlCache[cacheKey] = url
-        return@withContext url
+        val cacheKey = "artist_${normalizeArtworkText(artistName)}"
+        resolveArtworkUrl(cacheKey) {
+            fetchAlbumArt(artistName, "", requireTrackMatch = false)
+        }
+    }
+
+    private suspend fun resolveArtworkUrl(cacheKey: String, lookup: () -> String?): String? {
+        imageUrlCache[cacheKey]?.let { return it }
+        imageUrlMisses[cacheKey]?.let { failedAt ->
+            if (System.currentTimeMillis() - failedAt < ARTWORK_LOOKUP_RETRY_DELAY_MS) return null
+        }
+
+        val request = imageUrlLookups.computeIfAbsent(cacheKey) {
+            viewModelScope.async(Dispatchers.IO) { lookup() }
+        }
+        val url = try {
+            request.await()
+        } finally {
+            imageUrlLookups.remove(cacheKey, request)
+        }
+
+        if (url.isNullOrBlank()) {
+            imageUrlMisses[cacheKey] = System.currentTimeMillis()
+        } else {
+            imageUrlMisses.remove(cacheKey)
+            imageUrlCache[cacheKey] = url
+        }
+        return url
     }
 
     private fun fetchAlbumArt(
@@ -2761,6 +2883,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         artist: String?,
         requireTrackMatch: Boolean
     ): String? {
+        var connection: HttpURLConnection? = null
         return try {
             val cleanQuery = normalizeArtworkText(title)
             val cleanArtist = if (artist.isNullOrBlank() || artist.contains("unknown", ignoreCase = true)) "" else artist.trim()
@@ -2769,8 +2892,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
             val encodedQuery = URLEncoder.encode(finalQueryText, "UTF-8")
             val url = "https://itunes.apple.com/search?term=$encodedQuery&media=music&entity=song&limit=10"
-
-            val response = URL(url).readText()
+            val activeConnection = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = METADATA_NETWORK_TIMEOUT_MS
+                readTimeout = METADATA_NETWORK_TIMEOUT_MS
+                setRequestProperty("User-Agent", "FridaMusic/1.0")
+            }
+            connection = activeConnection
+            if (activeConnection.responseCode !in 200..299) return null
+            val response = activeConnection.inputStream.bufferedReader().use { it.readText() }
             val json = JSONObject(response)
             val results = json.getJSONArray("results")
 
@@ -2798,7 +2927,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             }
 
             bestUrl
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     private fun artworkMetadataScore(
@@ -2891,24 +3024,35 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         try {
             val url = "https://lrclib.net/api/get?artist_name=$encodedArtist&track_name=$encodedTitle"
-            val connection = URL(url).openConnection()
-            connection.setRequestProperty("User-Agent", "FridaMusic/1.0")
+            readTextWithTimeout(url)?.let { response ->
+                val json = JSONObject(response)
+                val syncedLyrics = json.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }
+                if (syncedLyrics != null) return@withContext syncedLyrics
 
-            val response = connection.getInputStream().bufferedReader().readText()
-            val json = JSONObject(response)
-
-            val syncedLyrics = json.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }
-            if (syncedLyrics != null) return@withContext syncedLyrics
-
-            val plainLyrics = json.optString("plainLyrics").takeIf { it.isNotBlank() && it != "null" }
-            if (plainLyrics != null) return@withContext plainLyrics
+                val plainLyrics = json.optString("plainLyrics").takeIf { it.isNotBlank() && it != "null" }
+                if (plainLyrics != null) return@withContext plainLyrics
+            }
         } catch (e: Exception) {}
 
         try {
             val url = "https://api.lyrics.ovh/v1/$encodedArtist/$encodedTitle"
-            val response = URL(url).readText()
+            val response = readTextWithTimeout(url) ?: return@withContext null
             return@withContext JSONObject(response).optString("lyrics").takeIf { it.isNotBlank() && it != "null" }
         } catch (e: Exception) { return@withContext null }
+    }
+
+    private fun readTextWithTimeout(url: String): String? {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = METADATA_NETWORK_TIMEOUT_MS
+            readTimeout = METADATA_NETWORK_TIMEOUT_MS
+            setRequestProperty("User-Agent", "FridaMusic/1.0")
+        }
+        return try {
+            if (connection.responseCode !in 200..299) return null
+            connection.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun prefetchAutoplayCandidates(items: List<QueueItem>, skipFirst: Boolean) {
@@ -2931,6 +3075,37 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             .take(AUTOPLAY_PREFETCH_LIMIT)
             .forEach { prefetchYouTubeAudio(it, identifyUnavailable = true) }
         promoteReadyAutoplayToUpNext()
+    }
+
+    private fun prefetchUpcomingQueueItems(items: List<QueueItem>) {
+        items.asSequence()
+            .filter { it.source != QueueSource.AUTOPLAY && it.song.requiresRemoteExtraction() }
+            .take(UPCOMING_QUEUE_PREFETCH_SIZE)
+            .forEach { prefetchQueuedRemoteSong(it.song) }
+    }
+
+    private fun prefetchQueuedRemoteSong(song: Song) {
+        if (!song.requiresRemoteExtraction()) return
+        val key = songIdentityKey(song)
+        if (!queuePrefetchInFlight.add(key)) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val videoId = song.data.takeIf { YOUTUBE_VIDEO_ID_PATTERN.matches(it) }
+                    ?: deezerToYoutubeMap[song.data]
+                    ?: YouTube.search("${song.title} ${song.artist} audio")
+                        .firstOrNull { it.type == ResultType.SONG }
+                        ?.videoId
+                        ?.also { deezerToYoutubeMap[song.data] = it }
+                if (videoId != null) {
+                    prefetchYouTubeAudio(videoId)
+                }
+            } catch (_: Exception) {
+                // The foreground playback path remains the final retry.
+            } finally {
+                queuePrefetchInFlight.remove(key)
+            }
+        }
     }
 
     private fun prefetchYouTubeAudio(videoId: String, identifyUnavailable: Boolean = false) {

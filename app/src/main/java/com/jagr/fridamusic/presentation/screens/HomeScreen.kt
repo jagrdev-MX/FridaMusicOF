@@ -36,9 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
+import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.FridaEmptyState
@@ -52,12 +52,12 @@ fun HomeScreen(
     paddingValues: PaddingValues,
     listState: LazyListState,
     songs: List<Song>,
-    currentSong: Song?,
     viewModel: LibraryViewModels,
     onSongClick: (Song) -> Unit,
     onNavigateToSettings: () -> Unit,
     onOpenLibrarySection: (String) -> Unit
 ) {
+    val recentHistory by viewModel.recentHistory.collectAsState()
     val history by viewModel.fullHistory.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
     val favorites = remember(playlists) {
@@ -69,11 +69,10 @@ fun HomeScreen(
     }
     val recentlyAdded = remember(songs) { songs.sortedByDescending { it.dateAdded }.take(10) }
     val historySongs = remember(history, songs) {
+        val songsByUri = songs.associateBy { it.uri.toString() }
+        val songsByMetadata = songs.associateBy { "${it.title}\u0000${it.artist}" }
         history.mapNotNull { entry ->
-            songs.firstOrNull { song ->
-                song.uri.toString() == entry.songId ||
-                    (song.title == entry.title && song.artist == entry.artist)
-            }
+            songsByUri[entry.songId] ?: songsByMetadata["${entry.title}\u0000${entry.artist}"]
         }.distinctBy { it.id }
     }
     val recentAlbums = remember(historySongs) {
@@ -87,9 +86,7 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp,
-            bottom = paddingValues.calculateBottomPadding() + 80.dp,
-            start = 20.dp,
-            end = 20.dp
+            bottom = paddingValues.calculateBottomPadding() + 80.dp
         ),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
@@ -104,6 +101,19 @@ fun HomeScreen(
                 onMostPlayed = { onOpenLibrarySection("MOST_PLAYED") },
                 onShuffle = { viewModel.shuffleLibrary() }
             )
+        }
+
+        item {
+            RecentlyPlayedSection(
+                history = recentHistory,
+                viewModel = viewModel,
+                onHistoryClick = viewModel::playHistoryItem,
+                onSeeAll = { onOpenLibrarySection("HISTORY") }
+            )
+        }
+
+        item {
+            TopArtistsSection(history = history, viewModel = viewModel)
         }
 
         item {
@@ -132,24 +142,12 @@ fun HomeScreen(
             )
         }
 
-        if (songs.isNotEmpty()) {
-            item {
-                RecentlyPlayedSection(
-                    songs = songs,
-                    currentSong = currentSong,
-                    viewModel = viewModel,
-                    onSongClick = onSongClick
-                )
-            }
-
-            item {
-                TopArtistsSection(songs = songs, viewModel = viewModel)
-            }
-        } else {
+        if (songs.isEmpty() && history.isEmpty()) {
             item {
                 FridaEmptyState(
                     title = stringResource(R.string.no_local_songs),
-                    subtitle = stringResource(R.string.library_empty_hint)
+                    subtitle = stringResource(R.string.library_empty_hint),
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
         }
@@ -170,7 +168,9 @@ private fun QuickAccessSection(
         Triple(Icons.Default.Shuffle, stringResource(R.string.shuffle), onShuffle)
     )
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         actions.forEach { (icon, label, action) ->
@@ -212,18 +212,30 @@ private fun HomeSongCarousel(
     viewModel: LibraryViewModels,
     onSongClick: (Song) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        FridaSectionHeader(title = title)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        FridaSectionHeader(title = title, modifier = Modifier.padding(horizontal = 20.dp))
         if (songs.isEmpty()) {
             Text(
                 text = stringResource(R.string.nothing_played_yet),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = LiquidTypography.bodySmall
+                style = LiquidTypography.bodySmall,
+                modifier = Modifier.padding(horizontal = 20.dp)
             )
             return@Column
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            itemsIndexed(songs) { _, song ->
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            itemsIndexed(
+                items = songs,
+                key = { _, song -> "home_song_${song.id}" },
+                contentType = { _, _ -> "home_song_card" }
+            ) { _, song ->
                 HomeMediaCard(song = song, viewModel = viewModel, onClick = { onSongClick(song) })
             }
         }
@@ -236,18 +248,33 @@ private fun HomeArtistCarousel(
     viewModel: LibraryViewModels,
     onSongClick: (Song) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        FridaSectionHeader(title = stringResource(R.string.recent_artists))
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        FridaSectionHeader(
+            title = stringResource(R.string.recent_artists),
+            modifier = Modifier.padding(horizontal = 20.dp)
+        )
         if (songs.isEmpty()) {
             Text(
                 text = stringResource(R.string.nothing_played_yet),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = LiquidTypography.bodySmall
+                style = LiquidTypography.bodySmall,
+                modifier = Modifier.padding(horizontal = 20.dp)
             )
             return@Column
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            itemsIndexed(songs) { _, song ->
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            itemsIndexed(
+                items = songs,
+                key = { _, song -> "home_artist_${song.artist}_${song.id}" },
+                contentType = { _, _ -> "home_artist_card" }
+            ) { _, song ->
                 val artwork by produceState<String?>(null, song) { value = viewModel.getSongImageUrl(song) }
                 Column(
                     modifier = Modifier.width(92.dp).clickable { onSongClick(song) },
@@ -257,7 +284,8 @@ private fun HomeArtistCarousel(
                         model = artwork,
                         contentDescription = song.artist,
                         modifier = Modifier.size(84.dp),
-                        shape = CircleShape
+                        shape = CircleShape,
+                        contentScale = ContentScale.Crop
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -324,7 +352,9 @@ private fun WelcomeSection(onProfileClick: () -> Unit) {
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -364,43 +394,53 @@ private fun WelcomeSection(onProfileClick: () -> Unit) {
 
 @Composable
 private fun RecentlyPlayedSection(
-    songs: List<Song>,
-    currentSong: Song?,
+    history: List<PlaybackHistoryEntity>,
     viewModel: LibraryViewModels,
-    onSongClick: (Song) -> Unit
+    onHistoryClick: (PlaybackHistoryEntity) -> Unit,
+    onSeeAll: () -> Unit
 ) {
-    val mainSong = remember(songs, currentSong) { currentSong ?: songs.firstOrNull() }
-    val smallSong1 = remember(songs) { songs.getOrNull(1) }
-    val smallSong2 = remember(songs) { songs.getOrNull(2) }
+    val mainSong = history.getOrNull(0)
+    val secondaryHistory = remember(history) { history.drop(1) }
 
     val mainSongImageUrl by produceState<String?>(initialValue = null, key1 = mainSong) {
-        value = mainSong?.let { viewModel.getSongImageUrl(it) }
+        value = mainSong?.let { viewModel.getHistoryImageUrl(it) }
     }
 
-    Column {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(stringResource(R.string.recently_played), style = LiquidTypography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
-            Text(stringResource(R.string.see_all), style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            Text(
+                text = stringResource(R.string.see_all),
+                style = LiquidTypography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.clickable(onClick = onSeeAll)
+            )
         }
 
         if (mainSong != null) {
             Box(
                 modifier = Modifier
+                    .padding(horizontal = 20.dp)
                     .fillMaxWidth()
                     .aspectRatio(2f / 1f)
                     .clip(RoundedCornerShape(20.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onSongClick(mainSong) }
+                    .clickable { onHistoryClick(mainSong) }
             ) {
                 FridaArtworkImage(
                     model = mainSongImageUrl,
                     contentDescription = mainSong.title,
                     modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(20.dp),
+                    contentScale = ContentScale.Crop
                 )
 
                 Box(
@@ -420,7 +460,7 @@ private fun RecentlyPlayedSection(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                        Text(stringResource(R.string.now_playing), style = LiquidTypography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.last_played), style = LiquidTypography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Text(
                             text = mainSong.title,
                             style = LiquidTypography.headlineMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
@@ -429,7 +469,7 @@ private fun RecentlyPlayedSection(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = mainSong.artist ?: stringResource(R.string.unknown_artist),
+                            text = mainSong.artist.ifBlank { stringResource(R.string.unknown_artist) },
                             style = LiquidTypography.bodySmall,
                             color = Color.White.copy(alpha = 0.7f),
                             maxLines = 1,
@@ -449,25 +489,52 @@ private fun RecentlyPlayedSection(
                     }
                 }
             }
+        } else {
+            Text(
+                text = stringResource(R.string.nothing_played_yet),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = LiquidTypography.bodySmall,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        if (secondaryHistory.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (smallSong1 != null) {
-                SmallTile(song = smallSong1, viewModel = viewModel, modifier = Modifier.weight(1f), onClick = { onSongClick(smallSong1) })
-            }
-            if (smallSong2 != null) {
-                SmallTile(song = smallSong2, viewModel = viewModel, modifier = Modifier.weight(1f), onClick = { onSongClick(smallSong2) })
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val tileWidth = (maxWidth - 56.dp) / 2
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    itemsIndexed(
+                        items = secondaryHistory,
+                        key = { _, item -> "recent_history_${item.id}" },
+                        contentType = { _, _ -> "recent_history_tile" }
+                    ) { _, historyItem ->
+                        SmallTile(
+                            history = historyItem,
+                            viewModel = viewModel,
+                            modifier = Modifier.width(tileWidth),
+                            onClick = { onHistoryClick(historyItem) }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val imageUrl by produceState<String?>(initialValue = null, key1 = song) {
-        value = viewModel.getSongImageUrl(song)
+private fun SmallTile(
+    history: PlaybackHistoryEntity,
+    viewModel: LibraryViewModels,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val imageUrl by produceState<String?>(initialValue = null, key1 = history) {
+        value = viewModel.getHistoryImageUrl(history)
     }
 
     Row(
@@ -484,45 +551,87 @@ private fun SmallTile(song: Song, viewModel: LibraryViewModels, modifier: Modifi
         ) {
             FridaArtworkImage(
                 model = imageUrl,
-                contentDescription = song.title,
+                contentDescription = history.title,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(8.dp)
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(song.title, style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.artist ?: stringResource(R.string.unknown), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(history.title, style = LiquidTypography.bodySmall.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(history.artist.ifBlank { stringResource(R.string.unknown) }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
+private data class HomeArtistStat(
+    val name: String,
+    val artworkUrl: String?,
+    val playCount: Int,
+    val lastPlayedAt: Long
+)
+
 @Composable
-private fun TopArtistsSection(songs: List<Song>, viewModel: LibraryViewModels) {
+private fun TopArtistsSection(history: List<PlaybackHistoryEntity>, viewModel: LibraryViewModels) {
     val unknownStr = stringResource(R.string.unknown)
-    val artists = remember(songs, unknownStr) {
-        songs.mapNotNull { it.artist }
-            .filter { it.isNotBlank() && !it.contains(unknownStr, ignoreCase = true) && !it.contains("unknown", ignoreCase = true) }
-            .distinct()
+    val artists = remember(history, unknownStr) {
+        history
+            .filter { item ->
+                item.artist.isNotBlank() &&
+                    !item.artist.contains(unknownStr, ignoreCase = true) &&
+                    !item.artist.contains("unknown", ignoreCase = true)
+            }
+            .groupBy { it.artist.trim().lowercase() }
+            .values
+            .map { plays ->
+                val latest = plays.maxBy { it.playedAt }
+                HomeArtistStat(
+                    name = latest.artist.trim(),
+                    artworkUrl = latest.artworkUrl?.takeIf { it.isNotBlank() },
+                    playCount = plays.sumOf { it.playCount },
+                    lastPlayedAt = latest.playedAt
+                )
+            }
+            .sortedWith(
+                compareByDescending<HomeArtistStat> { it.playCount }
+                    .thenByDescending { it.lastPlayedAt }
+            )
             .take(10)
     }
 
     if (artists.isEmpty()) return
 
-    Column {
-        Text(stringResource(R.string.top_artists), style = LiquidTypography.headlineMedium, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(bottom = 16.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(end = 20.dp)) {
-            itemsIndexed(artists) { index, artistName ->
-                ArtistItem(name = artistName, isActive = index == 0, viewModel = viewModel)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            stringResource(R.string.top_artists),
+            style = LiquidTypography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 16.dp)
+        )
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            itemsIndexed(
+                items = artists,
+                key = { _, artist -> "top_artist_${artist.name}" },
+                contentType = { _, _ -> "top_artist_card" }
+            ) { index, artist ->
+                ArtistItem(artist = artist, isActive = index == 0, viewModel = viewModel)
             }
         }
     }
 }
 
 @Composable
-private fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewModels) {
-    val imageUrl by produceState<String?>(initialValue = null, key1 = name) {
-        value = viewModel.getArtistImageUrl(name)
+private fun ArtistItem(
+    artist: HomeArtistStat,
+    isActive: Boolean,
+    viewModel: LibraryViewModels
+) {
+    val imageUrl by produceState<String?>(initialValue = artist.artworkUrl, key1 = artist) {
+        value = artist.artworkUrl ?: viewModel.getArtistImageUrl(artist.name)
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(90.dp)) {
@@ -530,13 +639,14 @@ private fun ArtistItem(name: String, isActive: Boolean, viewModel: LibraryViewMo
             Box(modifier = Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                 FridaArtworkImage(
                     model = imageUrl,
-                    contentDescription = name,
+                    contentDescription = artist.name,
                     modifier = Modifier.fillMaxSize(),
-                    shape = CircleShape
+                    shape = CircleShape,
+                    contentScale = ContentScale.Crop
                 )
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Text(name, style = LiquidTypography.bodySmall, color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(artist.name, style = LiquidTypography.bodySmall, color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
