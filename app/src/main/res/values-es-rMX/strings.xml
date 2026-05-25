@@ -110,6 +110,10 @@
     <string name="playlist_description">Descripción opcional</string>
     <string name="create">Crear</string>
     <string name="songs_count">%1$d canciones</string>
+    <plurals name="library_songs_count">
+        <item quantity="one">%1$d canci&#243;n</item>
+        <item quantity="other">%1$d canciones</item>
+    </plurals>
     <string name="playlists_count">%1$d listas</string>
     <string name="artists_count">%1$d artistas</string>
     <string name="search">Buscar</string>

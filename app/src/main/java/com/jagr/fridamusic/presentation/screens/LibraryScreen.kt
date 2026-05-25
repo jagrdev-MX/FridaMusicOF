@@ -124,6 +124,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -939,7 +940,7 @@ private fun AllPage(
                 item {
                     LibraryCollectionCard(
                         title = stringResource(R.string.local_songs),
-                        subtitle = stringResource(R.string.songs_count, songs.size),
+                        subtitle = pluralStringResource(R.plurals.library_songs_count, songs.size, songs.size),
                         icon = Icons.Default.MusicNote,
                         viewModel = viewModel,
                         coverSongs = songs,
@@ -997,7 +998,7 @@ private fun SongsPage(
                 Column(Modifier.weight(1f)) {
                     SectionHeader(text = stringResource(R.string.local_songs))
                     Text(
-                        stringResource(R.string.songs_count, songs.size),
+                        pluralStringResource(R.plurals.library_songs_count, songs.size, songs.size),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 13.sp
                     )
@@ -1452,7 +1453,7 @@ private fun PlaylistGridCard(
         Spacer(Modifier.height(7.dp))
         Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
         Text(
-            stringResource(R.string.songs_count, playlist.songIds.size),
+            pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1503,7 +1504,7 @@ private fun ArtistGridCard(
         Spacer(Modifier.height(8.dp))
         Text(artist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
         Text(
-            stringResource(R.string.songs_count, artist.songs.size),
+            pluralStringResource(R.plurals.library_songs_count, artist.songs.size, artist.songs.size),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1554,7 +1555,7 @@ private fun SmartSongsDetailPage(
         }
         item {
             Text(
-                stringResource(R.string.songs_count, songs.size),
+                pluralStringResource(R.plurals.library_songs_count, songs.size, songs.size),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 14.sp
             )
@@ -1635,7 +1636,7 @@ private fun PlaylistDetailPage(
                 fallbackIcon = Icons.AutoMirrored.Filled.QueueMusic
             )
         },
-        countLabel = stringResource(R.string.songs_count, displayedSongs.size),
+        countLabel = pluralStringResource(R.plurals.library_songs_count, displayedSongs.size, displayedSongs.size),
         backgroundArtUrl = leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
@@ -1810,7 +1811,7 @@ private fun AlbumDetailPage(
                 shape = RoundedCornerShape(24.dp)
             )
         },
-        countLabel = stringResource(R.string.songs_count, album.songCount),
+        countLabel = pluralStringResource(R.plurals.library_songs_count, album.songCount, album.songCount),
         backgroundArtUrl = leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
@@ -2021,7 +2022,7 @@ private fun ArtistDetailPage(
                 overrideModel = selectedArtworkUri
             )
         },
-        countLabel = stringResource(R.string.songs_count, artist.songs.size),
+        countLabel = pluralStringResource(R.plurals.library_songs_count, artist.songs.size, artist.songs.size),
         backgroundArtUrl = selectedArtworkUri ?: leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
@@ -2996,7 +2997,7 @@ private fun PlaylistListItem(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                stringResource(R.string.songs_count, playlist.songIds.size),
+                pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -3420,7 +3421,7 @@ private fun SaveToPlaylistSheet(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = stringResource(R.string.songs_count, playlist.songIds.size),
+                            text = pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -3996,7 +3997,7 @@ private fun ArtistListItem(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                stringResource(R.string.songs_count, artist.songs.size),
+                pluralStringResource(R.plurals.library_songs_count, artist.songs.size, artist.songs.size),
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -4344,7 +4345,7 @@ private fun sharePlaylist(
     val text = buildString {
         append(playlist.name)
         append("\n")
-        append(context.getString(R.string.songs_count, songs.size))
+        append(context.resources.getQuantityString(R.plurals.library_songs_count, songs.size, songs.size))
         if (!playlist.description.isNullOrBlank()) {
             append("\n")
             append(playlist.description)
@@ -4366,7 +4367,7 @@ private fun shareAlbum(
         append(album.title)
         if (album.artist.isNotBlank()) append(" — ${album.artist}")
         append("\n")
-        append(context.getString(R.string.songs_count, album.songCount))
+        append(context.resources.getQuantityString(R.plurals.library_songs_count, album.songCount, album.songCount))
         album.songs.take(12).forEachIndexed { index, song ->
             append("\n${index + 1}. ${song.title}")
         }
@@ -4382,7 +4383,7 @@ private fun shareArtist(
     val text = buildString {
         append(artist.name)
         append("\n")
-        append(context.getString(R.string.songs_count, artist.songs.size))
+        append(context.resources.getQuantityString(R.plurals.library_songs_count, artist.songs.size, artist.songs.size))
         artist.songs.take(12).forEachIndexed { index, song ->
             append("\n${index + 1}. ${song.title}")
         }

@@ -30,12 +30,6 @@ class MainActivity : ComponentActivity() {
         adManager = AdManager.getInstance(applicationContext)
         consentManager = GoogleMobileAdsConsentManager(applicationContext)
 
-        consentManager.requestConsent(this) {
-            if (consentManager.canRequestAds) {
-                adManager.initialize()
-            }
-        }
-
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
                 Color.TRANSPARENT,
@@ -58,6 +52,12 @@ class MainActivity : ComponentActivity() {
 
             FridaMusicTheme(darkTheme = isDarkTheme) {
                 MainScreen()
+            }
+        }
+
+        consentManager.requestConsent(this) {
+            if (consentManager.canRequestAds) {
+                adManager.initialize()
             }
         }
     }

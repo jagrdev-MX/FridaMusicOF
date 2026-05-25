@@ -143,10 +143,13 @@ fun MainScreen() {
                             if (route == selectedTopLevelRoute && route == "library") {
                                 libraryReselectSignal++
                             } else {
+                                val returnHome = route == "home"
                                 navController.navigate(route) {
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                    popUpTo(navController.graph.startDestinationId) {
+                                        saveState = !returnHome
+                                    }
                                     launchSingleTop = true
-                                    restoreState = true
+                                    restoreState = !returnHome
                                 }
                             }
                         },
