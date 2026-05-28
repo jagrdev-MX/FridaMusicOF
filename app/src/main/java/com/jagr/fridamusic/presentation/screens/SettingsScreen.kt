@@ -57,6 +57,8 @@ fun SettingsScreen(
     val sleepTimer by viewModel.sleepTimerMinutes.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
 
+    val enableBlurEffect by viewModel.enableBlurEffect.collectAsState()
+
     var showTimerDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
 
@@ -125,6 +127,13 @@ fun SettingsScreen(
                         title = stringResource(R.string.theme),
                         value = currentTheme.displayName,
                         onClick = { showThemeDialog = true }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
+                    SettingsToggleItem(
+                        icon = Icons.Default.BlurOn,
+                        title = "Efecto Blur",
+                        isChecked = enableBlurEffect,
+                        onCheckedChange = { viewModel.updateEnableBlurEffect(it) }
                     )
                 }
             }
@@ -372,7 +381,7 @@ private fun AppInfoItem() {
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(text = stringResource(R.string.app_name), style = LiquidTypography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onBackground)
-            Text(text = stringResource(R.string.local_audio_player) + " • v1.0.0", style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = stringResource(R.string.local_audio_player) + " • v2.0.0", style = LiquidTypography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

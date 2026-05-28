@@ -137,19 +137,20 @@ fun MainScreen() {
                         onNext = { libraryViewModel.skipToNext() },
                         onPrevious = { libraryViewModel.skipToPrevious() },
                         onNavigate = { route ->
-                            if (route == "search") {
-                                searchFocusSignal++
-                            }
-                            if (route == selectedTopLevelRoute && route == "library") {
-                                libraryReselectSignal++
+                            if (route == selectedTopLevelRoute) {
+                                if (route == "search") {
+                                    searchFocusSignal++
+                                } else if (route == "library") {
+                                    libraryReselectSignal++
+                                }
                             } else {
-                                val returnHome = route == "home"
+                                searchFocusSignal = 0
                                 navController.navigate(route) {
                                     popUpTo(navController.graph.startDestinationId) {
-                                        saveState = !returnHome
+                                        saveState = true
                                     }
                                     launchSingleTop = true
-                                    restoreState = !returnHome
+                                    restoreState = true
                                 }
                             }
                         },
@@ -210,13 +211,13 @@ fun MainScreen() {
                         onlineResults
                             .filter {
                                 it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.SONG &&
-                                    normalizeRouteArtistName(it.artist).let { artist ->
-                                        artist.isNotBlank() && (
-                                            artist == normalizedArtistName ||
-                                            artist.contains(normalizedArtistName) ||
-                                            normalizedArtistName.contains(artist)
-                                        )
-                                    }
+                                        normalizeRouteArtistName(it.artist).let { artist ->
+                                            artist.isNotBlank() && (
+                                                    artist == normalizedArtistName ||
+                                                            artist.contains(normalizedArtistName) ||
+                                                            normalizedArtistName.contains(artist)
+                                                    )
+                                        }
                             }
                             .map { result ->
                                 com.jagr.fridamusic.domain.model.Song(
@@ -252,7 +253,7 @@ fun MainScreen() {
                         onlineResults
                             .filter {
                                 it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.PLAYLIST &&
-                                    normalizeRouteArtistName("${it.title} ${it.artist}").contains(normalizedArtistName)
+                                        normalizeRouteArtistName("${it.title} ${it.artist}").contains(normalizedArtistName)
                             }
                             .map { result ->
                                 com.jagr.fridamusic.domain.model.Song(

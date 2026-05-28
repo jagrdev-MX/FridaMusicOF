@@ -38,7 +38,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -71,6 +70,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -93,7 +93,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.focus.FocusRequester
@@ -108,7 +107,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import coil.compose.AsyncImage
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.data.remote.innertube.ResultType
@@ -350,9 +348,11 @@ fun SearchScreen(
     }
 
     LaunchedEffect(focusSignal) {
-        delay(220)
-        focusRequester.requestFocus()
-        keyboardController?.show()
+        if (focusSignal > 0) {
+            delay(100)
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
     }
 
     var isScrollingDown by remember { mutableStateOf(false) }
@@ -747,11 +747,11 @@ private fun SearchStickyHeader(
         label = "search-header-scroll-alpha"
     )
     val isDark = isSystemInDarkTheme()
-    val tint = if (isDark) {
-        MaterialTheme.colorScheme.background.copy(alpha = 0.54f + (0.24f * scrollAlpha))
-    } else {
-        Color.White.copy(alpha = 0.58f + (0.22f * scrollAlpha))
-    }
+
+    // CORRECCIÓN: Fondo dinámico adaptable a modo oscuro y claro sin colores quemados.
+    val tint = MaterialTheme.colorScheme.surface.copy(
+        alpha = if (isDark) 0.65f + (0.3f * scrollAlpha) else 0.85f + (0.15f * scrollAlpha)
+    )
     val dividerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f + (0.07f * scrollAlpha))
 
     Column(
@@ -800,12 +800,10 @@ private fun Modifier.searchHeaderGlass(
     hazeState: HazeState?,
     tint: Color
 ): Modifier {
-    // Search is rendered inside the main hazed NavHost. Haze does not allow a
-    // hazeChild to be a descendant of another haze node, so the top bar keeps
-    // the glass tint locally and relies on the parent surface for depth.
     return background(tint)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PremiumSearchField(
     query: String,
@@ -814,75 +812,62 @@ private fun PremiumSearchField(
     onSearch: () -> Unit,
     onClearQuery: () -> Unit
 ) {
-    val shape = RoundedCornerShape(30.dp)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(62.dp)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
-            .border(
-                width = 1.dp,
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.13f),
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                    )
-                ),
-                shape = shape
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = {
+            Text(
+                text = stringResource(R.string.search_placeholder),
+                style = LiquidTypography.bodyLarge.copy(fontSize = 18.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            .padding(horizontal = 18.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        },
+        leadingIcon = {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(26.dp)
             )
-            Spacer(Modifier.width(14.dp))
-            BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                textStyle = LiquidTypography.bodyLarge.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Medium
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-                decorationBox = { innerTextField ->
-                    if (query.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.search_placeholder),
-                            style = LiquidTypography.bodyLarge.copy(fontSize = 18.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    innerTextField()
-                }
-            )
+        },
+        trailingIcon = {
             if (query.isNotEmpty()) {
                 IconButton(onClick = onClearQuery, modifier = Modifier.size(42.dp)) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = stringResource(R.string.clear_all),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(26.dp)
                     )
                 }
             }
-        }
-    }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester),
+        shape = RoundedCornerShape(30.dp),
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+        textStyle = LiquidTypography.bodyLarge.copy(
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Medium
+        ),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            focusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+            cursorColor = MaterialTheme.colorScheme.primary
+        )
+    )
 }
 
 @Composable
@@ -2097,7 +2082,7 @@ private fun buildSongHits(
 
     localSongs.forEach { song ->
         val score = scoreSong(song, normalizedQuery, tokens) +
-            min((historyCounts[metadataKey(song.title, song.artist)] ?: 0) * 5, 24)
+                min((historyCounts[metadataKey(song.title, song.artist)] ?: 0) * 5, 24)
         if (score <= 0) return@forEach
         val key = metadataKey(song.title, song.artist)
         val hit = SearchSongHit(
@@ -2155,7 +2140,7 @@ private fun buildArtistHits(
         .forEach { (_, artistSongs) ->
             val artistName = artistSongs.first().artist
             val score = scoreText(artistName, normalizedQuery, tokens, 1.2f) +
-                artistSongs.sumOf { scoreSong(it, normalizedQuery, tokens).coerceAtMost(18) }
+                    artistSongs.sumOf { scoreSong(it, normalizedQuery, tokens).coerceAtMost(18) }
             if (score <= 0) return@forEach
             byArtist[normalizeForSearch(artistName)] = SearchArtistHit(
                 name = artistName,
@@ -2174,7 +2159,7 @@ private fun buildArtistHits(
         val key = normalizeForSearch(candidateName)
         if (key.isBlank()) return@forEach
         val score = scoreText(candidateName, normalizedQuery, tokens, 1.2f) +
-            scoreRemoteResult(result, normalizedQuery, tokens).coerceAtMost(34)
+                scoreRemoteResult(result, normalizedQuery, tokens).coerceAtMost(34)
         if (score <= 0) return@forEach
 
         val existing = byArtist[key]
@@ -2210,8 +2195,8 @@ private fun buildPlaylistHits(
     playlists.forEach { playlist ->
         val playlistSongs = playlist.songIds.mapNotNull { songsById[it] }
         val score = scoreText(playlist.name, normalizedQuery, tokens, 1.25f) +
-            scoreText(playlist.description.orEmpty(), normalizedQuery, tokens, 0.8f) +
-            playlistSongs.sumOf { scoreSong(it, normalizedQuery, tokens).coerceAtMost(14) }
+                scoreText(playlist.description.orEmpty(), normalizedQuery, tokens, 0.8f) +
+                playlistSongs.sumOf { scoreSong(it, normalizedQuery, tokens).coerceAtMost(14) }
         if (score <= 0) return@forEach
         byPlaylist["local-${playlist.id}"] = SearchPlaylistHit(
             name = playlist.name,
@@ -2258,8 +2243,8 @@ private fun buildAlbumHits(
         .forEach { (_, albumSongs) ->
             val first = albumSongs.first()
             val score = scoreText(first.album, normalizedQuery, tokens, 1.25f) +
-                scoreText(first.artist, normalizedQuery, tokens, 0.9f) +
-                albumSongs.sumOf { scoreSong(it, normalizedQuery, tokens).coerceAtMost(12) }
+                    scoreText(first.artist, normalizedQuery, tokens, 0.9f) +
+                    albumSongs.sumOf { scoreSong(it, normalizedQuery, tokens).coerceAtMost(12) }
             if (score <= 0) return@forEach
             val sortedSongs = albumSongs.sortedByDescending { it.dateAdded }
             val key = "${normalizeForSearch(first.album)}|${normalizeForSearch(first.artist)}"
@@ -2372,8 +2357,8 @@ private fun scoreSong(
     tokens: Set<String>
 ): Int {
     return scoreText(song.title, normalizedQuery, tokens, 1.35f) +
-        scoreText(song.artist, normalizedQuery, tokens, 1.0f) +
-        scoreText(song.album, normalizedQuery, tokens, 0.7f)
+            scoreText(song.artist, normalizedQuery, tokens, 1.0f) +
+            scoreText(song.album, normalizedQuery, tokens, 0.7f)
 }
 
 private fun scoreRemoteResult(
@@ -2388,8 +2373,8 @@ private fun scoreRemoteResult(
         ResultType.ALBUM -> 7
     }
     return typeBoost +
-        scoreText(result.title, normalizedQuery, tokens, 1.25f) +
-        scoreText(result.artist, normalizedQuery, tokens, 0.9f)
+            scoreText(result.title, normalizedQuery, tokens, 1.25f) +
+            scoreText(result.artist, normalizedQuery, tokens, 0.9f)
 }
 
 private fun scoreText(
@@ -2481,13 +2466,13 @@ private fun YouTubeResult.toSearchSong(): Song =
 private fun isKnownArtist(artist: String): Boolean {
     val normalized = normalizeForSearch(artist)
     return normalized.isNotBlank() &&
-        normalized !in setOf("unknown", "unknown artist", "artista", "artista desconocido", "youtube")
+            normalized !in setOf("unknown", "unknown artist", "artista", "artista desconocido", "youtube")
 }
 
 private fun isKnownAlbum(album: String): Boolean {
     val normalized = normalizeForSearch(album)
     return normalized.isNotBlank() &&
-        normalized !in setOf("unknown", "unknown album", "album desconocido", "sin album")
+            normalized !in setOf("unknown", "unknown album", "album desconocido", "sin album")
 }
 
 @Composable

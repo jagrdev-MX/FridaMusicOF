@@ -2,8 +2,10 @@ package com.jagr.fridamusic.presentation.components
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,8 +25,6 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,7 +33,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -41,17 +43,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import coil.compose.SubcomposeAsyncImage
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
+import kotlin.math.roundToInt
 
 @Composable
 fun MiniPlayer(
@@ -102,11 +106,13 @@ fun MiniPlayer(
         label = "mini-player-glow-end"
     )
 
-    // Forzamos el texto a blanco para que contraste bien con los fondos de Palette
     val contentColor = Color.White
     val mutedContentColor = Color.White.copy(alpha = 0.7f)
     val accentColor = Color.White
     val interactionSource = remember { MutableInteractionSource() }
+
+    var swipeOffset by remember { mutableFloatStateOf(0f) }
+    val animatedOffset by animateFloatAsState(targetValue = swipeOffset, label = "swipe_anim")
 
     Box(
         modifier = modifier
@@ -119,6 +125,25 @@ fun MiniPlayer(
                 indication = null,
                 onClick = onExpand
             )
+            .pointerInput(hasSong) {
+                if (!hasSong) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (swipeOffset > 80f) {
+                            onPrevious()
+                        }
+                        else if (swipeOffset < -80f) {
+                            onNext()
+                        }
+                        swipeOffset = 0f
+                    },
+                    onDragCancel = { swipeOffset = 0f },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        swipeOffset = (swipeOffset + dragAmount).coerceIn(-150f, 150f)
+                    }
+                )
+            }
     ) {
         MiniPlayerBackdrop(
             albumArtUrl = normalizedAlbumArt,
@@ -152,6 +177,7 @@ fun MiniPlayer(
         Row(
             modifier = Modifier
                 .fillMaxSize()
+                .offset { IntOffset(animatedOffset.roundToInt(), 0) }
                 .padding(start = 8.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -189,15 +215,6 @@ fun MiniPlayer(
                 }
             }
 
-            // BOTONES RESTAURADOS
-            MiniPlayerControlButton(
-                icon = Icons.Default.SkipPrevious,
-                contentDescription = stringResource(R.string.previous),
-                enabled = hasSong,
-                contentColor = contentColor,
-                onClick = onPrevious
-            )
-
             MiniPlayerPlayPauseButton(
                 isPlaying = isPlaying,
                 enabled = hasSong,
@@ -205,14 +222,6 @@ fun MiniPlayer(
                 accentColor = accentColor,
                 contentColor = contentColor,
                 onClick = onPlayPause
-            )
-
-            MiniPlayerControlButton(
-                icon = Icons.Default.SkipNext,
-                contentDescription = stringResource(R.string.next),
-                enabled = hasSong,
-                contentColor = contentColor,
-                onClick = onNext
             )
         }
     }
@@ -304,32 +313,6 @@ private fun AlbumArtThumb(
             contentDescription = stringResource(R.string.album_art),
             modifier = Modifier.fillMaxSize(),
             shape = RoundedCornerShape(8.dp)
-        )
-    }
-}
-
-@Composable
-private fun MiniPlayerControlButton(
-    icon: ImageVector,
-    contentDescription: String,
-    enabled: Boolean,
-    contentColor: Color,
-    onClick: () -> Unit
-) {
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.size(44.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = if (enabled) {
-                contentColor.copy(alpha = 0.90f)
-            } else {
-                contentColor.copy(alpha = 0.24f)
-            },
-            modifier = Modifier.size(22.dp)
         )
     }
 }

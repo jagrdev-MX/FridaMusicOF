@@ -90,8 +90,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     val crossfadeDuration = MutableStateFlow(settingsManager.crossfadeDuration)
     val saveLastPlayback = MutableStateFlow(settingsManager.saveLastPlayback)
 
-    private val _currentTheme = MutableStateFlow<AppTheme>(AppTheme.SYSTEM)
+    private val _currentTheme = MutableStateFlow(
+        AppTheme.entries.toTypedArray().getOrNull(settingsManager.appThemePreference) ?: AppTheme.SYSTEM
+    )
     val currentTheme = _currentTheme.asStateFlow()
+
+    val enableBlurEffect = MutableStateFlow(settingsManager.enableBlurEffect)
+
+
     val sleepTimerMinutes = MutableStateFlow(0)
     private var sleepTimerJob: Job? = null
     private val _searchHistory = MutableStateFlow<List<String>>(
@@ -2703,7 +2709,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         persistQueueState()
     }
 
-    fun updateTheme(theme: AppTheme) { _currentTheme.value = theme }
+    fun updateTheme(theme: AppTheme) {
+        _currentTheme.value = theme
+        settingsManager.appThemePreference = theme.ordinal
+    }
+
+    fun updateEnableBlurEffect(enabled: Boolean) {
+        settingsManager.enableBlurEffect = enabled
+        enableBlurEffect.value = enabled
+    }
 
     fun updateFilterVoiceNotes(enabled: Boolean) {
         settingsManager.filterVoiceNotes = enabled

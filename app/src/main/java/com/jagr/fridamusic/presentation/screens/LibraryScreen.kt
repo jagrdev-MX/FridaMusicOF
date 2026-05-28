@@ -212,7 +212,6 @@ private sealed interface LibraryDetail {
 
 private const val LIBRARY_PAGER_WINDOW = 10_000
 private val LibraryCardRadius = 18.dp
-private val LibraryArtworkRadius = 12.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -359,9 +358,9 @@ fun LibraryScreen(
         songs
             .filter { song ->
                 normalizedQuery.isBlank() ||
-                    song.title.contains(normalizedQuery, ignoreCase = true) ||
-                    song.artist.contains(normalizedQuery, ignoreCase = true) ||
-                    song.album.contains(normalizedQuery, ignoreCase = true)
+                        song.title.contains(normalizedQuery, ignoreCase = true) ||
+                        song.artist.contains(normalizedQuery, ignoreCase = true) ||
+                        song.album.contains(normalizedQuery, ignoreCase = true)
             }
             .sortedSongs(activeSort, appliedReversed)
     }
@@ -370,8 +369,8 @@ fun LibraryScreen(
         fullHistory
             .filter { history ->
                 normalizedQuery.isBlank() ||
-                    history.title.contains(normalizedQuery, ignoreCase = true) ||
-                    history.artist.contains(normalizedQuery, ignoreCase = true)
+                        history.title.contains(normalizedQuery, ignoreCase = true) ||
+                        history.artist.contains(normalizedQuery, ignoreCase = true)
             }
             .sortedHistory(activeSort, appliedReversed)
     }
@@ -380,8 +379,8 @@ fun LibraryScreen(
         playlists
             .filter { playlist ->
                 normalizedQuery.isBlank() ||
-                    playlist.name.contains(normalizedQuery, ignoreCase = true) ||
-                    playlist.description.orEmpty().contains(normalizedQuery, ignoreCase = true)
+                        playlist.name.contains(normalizedQuery, ignoreCase = true) ||
+                        playlist.description.orEmpty().contains(normalizedQuery, ignoreCase = true)
             }
             .sortedPlaylists(activeSort, appliedReversed)
     }
@@ -404,8 +403,8 @@ fun LibraryScreen(
             }
             .filter { album ->
                 normalizedQuery.isBlank() ||
-                    album.title.contains(normalizedQuery, ignoreCase = true) ||
-                    album.artist.contains(normalizedQuery, ignoreCase = true)
+                        album.title.contains(normalizedQuery, ignoreCase = true) ||
+                        album.artist.contains(normalizedQuery, ignoreCase = true)
             }
             .sortedAlbums(activeSort, appliedReversed)
     }
@@ -417,7 +416,7 @@ fun LibraryScreen(
             .map { (artist, artistSongs) -> LibraryArtist(artist, artistSongs) }
             .filter { artist ->
                 normalizedQuery.isBlank() ||
-                    artist.name.contains(normalizedQuery, ignoreCase = true)
+                        artist.name.contains(normalizedQuery, ignoreCase = true)
             }
             .sortedArtists(activeSort, appliedReversed)
     }
@@ -466,13 +465,14 @@ fun LibraryScreen(
     if (playlistToDelete != null) {
         AlertDialog(
             onDismissRequest = { playlistToDelete = null },
-            title = { Text(stringResource(R.string.delete_playlist_title)) },
+            title = { Text(stringResource(R.string.delete_playlist_title), color = MaterialTheme.colorScheme.onSurface) },
             text = {
                 Text(
                     stringResource(
                         R.string.delete_playlist_message,
                         playlistToDelete?.name.orEmpty()
-                    )
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
@@ -596,119 +596,119 @@ fun LibraryScreen(
                 null -> Unit
             }
         } else {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize()
-        ) { page ->
-            when (tabs[page.floorMod(tabs.size)].first) {
-                LibraryTab.ALL -> AllPage(
-                    playlists = visiblePlaylists,
-                    songs = visibleSongs,
-                    artists = visibleArtists,
-                    playlistCoverUris = playlistCoverUris,
-                    paddingValues = paddingValues,
-                    listState = allListState,
-                    headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel,
-                    onOpenTab = { target ->
-                        scope.launch {
-                            pagerState.animateScrollToPage(
-                                pagerState.currentPage.nearestPageForTab(target, tabs.size)
-                            )
-                        }
-                    },
-                    onDelete = { playlistToDelete = it }
-                )
-
-                LibraryTab.HISTORY -> HistoryPage(
-                    history = visibleHistory,
-                    songs = songs,
-                    paddingValues = paddingValues,
-                    listState = historyListState,
-                    headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel,
-                    playlists = playlists
-                )
-
-                LibraryTab.PLAYLISTS -> PlaylistsPage(
-                    playlists = visiblePlaylists,
-                    songs = songs,
-                    playlistCoverUris = playlistCoverUris,
-                    paddingValues = paddingValues,
-                    listState = playlistsListState,
-                    headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel,
-                    onOpenPlaylist = { detail = LibraryDetail.PlaylistDetail(it) },
-                    onOpenHistory = {
-                        scope.launch {
-                            pagerState.animateScrollToPage(
-                                pagerState.currentPage.nearestPageForTab(
-                                    tabs.indexOfFirst { it.first == LibraryTab.HISTORY },
-                                    tabs.size
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (tabs[page.floorMod(tabs.size)].first) {
+                    LibraryTab.ALL -> AllPage(
+                        playlists = visiblePlaylists,
+                        songs = visibleSongs,
+                        artists = visibleArtists,
+                        playlistCoverUris = playlistCoverUris,
+                        paddingValues = paddingValues,
+                        listState = allListState,
+                        headerSpacerHeight = headerSpacerHeight,
+                        viewModel = viewModel,
+                        onOpenTab = { target ->
+                            scope.launch {
+                                pagerState.animateScrollToPage(
+                                    pagerState.currentPage.nearestPageForTab(target, tabs.size)
                                 )
-                            )
-                        }
-                    },
-                    onDelete = { playlistToDelete = it }
-                )
+                            }
+                        },
+                        onDelete = { playlistToDelete = it }
+                    )
 
-                LibraryTab.ALBUMS -> AlbumsPage(
-                    albums = visibleAlbums,
-                    paddingValues = paddingValues,
-                    listState = albumsListState,
-                    headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel,
-                    onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) }
-                )
+                    LibraryTab.HISTORY -> HistoryPage(
+                        history = visibleHistory,
+                        songs = songs,
+                        paddingValues = paddingValues,
+                        listState = historyListState,
+                        headerSpacerHeight = headerSpacerHeight,
+                        viewModel = viewModel,
+                        playlists = playlists
+                    )
 
-                LibraryTab.SONGS -> SongsPage(
-                    songs = visibleSongs,
-                    albums = visibleAlbums,
-                    artists = visibleArtists,
-                    paddingValues = paddingValues,
-                    listState = songsListState,
-                    headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel,
-                    playlists = playlists,
-                    onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) },
-                    onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
-                )
+                    LibraryTab.PLAYLISTS -> PlaylistsPage(
+                        playlists = visiblePlaylists,
+                        songs = songs,
+                        playlistCoverUris = playlistCoverUris,
+                        paddingValues = paddingValues,
+                        listState = playlistsListState,
+                        headerSpacerHeight = headerSpacerHeight,
+                        viewModel = viewModel,
+                        onOpenPlaylist = { detail = LibraryDetail.PlaylistDetail(it) },
+                        onOpenHistory = {
+                            scope.launch {
+                                pagerState.animateScrollToPage(
+                                    pagerState.currentPage.nearestPageForTab(
+                                        tabs.indexOfFirst { it.first == LibraryTab.HISTORY },
+                                        tabs.size
+                                    )
+                                )
+                            }
+                        },
+                        onDelete = { playlistToDelete = it }
+                    )
 
-                LibraryTab.ARTISTS -> ArtistsPage(
-                    artists = visibleArtists,
-                    paddingValues = paddingValues,
-                    listState = artistsListState,
-                    headerSpacerHeight = headerSpacerHeight,
-                    viewModel = viewModel,
-                    onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
-                )
-            }
-        }
+                    LibraryTab.ALBUMS -> AlbumsPage(
+                        albums = visibleAlbums,
+                        paddingValues = paddingValues,
+                        listState = albumsListState,
+                        headerSpacerHeight = headerSpacerHeight,
+                        viewModel = viewModel,
+                        onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) }
+                    )
 
-        LibraryHeader(
-            tabs = tabs,
-            selectedPage = currentLogicalPage,
-            searchVisible = searchVisible,
-            searchQuery = searchQuery,
-            sortSheetVisible = showSortSheet,
-            onTabSelected = { index ->
-                scope.launch {
-                    pagerState.animateScrollToPage(
-                        pagerState.currentPage.nearestPageForTab(index, tabs.size)
+                    LibraryTab.SONGS -> SongsPage(
+                        songs = visibleSongs,
+                        albums = visibleAlbums,
+                        artists = visibleArtists,
+                        paddingValues = paddingValues,
+                        listState = songsListState,
+                        headerSpacerHeight = headerSpacerHeight,
+                        viewModel = viewModel,
+                        playlists = playlists,
+                        onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) },
+                        onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
+                    )
+
+                    LibraryTab.ARTISTS -> ArtistsPage(
+                        artists = visibleArtists,
+                        paddingValues = paddingValues,
+                        listState = artistsListState,
+                        headerSpacerHeight = headerSpacerHeight,
+                        viewModel = viewModel,
+                        onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
                     )
                 }
-            },
-            onToggleSearch = {
-                searchVisible = !searchVisible
-                if (!searchVisible) searchQuery = ""
-            },
-            onSearchQueryChange = { searchQuery = it },
-            onOpenSort = { showSortSheet = true },
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset { IntOffset(0, -headerOffsetPx) }
-                .onGloballyPositioned { headerHeightPx = it.size.height }
-        )
+            }
+
+            LibraryHeader(
+                tabs = tabs,
+                selectedPage = currentLogicalPage,
+                searchVisible = searchVisible,
+                searchQuery = searchQuery,
+                sortSheetVisible = showSortSheet,
+                onTabSelected = { index ->
+                    scope.launch {
+                        pagerState.animateScrollToPage(
+                            pagerState.currentPage.nearestPageForTab(index, tabs.size)
+                        )
+                    }
+                },
+                onToggleSearch = {
+                    searchVisible = !searchVisible
+                    if (!searchVisible) searchQuery = ""
+                },
+                onSearchQueryChange = { searchQuery = it },
+                onOpenSort = { showSortSheet = true },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset { IntOffset(0, -headerOffsetPx) }
+                    .onGloballyPositioned { headerHeightPx = it.size.height }
+            )
         }
 
         if (detail == null) ExtendedFloatingActionButton(
@@ -1412,7 +1412,7 @@ private fun GridCountSheet(
                 FilterChip(
                     selected = selected == count,
                     onClick = { onSelected(count) },
-                    label = { Text(count.toString()) },
+                    label = { Text(count.toString(), color = if (selected == count) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1431,7 +1431,7 @@ private fun LibraryShortcutCard(
 ) {
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.5f)
@@ -1444,7 +1444,8 @@ private fun LibraryShortcutCard(
             title,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -1465,31 +1466,60 @@ private fun PlaylistGridCard(
     val artwork by produceState<String?>(initialValue = customCoverUri, key1 = customCoverUri, key2 = songs) {
         value = customCoverUri ?: songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
     }
-    Column(modifier = modifier.clickable(onClick = onOpen)) {
-        Box {
-            FridaArtworkImage(
-                model = artwork,
-                contentDescription = playlist.name,
-                modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-                shape = RoundedCornerShape(18.dp)
-            )
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onOpen)
+    ) {
+        FridaArtworkImage(
+            model = artwork,
+            contentDescription = playlist.name,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(12.dp)),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = playlist.name,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp
+                )
+            }
+
             IconButton(
                 onClick = { showActions = true },
-                modifier = Modifier.align(Alignment.TopEnd)
+                modifier = Modifier.size(24.dp)
             ) {
-                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options), tint = Color.White)
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.more_options),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
-        Spacer(Modifier.height(7.dp))
-        Text(playlist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-        Text(
-            pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp
-        )
+        Spacer(Modifier.height(8.dp))
     }
+
     if (showActions) {
         ModalBottomSheet(
             onDismissRequest = { showActions = false },
@@ -1522,7 +1552,9 @@ private fun ArtistGridCard(
             ?: artist.songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
     }
     Column(
-        modifier = modifier.clickable(onClick = onOpen),
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onOpen),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         FridaArtworkImage(
@@ -1532,14 +1564,21 @@ private fun ArtistGridCard(
             shape = CircleShape
         )
         Spacer(Modifier.height(8.dp))
-        Text(artist.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+        Text(
+            artist.name,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
         Text(
             pluralStringResource(R.plurals.library_songs_count, artist.songs.size, artist.songs.size),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp
+            fontSize = 13.sp
         )
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -1573,7 +1612,8 @@ private fun SmartSongsDetailPage(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 IconButton(
                     onClick = { viewModel.playSongs(songs, shuffle = true) },
@@ -2250,79 +2290,79 @@ private fun DetailPageShell(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                }
-                IconButton(onClick = onMore) {
-                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
-                }
-            }
-        }
-
-        item { cover() }
-
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                content = secondaryActions
-            )
-        }
-
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = title,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text(
-                    text = subtitle,
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = countLabel,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (description.isNotBlank()) {
-                    Text(
-                        text = description,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = onPlay,
-                    shape = RoundedCornerShape(24.dp)
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.play))
-                }
-                TextButton(onClick = onShuffle) {
-                    Icon(Icons.Default.Shuffle, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.shuffle))
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                    IconButton(onClick = onMore) {
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
+                    }
                 }
             }
-        }
 
-        content()
-    }
+            item { cover() }
+
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = secondaryActions
+                )
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = title,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = subtitle,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = countLabel,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (description.isNotBlank()) {
+                        Text(
+                            text = description,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = onPlay,
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.play))
+                    }
+                    TextButton(onClick = onShuffle) {
+                        Icon(Icons.Default.Shuffle, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.shuffle))
+                    }
+                }
+            }
+
+            content()
+        }
     }
 }
 
@@ -2491,7 +2531,7 @@ private fun SmartCollectionThumbnail(
     Box(
         modifier = Modifier
             .size(52.dp)
-            .clip(RoundedCornerShape(LibraryArtworkRadius))
+            .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center
     ) {
@@ -2643,7 +2683,8 @@ private fun PlaylistSongSortSelector(
                                 PlaylistSongSortOption.ARTIST -> stringResource(R.string.artists_tab)
                                 PlaylistSongSortOption.TITLE -> stringResource(R.string.title_label)
                                 PlaylistSongSortOption.CUSTOM -> stringResource(R.string.custom_order)
-                            }
+                            },
+                            color = if (selected == option) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     leadingIcon = {
@@ -2681,7 +2722,7 @@ private fun ArtistAlbumChip(
         Box(
             modifier = Modifier
                 .size(140.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             FridaArtworkImage(
@@ -2689,14 +2730,15 @@ private fun ArtistAlbumChip(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(12.dp)
             )
         }
         Text(
             text = album.title,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -2760,7 +2802,7 @@ private fun ArtistSongCard(
         Box(
             modifier = Modifier
                 .size(150.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             FridaArtworkImage(
@@ -2768,14 +2810,15 @@ private fun ArtistSongCard(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(12.dp)
             )
         }
         Text(
             text = song.title,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium
         )
         Text(
             text = song.artist.ifBlank { stringResource(R.string.unknown_artist) },
@@ -2872,7 +2915,8 @@ private fun RelatedArtistCard(
             text = artist.name,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -2894,7 +2938,8 @@ private fun LibraryCollectionCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(LibraryCardRadius)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)) // Reemplazado liquidGlassEffect por un fondo mucho más limpio
             .clickable(onClick = onOpen)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -2997,9 +3042,8 @@ private fun PlaylistListItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onOpen)
-            .padding(14.dp),
+            .padding(horizontal = 4.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         SmartCollectionThumbnail(
@@ -3012,10 +3056,11 @@ private fun PlaylistListItem(
         Column(Modifier.weight(1f)) {
             Text(
                 playlist.name,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground
             )
+            Spacer(Modifier.height(4.dp))
             Text(
                 pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
                 fontSize = 14.sp,
@@ -3411,7 +3456,8 @@ private fun SaveToPlaylistSheet(
             Text(
                 text = stringResource(R.string.save_to_playlist),
                 fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.width(48.dp))
         }
@@ -3438,7 +3484,8 @@ private fun SaveToPlaylistSheet(
                         Text(
                             text = playlist.name,
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
@@ -3465,48 +3512,59 @@ private fun LibraryAlbumCard(
         value = viewModel.getSongImageUrl(album.representativeSong)
     }
 
-    Box(
+    Column(
         modifier = modifier
-            .aspectRatio(1f)
-            .liquidGlassEffect(16.dp)
-            .clickable(onClick = onOpen)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onOpen),
+        horizontalAlignment = Alignment.Start
     ) {
-        FridaArtworkImage(
-            model = imageUrl,
-            contentDescription = album.title,
-            modifier = Modifier.fillMaxSize().alpha(0.8f),
-            shape = RoundedCornerShape(16.dp)
-        )
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.9f)
-                        ),
-                        startY = 50f
-                    )
-                )
-        )
-        Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-            Text(
-                album.title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+        ) {
+            FridaArtworkImage(
+                model = imageUrl,
+                contentDescription = album.title,
+                modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(12.dp)
             )
-            Text(
-                stringResource(R.string.album_subtitle_format, album.artist, album.songCount),
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.15f))
+                        )
+                    )
             )
         }
+
+        Spacer(Modifier.height(10.dp))
+
+        Text(
+            text = album.title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        Text(
+            text = album.artist,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -3551,51 +3609,48 @@ private fun LibrarySongItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onClick)
-            .padding(14.dp),
+            .padding(horizontal = 4.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(LibraryArtworkRadius))
+                .size(56.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             FridaArtworkImage(
                 model = imageUrl,
                 contentDescription = song.title,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(LibraryArtworkRadius)
+                shape = RoundedCornerShape(8.dp)
             )
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                song.title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
+                text = song.title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
-                lineHeight = 21.sp,
                 overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (song.isExplicit) {
-                    RestrictionBadge(text = stringResource(R.string.explicit_badge))
+                    RestrictionBadge(text = "E")
                 }
                 Text(
-                    buildString {
+                    text = buildString {
                         append(song.artist.ifBlank { context.getString(R.string.unknown) })
-                        if (song.duration > 0) append(" • ").append(formatDuration(song.duration))
                     },
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    lineHeight = 18.sp,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -3799,7 +3854,7 @@ private fun HistorySongItem(
     val linkedSong = remember(item, songs) {
         songs.firstOrNull { song ->
             song.uri.toString() == item.songId ||
-                (song.title == item.title && song.artist == item.artist)
+                    (song.title == item.title && song.artist == item.artist)
         }
     }
     var showActions by rememberSaveable { mutableStateOf(false) }
@@ -3810,49 +3865,47 @@ private fun HistorySongItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onClick)
-            .padding(14.dp),
+            .padding(horizontal = 4.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(LibraryArtworkRadius))
+                .size(56.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             FridaArtworkImage(
                 model = item.artworkUrl,
                 contentDescription = item.title,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(LibraryArtworkRadius)
+                shape = RoundedCornerShape(8.dp)
             )
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                item.title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                lineHeight = 21.sp,
-                overflow = TextOverflow.Clip
+                text = item.title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (linkedSong?.isExplicit == true) {
-                    RestrictionBadge(text = stringResource(R.string.explicit_badge))
+                    RestrictionBadge(text = "E")
                 }
                 Text(
-                    item.artist.ifBlank { stringResource(R.string.unknown_artist) },
+                    text = item.artist.ifBlank { stringResource(R.string.unknown_artist) },
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    lineHeight = 18.sp,
-                    overflow = TextOverflow.Clip
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -3959,13 +4012,13 @@ private fun HistorySongItem(
 private fun RestrictionBadge(text: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f))
-            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+            .padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
         Text(
             text = text,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -3986,14 +4039,13 @@ private fun ArtistListItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .liquidGlassEffect(LibraryCardRadius)
             .clickable(onClick = onOpen)
-            .padding(14.dp),
+            .padding(horizontal = 4.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(56.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
@@ -4001,7 +4053,7 @@ private fun ArtistListItem(
             FridaArtworkImage(
                 model = imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
                 shape = CircleShape
             )
@@ -4010,12 +4062,13 @@ private fun ArtistListItem(
         Column(Modifier.weight(1f)) {
             Text(
                 artist.name,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(4.dp))
             Text(
                 pluralStringResource(R.plurals.library_songs_count, artist.songs.size, artist.songs.size),
                 fontSize = 14.sp,
@@ -4052,7 +4105,8 @@ private fun CreatePlaylistSheet(
             Text(
                 text = stringResource(R.string.create_playlist_title),
                 fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.width(48.dp))
         }
@@ -4132,7 +4186,8 @@ private fun EditPlaylistSheet(
             Text(
                 text = stringResource(R.string.edit_playlist),
                 fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.width(48.dp))
         }
@@ -4217,7 +4272,8 @@ private fun SortAndFilterSheet(
             Text(
                 text = stringResource(R.string.sort_and_filter),
                 fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.width(72.dp))
         }
@@ -4263,7 +4319,8 @@ private fun SortAndFilterSheet(
                                 LibrarySortOption.DURATION -> stringResource(R.string.duration_label)
                                 LibrarySortOption.SONG_COUNT -> stringResource(R.string.sort_song_count)
                                 LibrarySortOption.ALBUM_COUNT -> stringResource(R.string.sort_album_count)
-                            }
+                            },
+                            color = if (selectedSortName == option.name) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     leadingIcon = {
@@ -4282,7 +4339,7 @@ private fun SortAndFilterSheet(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(stringResource(R.string.save))
+            Text(stringResource(R.string.save), color = MaterialTheme.colorScheme.onSurface)
             Checkbox(checked = saveSort, onCheckedChange = onSaveSortChange)
         }
 
@@ -4579,7 +4636,7 @@ private fun List<LibraryArtist>.sortedArtists(
         LibrarySortOption.DATE -> sortedByDescending { it.newestDateAdded }
         LibrarySortOption.SONG_COUNT -> sortedByDescending { it.songs.size }
         LibrarySortOption.ALBUM_COUNT -> sortedByDescending {
-            artist -> artist.songs.map { it.albumId }.distinct().size
+                artist -> artist.songs.map { it.albumId }.distinct().size
         }
     }
     return if (reversed) sorted.reversed() else sorted
@@ -4617,5 +4674,3 @@ private fun defaultSortFor(tab: LibraryTab): LibrarySortOption = when (tab) {
     LibraryTab.ALBUMS,
     LibraryTab.SONGS -> LibrarySortOption.DATE
 }
-
-

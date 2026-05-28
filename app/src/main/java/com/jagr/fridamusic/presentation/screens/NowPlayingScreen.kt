@@ -1,7 +1,7 @@
 package com.jagr.fridamusic.presentation.screens
 
 import android.content.Context
-
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
@@ -26,10 +26,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.ads.AdManager
@@ -51,6 +53,7 @@ import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
+import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
@@ -99,6 +102,20 @@ fun NowPlayingScreen(
         adExplicitlyClosed = true
     }
 
+    val enableBlur by viewModel.enableBlurEffect.collectAsState()
+    val supportsNativeBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val shouldApplyBlur = enableBlur && supportsNativeBlur
+
+    val artworkPalette by rememberMiniPlayerArtworkPalette(albumArtUrl)
+    val immersiveDarkGradient = remember(artworkPalette) {
+        Brush.verticalGradient(
+            colors = listOf(
+                artworkPalette.glowStart.copy(alpha = 0.65f), 
+                Color(0xFF121212)
+            )
+        )
+    }
+
     val isLiked = remember(playlists, currentSong) {
         playlists.find { it.name == "Me gusta" }?.songIds?.contains(currentSong?.id) == true
     }
@@ -125,16 +142,6 @@ fun NowPlayingScreen(
 
     BackHandler(onBack = onCollapse)
 
-    val backgroundColor = MaterialTheme.colorScheme.background
-    val bgGradient = remember(backgroundColor) {
-        Brush.verticalGradient(
-            colors = listOf(
-                backgroundColor.copy(alpha = 0.4f),
-                backgroundColor.copy(alpha = 0.95f)
-            )
-        )
-    }
-
     val coroutineScope = rememberCoroutineScope()
     val dragOffsetY = remember { Animatable(0f) }
 
@@ -142,7 +149,10 @@ fun NowPlayingScreen(
         modifier = Modifier
             .fillMaxSize()
             .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.Black) // Fondo base negro sólido para evitar transparencias
+            .background(
+                if (shouldApplyBlur) SolidColor(Color(0xFF121212)) else immersiveDarkGradient
+            )
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = {
@@ -166,15 +176,45 @@ fun NowPlayingScreen(
                 onClick = {}
             )
     ) {
-        FridaArtworkImage(
-            model = albumArtUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            requestSizePx = 192,
-            modifier = Modifier.fillMaxSize().alpha(0.22f)
-        )
-
-        Box(modifier = Modifier.fillMaxSize().background(bgGradient))
+        if (shouldApplyBlur && albumArtUrl != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(albumArtUrl)
+                    .size(100)
+                    .allowHardware(true)
+                    .build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(80.dp)
+                    .alpha(0.65f)
+            )
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+        } else if (!shouldApplyBlur) {
+            if (albumArtUrl != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(albumArtUrl)
+                        .size(128)
+                        .allowHardware(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(100.dp)
+                        .alpha(0.25f)
+                )
+            }
+            FridaArtworkImage(
+                model = albumArtUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                requestSizePx = 192,
+                modifier = Modifier.fillMaxSize().alpha(0.12f)
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -208,7 +248,11 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            SeekBarSection(totalDuration = totalDuration, currentPosition = currentPosition, onSeek = onSeek)
+            SeekBarSection(
+                totalDuration = totalDuration,
+                currentPosition = currentPosition,
+                onSeek = onSeek
+            )
 
             PlayerControlsSection(
                 isPlaying = isPlaying,
@@ -218,7 +262,8 @@ fun NowPlayingScreen(
                 onNext = onNext,
                 onPrevious = onPrevious,
                 onToggleRepeat = onToggleRepeat,
-                onToggleShuffle = onToggleShuffle
+                onToggleShuffle = onToggleShuffle,
+                accentColor = artworkPalette.accent
             )
 
             BottomActionsSection(
@@ -320,13 +365,13 @@ private fun NowPlayingTopBar(isYouTube: Boolean, onCollapse: () -> Unit, onMore:
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onCollapse) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.minimize), tint = MaterialTheme.colorScheme.onBackground)
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.minimize), tint = Color.White)
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = stringResource(R.string.now_playing),
                 style = LiquidTypography.labelSmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                color = Color.White.copy(alpha = 0.7f),
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             )
@@ -342,7 +387,7 @@ private fun NowPlayingTopBar(isYouTube: Boolean, onCollapse: () -> Unit, onMore:
             }
         }
         IconButton(onClick = onMore) {
-            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = MaterialTheme.colorScheme.onBackground)
+            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = Color.White)
         }
     }
 }
@@ -361,17 +406,17 @@ private fun AlbumArtOrAdSection(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(32.dp))
+                .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(32.dp))
         )
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(32.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .background(Color.White.copy(alpha = 0.05f))
                 .border(
                     width = 1.dp,
                     brush = Brush.linearGradient(
-                        listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), Color.Transparent)
+                        listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)
                     ),
                     shape = RoundedCornerShape(32.dp)
                 )
@@ -406,14 +451,14 @@ private fun SongInfoSection(currentSong: Song?, isLiked: Boolean, onToggleLike: 
             Text(
                 text = currentSong?.title ?: stringResource(R.string.no_song_playing),
                 style = LiquidTypography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = currentSong?.artist ?: stringResource(R.string.unknown_artist),
                 style = LiquidTypography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White.copy(alpha = 0.7f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -422,7 +467,7 @@ private fun SongInfoSection(currentSong: Song?, isLiked: Boolean, onToggleLike: 
             Icon(
                 imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 contentDescription = stringResource(R.string.like),
-                tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                tint = if (isLiked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
                 modifier = Modifier.size(28.dp)
             )
         }
@@ -446,15 +491,15 @@ private fun SeekBarSection(totalDuration: Long, currentPosition: () -> Long, onS
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
-            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))) {
-                Box(modifier = Modifier.fillMaxWidth(displayProgress.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary))
+            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
+                Box(modifier = Modifier.fillMaxWidth(displayProgress.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Color.White))
             }
             Slider(
                 value = displayProgress,
                 onValueChange = { sliderPosition = it },
                 onValueChangeFinished = { sliderPosition?.let { onSeek((it * totalDuration).toLong()) }; sliderPosition = null },
                 colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.onBackground,
+                    thumbColor = Color.White,
                     activeTrackColor = Color.Transparent,
                     inactiveTrackColor = Color.Transparent
                 ),
@@ -464,8 +509,8 @@ private fun SeekBarSection(totalDuration: Long, currentPosition: () -> Long, onS
         Spacer(modifier = Modifier.height(4.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             val displayTime = (displayProgress * totalDuration).toLong()
-            Text(text = formatTime(displayTime), style = LiquidTypography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = "-${formatTime(maxOf(0L, totalDuration - displayTime))}", style = LiquidTypography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = formatTime(displayTime), style = LiquidTypography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+            Text(text = "-${formatTime(maxOf(0L, totalDuration - displayTime))}", style = LiquidTypography.labelSmall, color = Color.White.copy(alpha = 0.7f))
         }
     }
 }
@@ -479,7 +524,8 @@ private fun PlayerControlsSection(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onToggleRepeat: () -> Unit,
-    onToggleShuffle: () -> Unit
+    onToggleShuffle: () -> Unit,
+    accentColor: Color
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
@@ -490,16 +536,16 @@ private fun PlayerControlsSection(
             Icon(
                 Icons.Default.Shuffle,
                 contentDescription = stringResource(R.string.shuffle),
-                tint = if (isShuffleMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                tint = if (isShuffleMode) accentColor else Color.White.copy(alpha = 0.5f),
                 modifier = Modifier.size(28.dp)
             )
         }
-        IconButton(onClick = onPrevious) { Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(36.dp)) }
+        IconButton(onClick = onPrevious) { Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = Color.White, modifier = Modifier.size(36.dp)) }
         Box(
             modifier = Modifier
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f))
+                .background(Color.White.copy(alpha = 0.1f))
                 .clickable(onClick = onPlayPause),
             contentAlignment = Alignment.Center
         ) {
@@ -507,21 +553,21 @@ private fun PlayerControlsSection(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)),
+                    .background(Color.White.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
-                    tint = MaterialTheme.colorScheme.onBackground,
+                    tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )
             }
         }
-        IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next), tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(36.dp)) }
+        IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next), tint = Color.White, modifier = Modifier.size(36.dp)) }
 
         val repeatIcon = if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
-        val repeatTint = if (repeatMode == RepeatMode.OFF) MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary
+        val repeatTint = if (repeatMode == RepeatMode.OFF) Color.White.copy(alpha = 0.5f) else accentColor
         IconButton(onClick = onToggleRepeat) { Icon(repeatIcon, contentDescription = stringResource(R.string.repeat), tint = repeatTint, modifier = Modifier.size(28.dp)) }
     }
 }
@@ -533,9 +579,9 @@ private fun BottomActionsSection(hasAnyLyrics: Boolean, onOpenQueue: () -> Unit,
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onOpenQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)) }
-        IconButton(onClick = onOpenLyrics) { Icon(Icons.Default.Lyrics, null, tint = if (hasAnyLyrics) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)) }
-        IconButton(onClick = onOpenInfo) { Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)) }
+        IconButton(onClick = onOpenQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Color.White.copy(alpha = 0.8f)) }
+        IconButton(onClick = onOpenLyrics) { Icon(Icons.Default.Lyrics, null, tint = if (hasAnyLyrics) Color.White.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.3f)) }
+        IconButton(onClick = onOpenInfo) { Icon(Icons.Default.Info, null, tint = Color.White.copy(alpha = 0.8f)) }
     }
 }
 
@@ -599,9 +645,10 @@ private fun CurrentSongActionsSheet(
                     .padding(horizontal = 12.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(action.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                val color = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                Icon(action.icon, contentDescription = null, tint = color)
                 Spacer(modifier = Modifier.width(14.dp))
-                Text(action.label, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
+                Text(action.label, color = color, fontWeight = FontWeight.Medium)
             }
         }
         Spacer(modifier = Modifier.height(18.dp))

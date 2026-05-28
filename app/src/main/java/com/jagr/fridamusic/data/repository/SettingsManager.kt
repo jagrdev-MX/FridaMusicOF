@@ -6,6 +6,14 @@ import android.content.SharedPreferences
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("frida_music_prefs", Context.MODE_PRIVATE)
 
+    var appThemePreference: Int
+        get() = prefs.getInt("app_theme_pref", 0)
+        set(value) = prefs.edit().putInt("app_theme_pref", value).apply()
+
+    var enableBlurEffect: Boolean
+        get() = prefs.getBoolean("enable_blur_effect", true)
+        set(value) = prefs.edit().putBoolean("enable_blur_effect", value).apply()
+
     var filterVoiceNotes: Boolean
         get() = prefs.getBoolean("filter_voice_notes", false)
         set(value) = prefs.edit().putBoolean("filter_voice_notes", value).apply()
