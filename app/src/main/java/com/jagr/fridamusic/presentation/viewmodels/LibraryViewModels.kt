@@ -43,7 +43,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.json.JSONArray
 import org.json.JSONObject
+import org.schabi.newpipe.extractor.MediaFormat
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import java.net.HttpURLConnection
 import java.net.URL
@@ -70,12 +72,22 @@ private const val RECOMMENDATION_PROFILE_WARMUP_DELAY_MS = 1_000L
 private const val SEARCH_RESULTS_CACHE_TTL_MS = 10 * 60 * 1000L
 private const val SEARCH_RESULTS_CACHE_LIMIT = 20
 private const val SEARCH_STREAM_PREFETCH_LIMIT = 2
+private const val REMOTE_STREAM_CACHE_FALLBACK_TTL_MS = 10 * 60 * 1000L
+private const val REMOTE_STREAM_CACHE_EXPIRY_GRACE_MS = 2 * 60 * 1000L
 private const val METADATA_NETWORK_TIMEOUT_MS = 4_000
 private const val PLAYBACK_UI_PROGRESS_INTERVAL_MS = 500L
 private const val AUTOPLAY_LOG_TAG = "FridaAutoplay"
+private const val PLAYBACK_LOG_TAG = "FridaPlayback"
 private val YOUTUBE_VIDEO_ID_PATTERN = Regex("[A-Za-z0-9_-]{11}")
 
 class LibraryViewModels(application: Application) : AndroidViewModel(application) {
+    private data class RemotePlaybackStream(
+        val url: String,
+        val source: String,
+        val formatName: String,
+        val bitrate: Int
+    )
+
     private data class SearchCacheEntry(
         val results: List<YouTubeResult>,
         val cachedAtMs: Long
@@ -261,6 +273,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private val imageUrlMisses = ConcurrentHashMap<String, Long>()
     private val imageUrlLookups = ConcurrentHashMap<String, Deferred<String?>>()
     private val audioStreamCache = ConcurrentHashMap<String, String>()
+    private val audioStreamCacheExpiresAtMs = ConcurrentHashMap<String, Long>()
     private val audioDurationCache = ConcurrentHashMap<String, Long>()
     private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
     private val searchResultsCache = ConcurrentHashMap<String, SearchCacheEntry>()
@@ -324,6 +337,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _isPlaying.value = isPlaying
                         if (isPlaying) {
+                            Log.i(PLAYBACK_LOG_TAG, "isPlaying=true title=${_currentSong.value?.title.orEmpty()}")
                             confirmCurrentPlayback()
                             startProgressUpdate()
                         } else {
@@ -335,6 +349,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         _playbackState.value = state
                         if (state == Player.STATE_READY) {
                             _duration.value = exoPlayer?.duration?.coerceAtLeast(0L) ?: 0L
+                            Log.i(
+                                PLAYBACK_LOG_TAG,
+                                "state=READY title=${_currentSong.value?.title.orEmpty()} durationMs=${_duration.value}"
+                            )
                         }
                         if (state == Player.STATE_ENDED) {
                             _currentPosition.value = 0L
@@ -777,6 +795,90 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         } else {
             Player.REPEAT_MODE_OFF
         }
+    }
+
+    private fun selectPlayableRemoteStream(streamInfo: StreamInfo): RemotePlaybackStream? {
+        val audioStream = streamInfo.audioStreams
+            .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
+            .maxByOrNull { it.bitrate }
+            ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+
+        audioStream?.url
+            ?.takeIf { it.isNotBlank() }
+            ?.let { url ->
+                return RemotePlaybackStream(
+                    url = url,
+                    source = "audio",
+                    formatName = audioStream.format?.name.orEmpty(),
+                    bitrate = audioStream.bitrate
+                )
+            }
+
+        val muxedStream = streamInfo.videoStreams
+            .asSequence()
+            .filterNot { it.isVideoOnly }
+            .filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
+            .filter { it.url?.isNotBlank() == true }
+            .minWithOrNull(
+                compareBy(
+                    { if (it.format == MediaFormat.MPEG_4) 0 else 1 },
+                    { remoteVideoHeight(it.resolution) },
+                    { it.bitrate.coerceAtLeast(0) }
+                )
+            )
+
+        return muxedStream?.url
+            ?.takeIf { it.isNotBlank() }
+            ?.let { url ->
+                RemotePlaybackStream(
+                    url = url,
+                    source = "muxed",
+                    formatName = muxedStream.format?.name.orEmpty(),
+                    bitrate = muxedStream.bitrate
+                )
+            }
+    }
+
+    private fun remoteVideoHeight(resolution: String?): Int =
+        Regex("(\\d+)p", RegexOption.IGNORE_CASE)
+            .find(resolution.orEmpty())
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+            ?: Int.MAX_VALUE
+
+    private fun cacheRemoteStream(videoId: String, streamUrl: String, durationMs: Long) {
+        audioStreamCache[videoId] = streamUrl
+        audioStreamCacheExpiresAtMs[videoId] = remoteStreamExpiresAtMs(streamUrl)
+        audioDurationCache[videoId] = durationMs
+    }
+
+    private fun cachedRemoteStreamUrl(videoId: String): String? {
+        val streamUrl = audioStreamCache[videoId] ?: return null
+        val expiresAtMs = audioStreamCacheExpiresAtMs[videoId] ?: remoteStreamExpiresAtMs(streamUrl).also {
+            audioStreamCacheExpiresAtMs[videoId] = it
+        }
+        if (System.currentTimeMillis() + REMOTE_STREAM_CACHE_EXPIRY_GRACE_MS >= expiresAtMs) {
+            audioStreamCache.remove(videoId)
+            audioStreamCacheExpiresAtMs.remove(videoId)
+            audioDurationCache.remove(videoId)
+            readyAutoplayVideoIds.remove(videoId)
+            return null
+        }
+        return streamUrl
+    }
+
+    private fun hasCachedRemoteStream(videoId: String): Boolean =
+        cachedRemoteStreamUrl(videoId) != null
+
+    private fun remoteStreamExpiresAtMs(streamUrl: String): Long {
+        val urlExpirySeconds = runCatching {
+            Uri.parse(streamUrl).getQueryParameter("expire")?.toLongOrNull()
+        }.getOrNull()
+
+        return urlExpirySeconds
+            ?.times(1000L)
+            ?: (System.currentTimeMillis() + REMOTE_STREAM_CACHE_FALLBACK_TTL_MS)
     }
 
     private fun maybeRefreshAutoplayRecommendations() {
@@ -1705,7 +1807,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             }
 
             // 2. Revisar si la URL del audio está en caché
-            val cachedAudioUrl = ytId?.let { audioStreamCache[it] }
+            val cachedAudioUrl = ytId?.let(::cachedRemoteStreamUrl)
 
             withContext(Dispatchers.Main) {
                 if (cachedAudioUrl != null) {
@@ -1945,8 +2047,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     deezerToYoutubeMap[result.videoId] = realYtId
                 }
 
-                val cachedUrl = audioStreamCache[realYtId]
+                val cachedUrl = cachedRemoteStreamUrl(realYtId)
                 if (cachedUrl != null) {
+                    Log.i(PLAYBACK_LOG_TAG, "stream cache hit id=$realYtId title=${result.title}")
                     val cachedDurationMs = audioDurationCache[realYtId] ?: result.durationMs
                     if (trustVideoId &&
                         !AutoplayDiversity.isAutoplayTrackCandidate(
@@ -2004,15 +2107,16 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     return@launch
                 }
 
-                val audioStream = streamInfo.audioStreams
-                    .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
-                    .maxByOrNull { it.bitrate }
-                    ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
-                val audioUrl = audioStream?.url?.takeIf { it.isNotBlank() }
+                val playbackStream = selectPlayableRemoteStream(streamInfo)
+                Log.i(
+                    PLAYBACK_LOG_TAG,
+                    "extract id=$realYtId title=${result.title} audioStreams=${streamInfo.audioStreams.size} " +
+                        "videoStreams=${streamInfo.videoStreams.size} selectedSource=${playbackStream?.source.orEmpty()} " +
+                        "selectedFormat=${playbackStream?.formatName.orEmpty()} bitrate=${playbackStream?.bitrate ?: 0}"
+                )
 
-                if (audioUrl != null) {
-                    audioStreamCache[realYtId] = audioUrl
-                    audioDurationCache[realYtId] = streamDurationMs
+                if (playbackStream != null) {
+                    cacheRemoteStream(realYtId, playbackStream.url, streamDurationMs)
 
                     val virtualSong = Song(
                         id = result.videoId.hashCode().toLong(),
@@ -2021,7 +2125,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         data = result.videoId,
                         duration = streamDurationMs,
                         albumId = 0L,
-                        uri = Uri.parse(audioUrl),
+                        uri = Uri.parse(playbackStream.url),
                         artworkUri = if (result.thumbnailUrl.isNotEmpty()) Uri.parse(result.thumbnailUrl) else Uri.EMPTY
                     )
                     rememberPlaylistSong(virtualSong)
@@ -2558,13 +2662,9 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                         ServiceList.YouTube,
                         "https://www.youtube.com/watch?v=${ytMatch.videoId}"
                     )
-                    val audioStream = streamInfo.audioStreams
-                        .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
-                        .maxByOrNull { it.bitrate }
-                        ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
-                    audioStream?.url?.takeIf { it.isNotBlank() }?.let { streamUrl ->
-                        audioStreamCache[ytMatch.videoId] = streamUrl
-                        audioDurationCache[ytMatch.videoId] = streamInfo.duration * 1000L
+                    selectPlayableRemoteStream(streamInfo)?.let { playbackStream ->
+                        val streamUrl = playbackStream.url
+                        cacheRemoteStream(ytMatch.videoId, streamUrl, streamInfo.duration * 1000L)
                     }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -3075,7 +3175,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             .filter { it.source == QueueSource.AUTOPLAY && it.song.requiresRemoteExtraction() }
             .toList()
         candidates
-            .filter { audioStreamCache.containsKey(it.song.data) }
+            .filter { hasCachedRemoteStream(it.song.data) }
             .forEach { readyAutoplayVideoIds.add(it.song.data) }
         candidates.asSequence()
             .map { it.song.data }
@@ -3084,7 +3184,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             .filterNot {
                 it in unavailableAutoplayVideoIds ||
                     it in rejectedAutoplayVideoIds ||
-                    audioStreamCache.containsKey(it)
+                    hasCachedRemoteStream(it)
             }
             .take(AUTOPLAY_PREFETCH_LIMIT)
             .forEach { prefetchYouTubeAudio(it, identifyUnavailable = true) }
@@ -3123,7 +3223,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     private fun prefetchYouTubeAudio(videoId: String, identifyUnavailable: Boolean = false) {
-        if (audioStreamCache.containsKey(videoId) ||
+        if (hasCachedRemoteStream(videoId) ||
             videoId in unavailableAutoplayVideoIds ||
             videoId in rejectedAutoplayVideoIds ||
             !autoplayPrefetchInFlight.add(videoId)
@@ -3145,15 +3245,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
                     }
                     return@launch
                 }
-                val audioStream = streamInfo.audioStreams
-                    .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
-                    .maxByOrNull { it.bitrate }
-                    ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
-                val audioUrl = audioStream?.url?.takeIf { it.isNotBlank() }
+                val playbackStream = selectPlayableRemoteStream(streamInfo)
+                val audioUrl = playbackStream?.url
 
                 if (audioUrl != null) {
-                    audioStreamCache[videoId] = audioUrl
-                    audioDurationCache[videoId] = durationMs
+                    cacheRemoteStream(videoId, audioUrl, durationMs)
                     Log.i(AUTOPLAY_LOG_TAG, "prefetch ready id=$videoId")
                     if (identifyUnavailable) {
                         readyAutoplayVideoIds.add(videoId)
