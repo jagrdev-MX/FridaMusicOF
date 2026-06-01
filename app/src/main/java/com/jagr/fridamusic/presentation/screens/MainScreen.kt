@@ -145,12 +145,13 @@ fun MainScreen() {
                                 }
                             } else {
                                 searchFocusSignal = 0
+                                val returnHome = route == "home"
                                 navController.navigate(route) {
                                     popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+                                        saveState = !returnHome
                                     }
                                     launchSingleTop = true
-                                    restoreState = true
+                                    restoreState = !returnHome
                                 }
                             }
                         },
