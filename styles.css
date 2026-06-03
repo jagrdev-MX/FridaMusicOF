@@ -783,7 +783,7 @@ button {
 
 .converter-form {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(120px, 0.24fr) auto;
+  grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.34fr) auto;
   gap: 12px;
   align-items: end;
   margin-top: 18px;
@@ -793,13 +793,21 @@ button {
   display: grid;
   gap: 8px;
   min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   color: rgba(255, 255, 255, 0.62);
   font-size: 12px;
   font-weight: 500;
 }
 
-.converter-field input,
-.converter-field select {
+.converter-field legend {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.converter-field [data-converter-url] {
   width: 100%;
   min-height: 46px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -812,30 +820,64 @@ button {
   transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
 }
 
-.converter-field input::placeholder {
+.converter-field [data-converter-url]::placeholder {
   color: rgba(255, 255, 255, 0.32);
 }
 
-.converter-field input:focus,
-.converter-field select:focus {
+.converter-field [data-converter-url]:focus {
   border-color: rgba(64, 196, 255, 0.58);
   background: rgba(255, 255, 255, 0.085);
   box-shadow: 0 0 0 3px rgba(64, 196, 255, 0.14);
 }
 
-.converter-field select {
-  color-scheme: dark;
+.format-segment {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-height: 46px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.format-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.format-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.72);
   cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
-.converter-field select option {
-  color: #f7fbff;
-  background: #1d233a;
-}
-
-.converter-field select option:checked {
+.format-input:checked + .format-option {
   color: #ffffff;
-  background: #2563eb;
+  background: linear-gradient(135deg, rgba(64, 196, 255, 0.34), rgba(224, 64, 251, 0.28));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.format-input:focus-visible + .format-option {
+  outline: 2px solid rgba(64, 196, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.format-input:disabled + .format-option {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .converter-submit {

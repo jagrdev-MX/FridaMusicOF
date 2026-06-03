@@ -446,7 +446,7 @@ function getConverterElements() {
   return {
     form: document.querySelector('[data-converter-form]'),
     urlInput: document.querySelector('[data-converter-url]'),
-    formatSelect: document.querySelector('[data-converter-format]'),
+    formatInputs: Array.from(document.querySelectorAll('[data-converter-format]')),
     submitButton: document.querySelector('[data-converter-submit]'),
     statusValue: document.querySelector('[data-converter-status]'),
     resultLink: document.querySelector('[data-converter-result]'),
@@ -488,7 +488,7 @@ function setConverterState(status, messageKey, options = {}) {
 }
 
 function renderConverterState() {
-  const { submitButton, statusValue, resultLink, panel } = getConverterElements();
+  const { formatInputs, submitButton, statusValue, resultLink, panel } = getConverterElements();
 
   if (!submitButton || !statusValue || !resultLink || !panel) {
     return;
@@ -497,6 +497,10 @@ function renderConverterState() {
   panel.classList.toggle('is-loading', converterState.status === 'loading');
   panel.classList.toggle('is-success', converterState.status === 'success');
   panel.classList.toggle('is-error', converterState.status === 'error');
+
+  formatInputs.forEach((input) => {
+    input.disabled = converterState.status === 'loading';
+  });
 
   submitButton.disabled = converterState.status === 'loading';
   statusValue.textContent = converterState.message || translate(converterState.messageKey);
@@ -517,9 +521,9 @@ function renderConverterState() {
 async function submitConversion(event) {
   event.preventDefault();
 
-  const { urlInput, formatSelect, resultLink } = getConverterElements();
+  const { urlInput, formatInputs, resultLink } = getConverterElements();
   const rawUrl = urlInput?.value.trim() || '';
-  const format = formatSelect?.value.trim().toLowerCase() || 'mp3';
+  const format = formatInputs.find((input) => input.checked)?.value.trim().toLowerCase() || 'mp3';
 
   if (!isValidConverterUrl(rawUrl)) {
     setConverterState('error', 'converter.invalidUrl');
@@ -529,7 +533,7 @@ async function submitConversion(event) {
 
   if (!CONVERTER_FORMATS.has(format)) {
     setConverterState('error', 'converter.invalidFormat');
-    formatSelect?.focus();
+    formatInputs[0]?.focus();
     return;
   }
 
