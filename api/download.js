@@ -35,6 +35,17 @@ function getFilename(upstreamResponse) {
   return upstreamResponse.headers.get('content-disposition') || 'attachment; filename="FridaMusic-conversion.mp3"';
 }
 
+function getHeader(request, name) {
+  const value = request.headers?.[name.toLowerCase()] || request.headers?.[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getForwardedFor(request) {
+  const forwardedFor = getHeader(request, 'x-forwarded-for');
+  const socketAddress = request.socket?.remoteAddress || request.connection?.remoteAddress || '';
+  return [forwardedFor, socketAddress].filter(Boolean).join(', ');
+}
+
 module.exports = async function handler(request, response) {
   if (request.method !== 'POST') {
     response.setHeader('Allow', 'POST');
@@ -77,6 +88,8 @@ module.exports = async function handler(request, response) {
   const timeoutMs = Number(process.env.FRIDAMUSIC_PROXY_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS);
+  const userAgent = getHeader(request, 'user-agent') || 'FridaMusic-Web';
+  const forwardedFor = getForwardedFor(request);
 
   try {
     const upstreamResponse = await fetch(`${apiBaseUrl}/download`, {
@@ -84,6 +97,8 @@ module.exports = async function handler(request, response) {
       headers: {
         Accept: 'application/octet-stream, application/json',
         'Content-Type': 'application/json',
+        'User-Agent': userAgent,
+        ...(forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {}),
       },
       body: JSON.stringify({ url, format }),
       signal: controller.signal,
