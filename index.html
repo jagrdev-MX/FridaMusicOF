@@ -995,6 +995,48 @@
           </div>
         </article>
       </div>
+
+      <article class="converter-panel" aria-labelledby="converter-title">
+        <div class="converter-copy">
+          <span class="release-chip" data-i18n="converter.chip">Convertidor web</span>
+          <h3 class="release-title" id="converter-title" data-i18n="converter.title">Convierte tu enlace</h3>
+          <p class="release-status" data-i18n="converter.copy">Pega una URL, elige el formato y recibe el audio listo para guardar.</p>
+        </div>
+
+        <form class="converter-form" data-converter-form novalidate>
+          <label class="converter-field" for="converter-url">
+            <span data-i18n="converter.urlLabel">URL del video</span>
+            <input id="converter-url" name="url" type="url" inputmode="url" autocomplete="off"
+              placeholder="https://www.youtube.com/watch?v=..." data-converter-url required>
+          </label>
+
+          <fieldset class="converter-field converter-format-field">
+            <legend data-i18n="converter.formatLabel">Formato</legend>
+            <div class="format-segment" role="radiogroup" aria-label="Formato">
+              <input class="format-input" id="converter-format-mp3" name="format" type="radio" value="mp3"
+                data-converter-format checked>
+              <label class="format-option" for="converter-format-mp3">MP3</label>
+
+              <input class="format-input" id="converter-format-flac" name="format" type="radio" value="flac"
+                data-converter-format>
+              <label class="format-option" for="converter-format-flac">FLAC</label>
+
+              <input class="format-input" id="converter-format-m4a" name="format" type="radio" value="m4a"
+                data-converter-format>
+              <label class="format-option" for="converter-format-m4a">M4A</label>
+            </div>
+          </fieldset>
+
+          <button class="btn download-action primary converter-submit" type="submit" data-converter-submit>
+            <span data-i18n="converter.submit">Convertir</span>
+          </button>
+        </form>
+
+        <div class="converter-feedback">
+          <p class="converter-status" data-converter-status data-i18n="converter.idleStatus" aria-live="polite">Listo para convertir.</p>
+          <a class="release-link converter-result" href="#" data-converter-result hidden data-i18n="converter.downloadReady">Descarga lista</a>
+        </div>
+      </article>
     </section>
 
     <section class="glass-card support-card" id="soporte">

@@ -1,6 +1,8 @@
 const RELEASE_ENDPOINT = 'https://api.github.com/repos/jagrdev-MX/FridaMusicOF/releases?per_page=30';
 const RELEASES_URL = 'https://github.com/jagrdev-MX/FridaMusicOF/releases';
 const CHANGELOG_URL = 'https://github.com/jagrdev-MX/FridaMusicOF/blob/master/CHANGELOG.md';
+const CONVERTER_ENDPOINT = '/api/download';
+const CONVERTER_FORMATS = new Set(['mp3', 'flac', 'm4a']);
 
 const translations = {
   es: {
@@ -67,6 +69,19 @@ const translations = {
     'downloads.releases': 'Ver releases',
     'downloads.changelog': 'Ver changelog',
     'downloads.previous': 'Versiones anteriores',
+    'converter.chip': 'Convertidor web',
+    'converter.title': 'Convierte tu enlace',
+    'converter.copy': 'Pega una URL, elige el formato y recibe el audio listo para guardar.',
+    'converter.urlLabel': 'URL del video',
+    'converter.formatLabel': 'Formato',
+    'converter.submit': 'Convertir',
+    'converter.loading': 'Convirtiendo...',
+    'converter.idleStatus': 'Listo para convertir.',
+    'converter.successStatus': 'Conversion lista. La descarga iniciara automaticamente.',
+    'converter.errorStatus': 'No se pudo completar la conversion.',
+    'converter.invalidUrl': 'Ingresa una URL valida que empiece con http o https.',
+    'converter.invalidFormat': 'Selecciona mp3, flac o m4a.',
+    'converter.downloadReady': 'Descarga lista',
     'support.kicker': 'Soporte',
     'support.title': 'Ayuda y seguimiento',
     'support.copy': 'Canales reales del proyecto para soporte, incidencias y seguimiento público.',
@@ -148,6 +163,19 @@ const translations = {
     'downloads.releases': 'View releases',
     'downloads.changelog': 'View changelog',
     'downloads.previous': 'Previous versions',
+    'converter.chip': 'Web converter',
+    'converter.title': 'Convert your link',
+    'converter.copy': 'Paste a URL, choose a format, and receive audio ready to save.',
+    'converter.urlLabel': 'Video URL',
+    'converter.formatLabel': 'Format',
+    'converter.submit': 'Convert',
+    'converter.loading': 'Converting...',
+    'converter.idleStatus': 'Ready to convert.',
+    'converter.successStatus': 'Conversion ready. The download will start automatically.',
+    'converter.errorStatus': 'The conversion could not be completed.',
+    'converter.invalidUrl': 'Enter a valid URL that starts with http or https.',
+    'converter.invalidFormat': 'Select mp3, flac, or m4a.',
+    'converter.downloadReady': 'Download ready',
     'support.kicker': 'Support',
     'support.title': 'Help and tracking',
     'support.copy': 'Real project channels for support, issues, and public tracking.',
@@ -229,6 +257,19 @@ const translations = {
     'downloads.releases': 'Ver releases',
     'downloads.changelog': 'Ver changelog',
     'downloads.previous': 'Versões anteriores',
+    'converter.chip': 'Conversor web',
+    'converter.title': 'Converta seu link',
+    'converter.copy': 'Cole uma URL, escolha o formato e receba o audio pronto para salvar.',
+    'converter.urlLabel': 'URL do video',
+    'converter.formatLabel': 'Formato',
+    'converter.submit': 'Converter',
+    'converter.loading': 'Convertendo...',
+    'converter.idleStatus': 'Pronto para converter.',
+    'converter.successStatus': 'Conversao pronta. O download iniciara automaticamente.',
+    'converter.errorStatus': 'Nao foi possivel concluir a conversao.',
+    'converter.invalidUrl': 'Insira uma URL valida que comece com http ou https.',
+    'converter.invalidFormat': 'Selecione mp3, flac ou m4a.',
+    'converter.downloadReady': 'Download pronto',
     'support.kicker': 'Suporte',
     'support.title': 'Ajuda e acompanhamento',
     'support.copy': 'Canais reais do projeto para suporte, incidências e acompanhamento público.',
@@ -262,6 +303,13 @@ let releaseState = {
   htmlUrl: RELEASES_URL,
   assetUrl: '',
 };
+let converterState = {
+  status: 'idle',
+  messageKey: 'converter.idleStatus',
+  message: '',
+  filename: '',
+};
+let converterDownloadUrl = '';
 
 function translate(key) {
   return translations[currentLanguage]?.[key] ?? translations.es[key] ?? key;
@@ -285,6 +333,7 @@ function applyTranslations(language) {
   });
 
   renderReleaseState();
+  renderConverterState();
 }
 
 function renderReleaseState() {
@@ -391,6 +440,155 @@ async function loadLatestRelease() {
   }
 
   renderReleaseState();
+}
+
+function getConverterElements() {
+  return {
+    form: document.querySelector('[data-converter-form]'),
+    urlInput: document.querySelector('[data-converter-url]'),
+    formatSelect: document.querySelector('[data-converter-format]'),
+    submitButton: document.querySelector('[data-converter-submit]'),
+    statusValue: document.querySelector('[data-converter-status]'),
+    resultLink: document.querySelector('[data-converter-result]'),
+    panel: document.querySelector('.converter-panel'),
+  };
+}
+
+function getConversionFilename(contentDisposition, fallbackFormat) {
+  if (!contentDisposition) {
+    return `FridaMusic.${fallbackFormat}`;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=utf-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1].replace(/["']/g, ''));
+  }
+
+  const asciiMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1] || `FridaMusic.${fallbackFormat}`;
+}
+
+function isValidConverterUrl(value) {
+  try {
+    const parsedUrl = new URL(value);
+    return ['http:', 'https:'].includes(parsedUrl.protocol);
+  } catch (error) {
+    return false;
+  }
+}
+
+function setConverterState(status, messageKey, options = {}) {
+  converterState = {
+    status,
+    messageKey,
+    message: options.message || '',
+    filename: options.filename || '',
+  };
+  renderConverterState();
+}
+
+function renderConverterState() {
+  const { submitButton, statusValue, resultLink, panel } = getConverterElements();
+
+  if (!submitButton || !statusValue || !resultLink || !panel) {
+    return;
+  }
+
+  panel.classList.toggle('is-loading', converterState.status === 'loading');
+  panel.classList.toggle('is-success', converterState.status === 'success');
+  panel.classList.toggle('is-error', converterState.status === 'error');
+
+  submitButton.disabled = converterState.status === 'loading';
+  statusValue.textContent = converterState.message || translate(converterState.messageKey);
+
+  if (converterState.status === 'success' && converterDownloadUrl) {
+    resultLink.hidden = false;
+    resultLink.href = converterDownloadUrl;
+    resultLink.download = converterState.filename || 'FridaMusic.mp3';
+    resultLink.textContent = translate('converter.downloadReady');
+  } else {
+    resultLink.hidden = true;
+    resultLink.removeAttribute('href');
+    resultLink.removeAttribute('download');
+    resultLink.textContent = translate('converter.downloadReady');
+  }
+}
+
+async function submitConversion(event) {
+  event.preventDefault();
+
+  const { urlInput, formatSelect, resultLink } = getConverterElements();
+  const rawUrl = urlInput?.value.trim() || '';
+  const format = formatSelect?.value.trim().toLowerCase() || 'mp3';
+
+  if (!isValidConverterUrl(rawUrl)) {
+    setConverterState('error', 'converter.invalidUrl');
+    urlInput?.focus();
+    return;
+  }
+
+  if (!CONVERTER_FORMATS.has(format)) {
+    setConverterState('error', 'converter.invalidFormat');
+    formatSelect?.focus();
+    return;
+  }
+
+  if (converterDownloadUrl) {
+    URL.revokeObjectURL(converterDownloadUrl);
+    converterDownloadUrl = '';
+  }
+
+  setConverterState('loading', 'converter.loading');
+
+  try {
+    const response = await fetch(CONVERTER_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/octet-stream, application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: rawUrl, format }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      let message = translate('converter.errorStatus');
+
+      try {
+        message = JSON.parse(text).detail || message;
+      } catch (error) {
+        if (text) {
+          message = text.slice(0, 240);
+        }
+      }
+
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const filename = getConversionFilename(response.headers.get('content-disposition'), format);
+    converterDownloadUrl = URL.createObjectURL(blob);
+    setConverterState('success', 'converter.successStatus', { filename });
+
+    window.setTimeout(() => {
+      resultLink?.click();
+    }, 50);
+  } catch (error) {
+    setConverterState('error', 'converter.errorStatus', {
+      message: error.message || translate('converter.errorStatus'),
+    });
+  }
+}
+
+function setupConverter() {
+  const { form } = getConverterElements();
+
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener('submit', submitConversion);
+  renderConverterState();
 }
 
 function setupNavbar() {
@@ -568,6 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupNavbar();
   setupActiveSection();
   setupLanguageSwitcher();
+  setupConverter();
   setupBackgroundCanvas();
   preserveExistingRestrictions();
   applyTranslations(currentLanguage);
