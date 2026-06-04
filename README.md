@@ -126,7 +126,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 ### Repositorio oficial
 
-**Commits humanos visibles:** 272 · **Commits de automatización:** 89
+**Commits humanos visibles:** 272 · **Commits de automatización:** 90
 
 | Colaborador | Commits | % de contribución humana |
 | --- | ---: | ---: |
