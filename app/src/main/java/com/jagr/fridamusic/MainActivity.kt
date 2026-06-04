@@ -10,6 +10,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import coil.imageLoader
 import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.data.ads.GoogleMobileAdsConsentManager
 import com.jagr.fridamusic.presentation.screens.MainScreen
@@ -23,6 +24,14 @@ class MainActivity : ComponentActivity() {
     private val libraryViewModel: LibraryViewModels by viewModels()
     private lateinit var adManager: AdManager
     private lateinit var consentManager: GoogleMobileAdsConsentManager
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_MODERATE) {
+            libraryViewModel.clearCaches()
+            imageLoader.memoryCache?.clear()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -4,10 +4,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.support.v4.media.MediaMetadataCompat
@@ -17,15 +21,14 @@ import androidx.core.app.NotificationCompat
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.jagr.fridamusic.R
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.jagr.fridamusic.domain.model.Song
+import kotlinx.coroutines.*
 
-class MusicService : Service() {
+class MusicService : Service(), AudioManager.OnAudioFocusChangeListener {
+
+    companion object {
+        const val ACTION_PLAY_SONG = "ACTION_PLAY_SONG"
+    }
 
     private data class NotificationState(
         val title: String,
@@ -36,6 +39,9 @@ class MusicService : Service() {
     )
 
     private lateinit var mediaSession: MediaSessionCompat
+    private lateinit var audioManager: AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
+
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(serviceJob + Dispatchers.IO)
     private var artworkJob: Job? = null
@@ -48,13 +54,16 @@ class MusicService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
         mediaSession = MediaSessionCompat(this, "FridaMusicSession").apply {
             isActive = true
 
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() {
-                    sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
+                    if (requestAudioFocus()) {
+                        sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
+                    }
                 }
                 override fun onPause() {
                     sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
@@ -74,6 +83,53 @@ class MusicService : Service() {
             })
         }
         createNotificationChannel()
+    }
+
+    fun playSong(song: Song) {
+        if (requestAudioFocus()) {
+            val intent = Intent(ACTION_PLAY_SONG).apply {
+                putExtra("SONG_DATA", song.data)
+            }
+            sendBroadcast(intent)
+        }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(audioAttributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setOnAudioFocusChangeListener(this)
+                .build()
+
+            audioManager.requestAudioFocus(audioFocusRequest!!)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                this,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            )
+        }
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    override fun onAudioFocusChange(focusChange: Int) {
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
+            }
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                sendBroadcast(Intent("ACTION_PLAY_PAUSE"))
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -135,10 +191,10 @@ class MusicService : Service() {
                 .setState(playbackState, state.position, if (state.isPlaying) 1f else 0f)
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY or
-                        PlaybackStateCompat.ACTION_PAUSE or
-                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                        PlaybackStateCompat.ACTION_SEEK_TO
+                            PlaybackStateCompat.ACTION_PAUSE or
+                            PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                            PlaybackStateCompat.ACTION_SEEK_TO
                 )
                 .build()
         )
@@ -213,6 +269,12 @@ class MusicService : Service() {
     override fun onDestroy() {
         artworkJob?.cancel()
         serviceScope.cancel()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(this)
+        }
         super.onDestroy()
         mediaSession.isActive = false
         mediaSession.release()

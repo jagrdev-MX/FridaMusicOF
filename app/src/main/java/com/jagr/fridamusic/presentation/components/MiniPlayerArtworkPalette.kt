@@ -54,8 +54,8 @@ internal fun rememberMiniPlayerArtworkPalette(albumArtUrl: String?): State<MiniP
                 val result = context.imageLoader.execute(request)
                 val drawable = (result as? SuccessResult)?.drawable ?: return@runCatching fallback
                 val bitmap = drawable.toBitmap(
-                    width = drawable.intrinsicWidth.coerceAtLeast(1),
-                    height = drawable.intrinsicHeight.coerceAtLeast(1)
+                    width = 40,
+                    height = 40
                 )
                 extractMiniPlayerArtworkPalette(
                     bitmap = bitmap,
@@ -93,13 +93,12 @@ internal fun extractMiniPlayerArtworkPalette(
     darkTheme: Boolean,
     fallback: MiniPlayerArtworkPalette
 ): MiniPlayerArtworkPalette {
-    val scaled = Bitmap.createScaledBitmap(bitmap, 40, 40, true)
     val buckets = linkedMapOf<Int, ColorBucket>()
     val samples = mutableListOf<ColorSample>()
 
-    for (y in 0 until scaled.height) {
-        for (x in 0 until scaled.width) {
-            val pixel = scaled.getPixel(x, y)
+    for (y in 0 until bitmap.height) {
+        for (x in 0 until bitmap.width) {
+            val pixel = bitmap.getPixel(x, y)
             if (AndroidColor.alpha(pixel) < 96) continue
 
             val hsl = FloatArray(3)

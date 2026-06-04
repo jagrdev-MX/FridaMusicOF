@@ -131,13 +131,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
-import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.FridaEmptyState
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
@@ -145,6 +143,8 @@ import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import java.util.Calendar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlin.math.min
 
 private enum class LibraryTab {
@@ -210,7 +210,7 @@ private sealed interface LibraryDetail {
     data class SmartSongs(val title: String, val songs: List<Song>) : LibraryDetail
 }
 
-private const val LIBRARY_PAGER_WINDOW = 10_000
+private const val LIBRARY_PAGER_WINDOW = 500
 private val LibraryCardRadius = 18.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -354,72 +354,98 @@ fun LibraryScreen(
 
     val normalizedQuery = appliedSearchQuery
 
-    val visibleSongs = remember(songs, normalizedQuery, activeSort, appliedReversed) {
-        songs
-            .filter { song ->
-                normalizedQuery.isBlank() ||
-                        song.title.contains(normalizedQuery, ignoreCase = true) ||
-                        song.artist.contains(normalizedQuery, ignoreCase = true) ||
-                        song.album.contains(normalizedQuery, ignoreCase = true)
-            }
-            .sortedSongs(activeSort, appliedReversed)
+    val visibleSongs by produceState(
+        initialValue = emptyList<Song>(),
+        songs, normalizedQuery, activeSort, appliedReversed
+    ) {
+        value = withContext(Dispatchers.Default) {
+            songs
+                .filter { song ->
+                    normalizedQuery.isBlank() ||
+                            song.title.contains(normalizedQuery, ignoreCase = true) ||
+                            song.artist.contains(normalizedQuery, ignoreCase = true) ||
+                            song.album.contains(normalizedQuery, ignoreCase = true)
+                }
+                .sortedSongs(activeSort, appliedReversed)
+        }
     }
 
-    val visibleHistory = remember(fullHistory, normalizedQuery, activeSort, appliedReversed) {
-        fullHistory
-            .filter { history ->
-                normalizedQuery.isBlank() ||
-                        history.title.contains(normalizedQuery, ignoreCase = true) ||
-                        history.artist.contains(normalizedQuery, ignoreCase = true)
-            }
-            .sortedHistory(activeSort, appliedReversed)
+    val visibleHistory by produceState(
+        initialValue = emptyList<PlaybackHistoryEntity>(),
+        fullHistory, normalizedQuery, activeSort, appliedReversed
+    ) {
+        value = withContext(Dispatchers.Default) {
+            fullHistory
+                .filter { history ->
+                    normalizedQuery.isBlank() ||
+                            history.title.contains(normalizedQuery, ignoreCase = true) ||
+                            history.artist.contains(normalizedQuery, ignoreCase = true)
+                }
+                .sortedHistory(activeSort, appliedReversed)
+        }
     }
 
-    val visiblePlaylists = remember(playlists, normalizedQuery, activeSort, appliedReversed) {
-        playlists
-            .filter { playlist ->
-                normalizedQuery.isBlank() ||
-                        playlist.name.contains(normalizedQuery, ignoreCase = true) ||
-                        playlist.description.orEmpty().contains(normalizedQuery, ignoreCase = true)
-            }
-            .sortedPlaylists(activeSort, appliedReversed)
+    val visiblePlaylists by produceState(
+        initialValue = emptyList<Playlist>(),
+        playlists, normalizedQuery, activeSort, appliedReversed
+    ) {
+        value = withContext(Dispatchers.Default) {
+            playlists
+                .filter { playlist ->
+                    normalizedQuery.isBlank() ||
+                            playlist.name.contains(normalizedQuery, ignoreCase = true) ||
+                            playlist.description.orEmpty().contains(normalizedQuery, ignoreCase = true)
+                }
+                .sortedPlaylists(activeSort, appliedReversed)
+        }
     }
 
     val unknownAlbum = stringResource(R.string.unknown_album)
-    val visibleAlbums = remember(songs, normalizedQuery, activeSort, appliedReversed, unknownAlbum) {
-        songs
-            .groupBy { song -> if (song.album.isBlank()) "${song.albumId}" else song.album }
-            .map { (_, albumSongs) ->
-                val representative = albumSongs.maxByOrNull { it.dateAdded } ?: albumSongs.first()
-                LibraryAlbum(
-                    id = representative.albumId,
-                    title = representative.album.ifBlank { unknownAlbum },
-                    artist = representative.artist,
-                    representativeSong = representative,
-                    newestDateAdded = albumSongs.maxOfOrNull { it.dateAdded } ?: 0L,
-                    songCount = albumSongs.size,
-                    songs = albumSongs.sortedBy { it.title.lowercase() }
-                )
-            }
-            .filter { album ->
-                normalizedQuery.isBlank() ||
-                        album.title.contains(normalizedQuery, ignoreCase = true) ||
-                        album.artist.contains(normalizedQuery, ignoreCase = true)
-            }
-            .sortedAlbums(activeSort, appliedReversed)
+    val visibleAlbums by produceState(
+        initialValue = emptyList<LibraryAlbum>(),
+        songs, normalizedQuery, activeSort, appliedReversed, unknownAlbum
+    ) {
+        value = withContext(Dispatchers.Default) {
+            songs
+                .groupBy { song -> if (song.album.isBlank()) "${song.albumId}" else song.album }
+                .map { (_, albumSongs) ->
+                    val representative = albumSongs.maxByOrNull { it.dateAdded } ?: albumSongs.first()
+                    LibraryAlbum(
+                        id = representative.albumId,
+                        title = representative.album.ifBlank { unknownAlbum },
+                        artist = representative.artist,
+                        representativeSong = representative,
+                        newestDateAdded = albumSongs.maxOfOrNull { it.dateAdded } ?: 0L,
+                        songCount = albumSongs.size,
+                        songs = albumSongs.sortedBy { it.title.lowercase() }
+                    )
+                }
+                .filter { album ->
+                    normalizedQuery.isBlank() ||
+                            album.title.contains(normalizedQuery, ignoreCase = true) ||
+                            album.artist.contains(normalizedQuery, ignoreCase = true)
+                }
+                .sortedAlbums(activeSort, appliedReversed)
+        }
     }
 
     val unknownArtist = stringResource(R.string.unknown_artist)
-    val visibleArtists = remember(songs, normalizedQuery, activeSort, appliedReversed, unknownArtist) {
-        songs
-            .groupBy { it.artist.ifBlank { unknownArtist } }
-            .map { (artist, artistSongs) -> LibraryArtist(artist, artistSongs) }
-            .filter { artist ->
-                normalizedQuery.isBlank() ||
-                        artist.name.contains(normalizedQuery, ignoreCase = true)
-            }
-            .sortedArtists(activeSort, appliedReversed)
+    val visibleArtists by produceState(
+        initialValue = emptyList<LibraryArtist>(),
+        songs, normalizedQuery, activeSort, appliedReversed, unknownArtist
+    ) {
+        value = withContext(Dispatchers.Default) {
+            songs
+                .groupBy { it.artist.ifBlank { unknownArtist } }
+                .map { (artist, artistSongs) -> LibraryArtist(artist, artistSongs) }
+                .filter { artist ->
+                    normalizedQuery.isBlank() ||
+                            artist.name.contains(normalizedQuery, ignoreCase = true)
+                }
+                .sortedArtists(activeSort, appliedReversed)
+        }
     }
+
     val mostPlayedSongs = remember(mostPlayedHistory, songs) {
         val songsByUri = songs.associateBy { it.uri.toString() }
         val songsByMetadata = songs.associateBy { "${it.title}\u0000${it.artist}" }
@@ -2939,7 +2965,7 @@ private fun LibraryCollectionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)) // Reemplazado liquidGlassEffect por un fondo mucho más limpio
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
             .clickable(onClick = onOpen)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically

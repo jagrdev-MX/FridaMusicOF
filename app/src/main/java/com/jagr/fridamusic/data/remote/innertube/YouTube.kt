@@ -14,8 +14,8 @@ import java.util.concurrent.ConcurrentHashMap
 import io.ktor.client.engine.cio.*
 
 object YouTube {
-    private const val SEARCH_CACHE_TTL_MS = 10 * 60 * 1000L
-    private const val SEARCH_CACHE_LIMIT = 40
+    private const val SEARCH_CACHE_TTL_MS = 5 * 60 * 1000L
+    private const val SEARCH_CACHE_LIMIT = 25
 
     private data class CachedSearch(
         val results: List<YouTubeResult>,
@@ -73,6 +73,11 @@ object YouTube {
         } finally {
             searchesInFlight.remove(cacheKey, pending)
         }
+    }
+
+    fun clearCache() {
+        searchCache.clear()
+        searchesInFlight.clear()
     }
 
     private suspend fun searchUncached(query: String): List<YouTubeResult> {

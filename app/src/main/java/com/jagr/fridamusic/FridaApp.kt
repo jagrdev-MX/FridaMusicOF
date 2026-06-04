@@ -20,7 +20,7 @@ class FridaApp : Application(), ImageLoaderFactory {
         ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.20)
+                    .maxSizePercent(0.15) // Reducido del 20% al 15%
                     .build()
             }
             .diskCache {
@@ -29,6 +29,7 @@ class FridaApp : Application(), ImageLoaderFactory {
                     .maxSizeBytes(100L * 1024L * 1024L)
                     .build()
             }
-            .crossfade(120)
+            .allowHardware(true) // Bitmaps en memoria de hardware para ahorrar RAM
+            .crossfade(true)
             .build()
 }
