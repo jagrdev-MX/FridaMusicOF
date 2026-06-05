@@ -71,6 +71,8 @@ private const val AUTOPLAY_PREFETCH_GRACE_ATTEMPTS = 8
 private const val AUTOPLAY_PREFETCH_GRACE_DELAY_MS = 50L
 private const val UPCOMING_QUEUE_PREFETCH_SIZE = 2
 private const val ARTWORK_LOOKUP_RETRY_DELAY_MS = 5 * 60 * 1000L
+private const val ARTWORK_URL_CACHE_LIMIT = 256
+private const val ARTWORK_MISS_CACHE_LIMIT = 256
 private const val INITIAL_PROFILE_WARMUP_LIMIT = 24
 private const val RECOMMENDATION_PROFILE_WARMUP_DELAY_MS = 1_000L
 private const val SEARCH_RESULTS_CACHE_TTL_MS = 10 * 60 * 1000L
@@ -293,6 +295,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     private var searchJob: Job? = null
     private var recommendationJob: Job? = null
     private var profileWarmupJob: Job? = null
+    private var currentSongEnrichmentJob: Job? = null
     private val imageUrlCache = ConcurrentHashMap<String, String>()
     private val imageUrlMisses = ConcurrentHashMap<String, Long>()
     private val imageUrlLookups = ConcurrentHashMap<String, Deferred<String?>>()
@@ -492,10 +495,11 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         _errorMessage.value = null
         saveCurrentPlaybackState()
+        currentSongEnrichmentJob?.cancel()
         _currentSong.value = song
         syncQueueCurrentSong(song)
-        val preloadedArtwork = song.artworkUri.toString()
-            .takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() && it.startsWith("http") }
+        val requestedSongKey = songIdentityKey(song)
+        val preloadedArtwork = song.artworkUri.toString().takeIf { it.isUsableArtworkUri() }
         _currentAlbumArt.value = preloadedArtwork
 
         val cacheFactory = getCacheDataSourceFactory(getApplication())
@@ -515,11 +519,15 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         startProgressUpdate()
         updateNotification(song, true)
 
-        viewModelScope.launch(Dispatchers.IO) {
+        currentSongEnrichmentJob = viewModelScope.launch(Dispatchers.IO) {
             val url = preloadedArtwork ?: getSongImageUrl(song)
             val lyrics = settingsManager.localLyrics(song.id) ?: fetchLyrics(song.artist, song.title)
 
             withContext(Dispatchers.Main) {
+                val stillCurrent = _currentSong.value
+                    ?.let { current -> songIdentityKey(current) == requestedSongKey } == true
+                if (!stillCurrent) return@withContext
+
                 _currentAlbumArt.value = url
                 _currentSong.value = _currentSong.value?.copy(lyrics = lyrics)
                 _lyricsLines.value = lyrics?.let { LyricsParser.parseLrc(it) } ?: emptyList()
@@ -2675,10 +2683,18 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
             .forEach { result ->
                 currentCoroutineContext().ensureActive()
                 try {
+                    val cachedVideoId = deezerToYoutubeMap[result.videoId]
+                    if (cachedVideoId != null && hasCachedRemoteStream(cachedVideoId)) {
+                        return@forEach
+                    }
+
                     val ytMatch = YouTube.search("${result.title} ${result.artist} audio")
                         .firstOrNull { it.type == ResultType.SONG }
                         ?: return@forEach
                     deezerToYoutubeMap[result.videoId] = ytMatch.videoId
+                    if (hasCachedRemoteStream(ytMatch.videoId)) {
+                        return@forEach
+                    }
 
                     val streamInfo = StreamInfo.getInfo(
                         ServiceList.YouTube,
@@ -2931,9 +2947,14 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         }
     }
 
+    private fun String?.isUsableArtworkUri(): Boolean {
+        val value = this?.trim() ?: return false
+        return value.isNotBlank() && value != Uri.EMPTY.toString()
+    }
+
     suspend fun getSongImageUrl(song: Song): String? = withContext(Dispatchers.IO) {
         val preloadedArtwork = song.artworkUri.toString()
-            .takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() }
+            .takeIf { it.isUsableArtworkUri() }
         if (preloadedArtwork != null) return@withContext preloadedArtwork
 
         val cacheKey = "song_${songArtworkMetadataKey(song)}"
@@ -3006,11 +3027,27 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
 
         if (url.isNullOrBlank()) {
             imageUrlMisses[cacheKey] = System.currentTimeMillis()
+            trimConcurrentCache(imageUrlMisses, ARTWORK_MISS_CACHE_LIMIT, protectedKey = cacheKey)
         } else {
             imageUrlMisses.remove(cacheKey)
             imageUrlCache[cacheKey] = url
+            trimConcurrentCache(imageUrlCache, ARTWORK_URL_CACHE_LIMIT, protectedKey = cacheKey)
         }
         return url
+    }
+
+    private fun <T> trimConcurrentCache(
+        cache: ConcurrentHashMap<String, T>,
+        maxSize: Int,
+        protectedKey: String
+    ) {
+        val overflow = cache.size - maxSize
+        if (overflow <= 0) return
+        cache.keys
+            .asSequence()
+            .filter { it != protectedKey }
+            .take(overflow)
+            .forEach { key -> cache.remove(key) }
     }
 
     private fun fetchAlbumArt(
@@ -3139,7 +3176,10 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
     }
 
     private fun normalizeArtworkText(value: String?): String {
-        return value.orEmpty()
+        val withoutMarks = Normalizer.normalize(value.orEmpty(), Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+
+        return withoutMarks
             .lowercase()
             .replace(Regex("(?i)\\.(mp3|m4a|wav|flac|ogg)$"), " ")
             .replace("_", " ")
@@ -3382,6 +3422,7 @@ class LibraryViewModels(application: Application) : AndroidViewModel(application
         // Cancelar timer de sueño si existe
         sleepTimerJob?.cancel()
 
+        currentSongEnrichmentJob?.cancel()
         try { getApplication<Application>().unregisterReceiver(notificationReceiver) } catch (e: Exception) {}
         getApplication<Application>().startService(Intent(getApplication(), MusicService::class.java).apply { action = "STOP_SERVICE" })
     }

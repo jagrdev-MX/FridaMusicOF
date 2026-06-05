@@ -1505,7 +1505,8 @@ private fun PlaylistGridCard(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(12.dp)),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(12.dp),
+            requestSizePx = 320
         )
 
         Spacer(Modifier.height(10.dp))
@@ -1587,7 +1588,9 @@ private fun ArtistGridCard(
             model = artwork,
             contentDescription = artist.name,
             modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-            shape = CircleShape
+            shape = CircleShape,
+            contentScale = ContentScale.Crop,
+            requestSizePx = 320
         )
         Spacer(Modifier.height(8.dp))
         Text(
@@ -2303,7 +2306,8 @@ private fun DetailPageShell(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(40.dp)
-                .alpha(0.18f)
+                .alpha(0.18f),
+            requestSizePx = 192
         )
 
         LazyColumn(
@@ -2415,7 +2419,8 @@ private fun DetailCoverPlaceholder(
             model = null,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            shape = RoundedCornerShape(24.dp)
+            shape = RoundedCornerShape(24.dp),
+            requestSizePx = 512
         )
     }
 }
@@ -2466,7 +2471,8 @@ private fun SmartCollectionCover(
                     model = coverModels.first(),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    requestSizePx = 512
                 )
             }
         }
@@ -2487,7 +2493,8 @@ private fun SmartCollectionCover(
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxSize()
+                                    .fillMaxSize(),
+                                requestSizePx = 256
                             )
                         }
                         if (row.size == 1) {
@@ -2530,7 +2537,8 @@ private fun DetailCoverPlaceholderCell(
             model = null,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            shape = RoundedCornerShape(0.dp)
+            shape = RoundedCornerShape(0.dp),
+            requestSizePx = 128
         )
     }
 }
@@ -2567,7 +2575,8 @@ private fun SmartCollectionThumbnail(
                     model = coverModels.first(),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    requestSizePx = 128
                 )
             }
 
@@ -2582,7 +2591,8 @@ private fun SmartCollectionThumbnail(
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier
                                         .weight(1f)
-                                        .fillMaxSize()
+                                        .fillMaxSize(),
+                                    requestSizePx = 96
                                 )
                             }
                             if (row.size == 1) {
@@ -2645,7 +2655,8 @@ private fun DetailSongCover(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
-            shape = shape
+            shape = shape,
+            requestSizePx = 720
         )
     }
 }
@@ -2756,7 +2767,8 @@ private fun ArtistAlbumChip(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                requestSizePx = 320
             )
         }
         Text(
@@ -2836,7 +2848,8 @@ private fun ArtistSongCard(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                requestSizePx = 320
             )
         }
         Text(
@@ -2934,7 +2947,8 @@ private fun RelatedArtistCard(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                shape = CircleShape
+                shape = CircleShape,
+                requestSizePx = 288
             )
         }
         Text(
@@ -3555,7 +3569,8 @@ private fun LibraryAlbumCard(
                 model = imageUrl,
                 contentDescription = album.title,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                requestSizePx = 320
             )
 
             Box(
@@ -3649,7 +3664,8 @@ private fun LibrarySongItem(
                 model = imageUrl,
                 contentDescription = song.title,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                requestSizePx = 128
             )
         }
         Spacer(Modifier.width(16.dp))
@@ -3905,7 +3921,8 @@ private fun HistorySongItem(
                 model = item.artworkUrl,
                 contentDescription = item.title,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                requestSizePx = 128
             )
         }
         Spacer(Modifier.width(16.dp))
@@ -4081,7 +4098,8 @@ private fun ArtistListItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                shape = CircleShape
+                shape = CircleShape,
+                requestSizePx = 128
             )
         }
         Spacer(Modifier.width(16.dp))

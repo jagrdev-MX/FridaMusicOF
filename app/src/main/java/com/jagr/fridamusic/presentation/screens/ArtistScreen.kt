@@ -118,7 +118,8 @@ private fun ArtistHeader(
             contentDescription = stringResource(R.string.artist_image),
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
-            shape = RoundedCornerShape(0.dp)
+            shape = RoundedCornerShape(0.dp),
+            requestSizePx = 720
         )
 
         Box(
@@ -241,7 +242,8 @@ private fun PopularSongItem(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                requestSizePx = 128
             )
         }
 
@@ -303,7 +305,8 @@ private fun ReleaseCard(release: Song, onClick: () -> Unit) {
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
+                requestSizePx = 320
             )
         }
         Spacer(modifier = Modifier.height(12.dp))

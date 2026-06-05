@@ -1,5 +1,6 @@
 package com.jagr.fridamusic.presentation.components
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,41 +34,84 @@ import coil.request.ImageRequest
 import com.jagr.fridamusic.R
 
 @Composable
+fun rememberFridaArtworkRequest(
+    model: Any?,
+    requestSizePx: Int? = null,
+    allowHardware: Boolean = true,
+    crossfadeMillis: Int = 120
+): ImageRequest {
+    val context = LocalContext.current
+    val normalizedModel = remember(model) { normalizedArtworkModel(model) }
+    return remember(context, normalizedModel, requestSizePx, allowHardware, crossfadeMillis) {
+        val builder = ImageRequest.Builder(context)
+            .data(normalizedModel)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .networkCachePolicy(CachePolicy.ENABLED)
+            .allowHardware(allowHardware)
+
+        if (crossfadeMillis > 0) {
+            builder.crossfade(crossfadeMillis)
+        } else {
+            builder.crossfade(false)
+        }
+
+        if (requestSizePx != null) builder.size(requestSizePx)
+        builder.build()
+    }
+}
+
+private fun normalizedArtworkModel(model: Any?): Any {
+    return when (model) {
+        null -> R.drawable.frida_artwork_fallback
+        is Uri -> model.takeUnless { it == Uri.EMPTY || it.isEmptyArtworkUri() }
+            ?: R.drawable.frida_artwork_fallback
+        is String -> model.trim()
+            .takeUnless { it.isBlank() || it == "null" || it.isEmptyArtworkUriString() }
+            ?: R.drawable.frida_artwork_fallback
+        else -> model
+    }
+}
+
+private fun Uri.isEmptyArtworkUri(): Boolean =
+    toString().isEmptyArtworkUriString()
+
+private fun String.isEmptyArtworkUriString(): Boolean =
+    this == Uri.EMPTY.toString() || endsWith("/albumart/0", ignoreCase = true)
+
+@Composable
 fun FridaArtworkImage(
     model: Any?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(14.dp),
     contentScale: ContentScale = ContentScale.Fit,
-    requestSizePx: Int? = null
+    requestSizePx: Int? = null,
+    crossfadeMillis: Int = 120
 ) {
     val fallback = painterResource(R.drawable.frida_artwork_fallback)
-    val context = LocalContext.current
-    val request = remember(model, context, requestSizePx) {
-        val builder = ImageRequest.Builder(context)
-            .data(model ?: R.drawable.frida_artwork_fallback)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .networkCachePolicy(CachePolicy.ENABLED)
-            .crossfade(120)
-        if (requestSizePx != null) builder.size(requestSizePx)
-        builder.build()
-    }
+    val request = rememberFridaArtworkRequest(
+        model = model,
+        requestSizePx = requestSizePx,
+        crossfadeMillis = crossfadeMillis
+    )
 
     Box(
         modifier = modifier
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        AsyncImage(
-            model = request,
-            contentDescription = contentDescription,
-            contentScale = contentScale,
-            modifier = Modifier.fillMaxSize(),
-            placeholder = fallback,
-            error = fallback,
-            fallback = fallback
-        )
+        key(model, requestSizePx, crossfadeMillis) {
+            AsyncImage(
+                model = request,
+                contentDescription = contentDescription,
+                contentScale = contentScale,
+                modifier = Modifier.fillMaxSize(),
+                placeholder = fallback,
+                error = fallback,
+                fallback = fallback
+            )
+        }
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,13 +46,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
@@ -106,9 +108,9 @@ fun MiniPlayer(
         label = "mini-player-glow-end"
     )
 
-    val contentColor = Color.White
-    val mutedContentColor = Color.White.copy(alpha = 0.7f)
-    val accentColor = Color.White
+    val contentColor = artworkPalette.onContainer
+    val mutedContentColor = artworkPalette.onContainerMuted
+    val accentColor = artworkPalette.accent
     val interactionSource = remember { MutableInteractionSource() }
 
     var swipeOffset by remember { mutableFloatStateOf(0f) }
@@ -238,14 +240,22 @@ private fun MiniPlayerBackdrop(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Transparent)
+            .background(containerColor)
     ) {
         if (showArtworkGlow) {
-            if (albumArtUrl != null) {
-                SubcomposeAsyncImage(
-                    model = albumArtUrl,
+            val fallback = painterResource(R.drawable.frida_artwork_fallback)
+            key(albumArtUrl) {
+                AsyncImage(
+                    model = rememberFridaArtworkRequest(
+                        model = albumArtUrl,
+                        requestSizePx = 96,
+                        crossfadeMillis = 0
+                    ),
                     contentDescription = null,
-                    contentScale = ContentScale.Fit,
+                    placeholder = fallback,
+                    error = fallback,
+                    fallback = fallback,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
@@ -312,7 +322,10 @@ private fun AlbumArtThumb(
             model = albumArtUrl,
             contentDescription = stringResource(R.string.album_art),
             modifier = Modifier.fillMaxSize(),
-            shape = RoundedCornerShape(8.dp)
+            shape = RoundedCornerShape(8.dp),
+            contentScale = ContentScale.Crop,
+            requestSizePx = 96,
+            crossfadeMillis = 0
         )
     }
 }

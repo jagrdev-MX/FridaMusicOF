@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.ads.AdManager
@@ -54,6 +53,7 @@ import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
+import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
 import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
@@ -107,6 +107,8 @@ fun NowPlayingScreen(
     val shouldApplyBlur = enableBlur && supportsNativeBlur
 
     val artworkPalette by rememberMiniPlayerArtworkPalette(albumArtUrl)
+    val blurArtworkRequest = rememberFridaArtworkRequest(albumArtUrl, requestSizePx = 128)
+    val ambienceArtworkRequest = rememberFridaArtworkRequest(albumArtUrl, requestSizePx = 192)
     val immersiveDarkGradient = remember(artworkPalette) {
         Brush.verticalGradient(
             colors = listOf(
@@ -178,11 +180,7 @@ fun NowPlayingScreen(
     ) {
         if (shouldApplyBlur && albumArtUrl != null) {
             AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(albumArtUrl)
-                    .size(100)
-                    .allowHardware(true)
-                    .build(),
+                model = blurArtworkRequest,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -194,11 +192,7 @@ fun NowPlayingScreen(
         } else if (!shouldApplyBlur) {
             if (albumArtUrl != null) {
                 AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(albumArtUrl)
-                        .size(128)
-                        .allowHardware(true)
-                        .build(),
+                    model = ambienceArtworkRequest,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -426,7 +420,8 @@ private fun AlbumArtOrAdSection(
                 contentDescription = stringResource(R.string.album_art),
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(32.dp),
-                contentScale = ContentScale.Fit
+                contentScale = ContentScale.Fit,
+                requestSizePx = 720
             )
         }
 
@@ -1021,7 +1016,8 @@ private fun QueueSongRow(
                 contentDescription = null,
                 modifier = Modifier.size(46.dp),
                 shape = RoundedCornerShape(10.dp),
-                contentScale = ContentScale.Fit
+                contentScale = ContentScale.Fit,
+                requestSizePx = 96
             )
             if (isCurrent) {
                 Box(

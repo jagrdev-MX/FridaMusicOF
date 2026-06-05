@@ -1,5 +1,6 @@
 package com.jagr.fridamusic.presentation.components
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -13,11 +14,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.ColorUtils
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.jagr.fridamusic.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import java.util.concurrent.ConcurrentHashMap
+
+private const val MINI_PLAYER_PALETTE_CACHE_LIMIT = 48
+private val miniPlayerPaletteCache = ConcurrentHashMap<String, MiniPlayerArtworkPalette>()
 
 internal data class MiniPlayerArtworkPalette(
     val container: Color,
@@ -42,30 +49,76 @@ internal fun rememberMiniPlayerArtworkPalette(albumArtUrl: String?): State<MiniP
         key2 = darkTheme
     ) {
         value = fallback
-        val normalizedUrl = albumArtUrl?.takeIf { it.isNotBlank() } ?: return@produceState
+        val normalizedModel: Any = albumArtUrl?.takeIf { it.isNotBlank() } ?: R.drawable.frida_artwork_fallback
+        val cacheKey = "${if (darkTheme) "dark" else "light"}|$normalizedModel"
+        miniPlayerPaletteCache[cacheKey]?.let { cached ->
+            value = cached
+            return@produceState
+        }
 
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val request = ImageRequest.Builder(context)
-                    .data(normalizedUrl)
-                    .allowHardware(false)
-                    .size(96)
-                    .build()
-                val result = context.imageLoader.execute(request)
-                val drawable = (result as? SuccessResult)?.drawable ?: return@runCatching fallback
-                val bitmap = drawable.toBitmap(
-                    width = 40,
-                    height = 40
-                )
-                extractMiniPlayerArtworkPalette(
-                    bitmap = bitmap,
+        val resolvedPalette = withContext(Dispatchers.IO) {
+            val fromPrimary = loadMiniPlayerPalette(
+                context = context,
+                model = normalizedModel,
+                darkTheme = darkTheme,
+                fallback = fallback
+            )
+            if (fromPrimary.fromArtwork || normalizedModel == R.drawable.frida_artwork_fallback) {
+                fromPrimary
+            } else {
+                loadMiniPlayerPalette(
+                    context = context,
+                    model = R.drawable.frida_artwork_fallback,
                     darkTheme = darkTheme,
                     fallback = fallback
                 )
             }
-                .getOrElse { fallback }
+        }
+        value = resolvedPalette
+        if (resolvedPalette.fromArtwork) {
+            miniPlayerPaletteCache[cacheKey] = resolvedPalette
+            trimMiniPlayerPaletteCache(protectedKey = cacheKey)
         }
     }
+}
+
+private suspend fun loadMiniPlayerPalette(
+    context: Context,
+    model: Any,
+    darkTheme: Boolean,
+    fallback: MiniPlayerArtworkPalette
+): MiniPlayerArtworkPalette {
+    return runCatching {
+        val request = ImageRequest.Builder(context)
+            .data(model)
+            .allowHardware(false)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .networkCachePolicy(CachePolicy.ENABLED)
+            .size(96)
+            .build()
+        val result = context.imageLoader.execute(request)
+        val drawable = (result as? SuccessResult)?.drawable ?: return@runCatching fallback
+        val bitmap = drawable.toBitmap(
+            width = 40,
+            height = 40
+        )
+        extractMiniPlayerArtworkPalette(
+            bitmap = bitmap,
+            darkTheme = darkTheme,
+            fallback = fallback
+        )
+    }.getOrElse { fallback }
+}
+
+private fun trimMiniPlayerPaletteCache(protectedKey: String) {
+    val overflow = miniPlayerPaletteCache.size - MINI_PLAYER_PALETTE_CACHE_LIMIT
+    if (overflow <= 0) return
+    miniPlayerPaletteCache.keys
+        .asSequence()
+        .filter { it != protectedKey }
+        .take(overflow)
+        .forEach { key -> miniPlayerPaletteCache.remove(key) }
 }
 
 @Composable

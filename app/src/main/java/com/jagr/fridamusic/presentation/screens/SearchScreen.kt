@@ -1444,7 +1444,8 @@ private fun SearchArtworkBox(
             contentDescription = null,
             contentScale = ContentScale.Fit,
             shape = shape,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            requestSizePx = 128
         )
     }
 }

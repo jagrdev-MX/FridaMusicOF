@@ -19,6 +19,7 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import coil.imageLoader
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
@@ -165,6 +166,10 @@ class MusicService : Service(), AudioManager.OnAudioFocusChangeListener {
                         val request = ImageRequest.Builder(this@MusicService)
                             .data(albumArtUrl)
                             .size(320)
+                            .allowHardware(false)
+                            .memoryCachePolicy(CachePolicy.ENABLED)
+                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .networkCachePolicy(CachePolicy.ENABLED)
                             .build()
                         val result = this@MusicService.imageLoader.execute(request)
                         (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap

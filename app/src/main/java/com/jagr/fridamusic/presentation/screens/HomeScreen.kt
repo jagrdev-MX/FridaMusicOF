@@ -285,7 +285,8 @@ private fun HomeArtistCarousel(
                         contentDescription = song.artist,
                         modifier = Modifier.size(84.dp),
                         shape = CircleShape,
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        requestSizePx = 180
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -317,7 +318,8 @@ private fun HomeMediaCard(
                 model = artwork,
                 contentDescription = song.title,
                 modifier = Modifier.size(146.dp),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(18.dp),
+                requestSizePx = 320
             )
             Box(
                 modifier = Modifier
@@ -440,7 +442,8 @@ private fun RecentlyPlayedSection(
                     contentDescription = mainSong.title,
                     modifier = Modifier.fillMaxSize(),
                     shape = RoundedCornerShape(20.dp),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    requestSizePx = 640
                 )
 
                 Box(
@@ -553,7 +556,9 @@ private fun SmallTile(
                 model = imageUrl,
                 contentDescription = history.title,
                 modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                contentScale = ContentScale.Crop,
+                requestSizePx = 96
             )
         }
         Spacer(modifier = Modifier.width(12.dp))
@@ -642,7 +647,8 @@ private fun ArtistItem(
                     contentDescription = artist.name,
                     modifier = Modifier.fillMaxSize(),
                     shape = CircleShape,
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    requestSizePx = 180
                 )
             }
         }
