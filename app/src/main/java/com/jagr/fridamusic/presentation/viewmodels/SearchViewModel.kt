@@ -25,7 +25,7 @@ class SearchViewModel @Inject constructor(
 
     private val searchCache = ConcurrentHashMap<String, List<YouTubeResult>>()
     private val searchCacheAtMs = ConcurrentHashMap<String, Long>()
-    private val CACHE_EXPIRY_MS = 1000 * 60 * 10 // 10 minutes
+    private val CACHE_EXPIRY_MS = 1000 * 60 * 10
 
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
     val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
@@ -45,7 +45,6 @@ class SearchViewModel @Inject constructor(
             return
         }
 
-        // 1. Instant Cache Check
         val cached = getCachedResults(trimmed)
         if (cached != null) {
             _youtubeSearchResults.value = cached
@@ -56,7 +55,6 @@ class SearchViewModel @Inject constructor(
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            // 2. Debounce: wait for user to stop typing (300ms)
             delay(300)
             
             _isSearching.value = true
@@ -65,7 +63,6 @@ class SearchViewModel @Inject constructor(
                     YouTube.search(trimmed)
                 }
                 
-                // 3. Update flows and Cache
                 if (results.isNotEmpty()) {
                     putInCache(trimmed, results)
                 }

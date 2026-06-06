@@ -96,7 +96,6 @@ class PlaybackViewModel @Inject constructor(
             ContextCompat.getMainExecutor(application)
         )
         
-        // Restore queue state
         val savedJson = settingsManager.playbackQueueJson
         if (savedJson.isNotBlank()) {
             restoreQueueState(savedJson)?.let { restored ->
@@ -233,7 +232,6 @@ class PlaybackViewModel @Inject constructor(
             }
         }
         
-        // Update queue state immediately for UI responsiveness
         val startIndex = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
         val currentItem = QueueItem(song, source, reason = sourceName)
         val previousItems = if (queue.isNotEmpty()) {
@@ -247,7 +245,6 @@ class PlaybackViewModel @Inject constructor(
             oldState.upNext
         }
         
-        // Preserve autoplay if we're just playing the next item from it or it's a navigational move
         val isNavigational = source == QueueSource.AUTOPLAY || source == QueueSource.USER || source == QueueSource.RESTORED
         val autoplayItems = if (isNavigational) {
             oldState.autoplay
@@ -384,7 +381,6 @@ class PlaybackViewModel @Inject constructor(
                 playSong(next.song, source = QueueSource.AUTOPLAY, sourceName = next.reason)
             }
             _repeatMode.value == RepeatMode.ALL && (state.previous.isNotEmpty() || state.current != null) -> {
-                // Loop back to start of manual queue
                 val fullQueue = state.previous + (state.current?.let { listOf(it) } ?: emptyList()) + state.upNext
                 if (fullQueue.isNotEmpty()) {
                     val first = fullQueue.first()
@@ -614,14 +610,11 @@ class PlaybackViewModel @Inject constructor(
         val seed = _currentSong.value ?: return
         val state = _queueState.value
         
-        // Threshold to start fetching more songs (e.g. when 4 items remain)
         val threshold = AUTOPLAY_FAST_READY_SIZE / 2
         
-        // Don't refresh if we have enough items AND we are in an autoplay-derivate session
         val isNavigational = state.source == QueueSource.AUTOPLAY || state.source == QueueSource.USER || state.source == QueueSource.RESTORED
         if (!force && state.autoplay.size >= threshold && isNavigational) return
         
-        // Update anchor only when playing a brand new song (from Search, Library, etc.)
         if (!isNavigational || autoplayAnchorSong == null) {
             autoplayAnchorSong = seed
         }
@@ -630,7 +623,6 @@ class PlaybackViewModel @Inject constructor(
         recommendationJob?.cancel()
         recommendationJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Only show loading if we have ABSOLUTELY no autoplay items
                 if (state.autoplay.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         _queueState.value = _queueState.value.copy(isAutoplayLoading = true, autoplayError = null)
@@ -651,12 +643,10 @@ class PlaybackViewModel @Inject constructor(
                 
                 withContext(Dispatchers.Main) {
                     val currentState = _queueState.value
-                    // Append new recommendations to the existing ones
-                    // The repository already excludes songs in currentState.autoplay
                     val updatedAutoplay = currentState.autoplay + recommendations
                     
                     _queueState.value = currentState.copy(
-                        autoplay = updatedAutoplay.take(20), // Cap at 20 to avoid infinite growth
+                        autoplay = updatedAutoplay.take(20),
                         isAutoplayLoading = false,
                         autoplayError = if (updatedAutoplay.isEmpty()) "No recommendations found" else null
                     )
