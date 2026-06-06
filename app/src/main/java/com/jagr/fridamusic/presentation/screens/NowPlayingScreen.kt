@@ -3,6 +3,7 @@ package com.jagr.fridamusic.presentation.screens
 import android.content.Context
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -47,16 +48,13 @@ import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
-import com.jagr.fridamusic.domain.model.QueueItem
-import com.jagr.fridamusic.domain.model.QueueSource
-import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.domain.model.*
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
 import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
 import com.jagr.fridamusic.presentation.theme.*
-import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
-import com.jagr.fridamusic.presentation.viewmodels.RepeatMode
+import com.jagr.fridamusic.presentation.viewmodels.*
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -67,7 +65,7 @@ fun NowPlayingScreen(
     isPlaying: Boolean,
     currentPosition: () -> Long,
     albumArtUrl: String?,
-    repeatMode: RepeatMode,
+    repeatMode: com.jagr.fridamusic.domain.model.RepeatMode,
     isShuffleMode: Boolean,
     lyricsLines: List<LyricsLine>,
     onPlayPause: () -> Unit,
@@ -77,7 +75,9 @@ fun NowPlayingScreen(
     onToggleRepeat: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCollapse: () -> Unit,
-    viewModel: LibraryViewModels
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
+    settingsViewModel: SettingsViewModel
 ) {
     val context = LocalContext.current
     val adManager = remember { AdManager.getInstance(context) }
@@ -96,19 +96,19 @@ fun NowPlayingScreen(
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
     val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
-    val totalDuration by viewModel.duration.collectAsState()
+    val totalDuration by playbackViewModel.duration.collectAsState()
+    val enableBlur by settingsViewModel.enableBlurEffect.collectAsState()
+    val queueState by playbackViewModel.queueState.collectAsState()
+    val isAutoplayEnabled by settingsViewModel.isAutoPlayEnabled.collectAsState()
     val dismissAdForPlaybackOverlay: () -> Unit = {
         showAd = false
         adExplicitlyClosed = true
     }
 
-    val enableBlur by viewModel.enableBlurEffect.collectAsState()
     val supportsNativeBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val shouldApplyBlur = enableBlur && supportsNativeBlur
 
     val artworkPalette by rememberMiniPlayerArtworkPalette(albumArtUrl)
-    val blurArtworkRequest = rememberFridaArtworkRequest(albumArtUrl, requestSizePx = 128)
-    val ambienceArtworkRequest = rememberFridaArtworkRequest(albumArtUrl, requestSizePx = 192)
     val immersiveDarkGradient = remember(artworkPalette) {
         Brush.verticalGradient(
             colors = listOf(
@@ -151,7 +151,7 @@ fun NowPlayingScreen(
         modifier = Modifier
             .fillMaxSize()
             .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
-            .background(Color.Black) // Fondo base negro sólido para evitar transparencias
+            .background(Color.Black) 
             .background(
                 if (shouldApplyBlur) SolidColor(Color(0xFF121212)) else immersiveDarkGradient
             )
@@ -178,111 +178,200 @@ fun NowPlayingScreen(
                 onClick = {}
             )
     ) {
-        if (shouldApplyBlur && albumArtUrl != null) {
-            AsyncImage(
-                model = blurArtworkRequest,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(80.dp)
-                    .alpha(0.65f)
-            )
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
-        } else if (!shouldApplyBlur) {
-            if (albumArtUrl != null) {
-                AsyncImage(
-                    model = ambienceArtworkRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blur(100.dp)
-                        .alpha(0.25f)
-                )
-            }
-            FridaArtworkImage(
-                model = albumArtUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                requestSizePx = 192,
-                modifier = Modifier.fillMaxSize().alpha(0.12f)
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 28.dp)
         ) {
-            NowPlayingTopBar(
-                isYouTube = isYouTube,
-                onCollapse = onCollapse,
-                onMore = { if (currentSong != null) showCurrentSongActions = true }
-            )
-
-            AlbumArtOrAdSection(
-                albumArtUrl = albumArtUrl,
-                showAd = showAd,
-                adExplicitlyClosed = adExplicitlyClosed,
-                onCloseAd = { showAd = false; adExplicitlyClosed = true },
-                onAdFailed = { showAd = false },
-                modifier = Modifier.fillMaxWidth().weight(1f).aspectRatio(1f)
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            SongInfoSection(
-                currentSong = currentSong,
-                isLiked = isLiked,
-                onToggleLike = onToggleLike
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            SeekBarSection(
-                totalDuration = totalDuration,
-                currentPosition = currentPosition,
-                onSeek = onSeek
-            )
-
-            PlayerControlsSection(
-                isPlaying = isPlaying,
-                repeatMode = repeatMode,
-                isShuffleMode = isShuffleMode,
-                onPlayPause = onPlayPause,
-                onNext = onNext,
-                onPrevious = onPrevious,
-                onToggleRepeat = onToggleRepeat,
-                onToggleShuffle = onToggleShuffle,
-                accentColor = artworkPalette.accent
-            )
-
-            BottomActionsSection(
-                hasAnyLyrics = hasAnyLyrics,
-                onOpenQueue = {
-                    dismissAdForPlaybackOverlay()
-                    showQueueSheet = true
-                },
-                onOpenLyrics = {
-                    dismissAdForPlaybackOverlay()
-                    showLyricsSheet = true
-                },
-                onOpenInfo = {
-                    dismissAdForPlaybackOverlay()
-                    showInfoSheet = true
+            Spacer(modifier = Modifier.height(20.dp))
+            
+            // Top Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onCollapse) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.minimize), tint = Color.White)
                 }
+                
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = if (isYouTube) stringResource(R.string.from_youtube_music) else stringResource(R.string.local_audio_player),
+                        style = LiquidTypography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                }
+                
+                IconButton(onClick = { showCurrentSongActions = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = Color.White)
+                }
+            }
+            
+            Spacer(modifier = Modifier.weight(0.15f))
+            
+            // Artwork
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+            ) {
+                FridaArtworkImage(
+                    model = albumArtUrl,
+                    contentDescription = stringResource(R.string.album_art),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            
+            Spacer(modifier = Modifier.weight(0.15f))
+            
+            // Title & Artist
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = currentSong?.title ?: stringResource(R.string.no_song_playing),
+                        style = LiquidTypography.headlineSmall,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = currentSong?.artist ?: stringResource(R.string.unknown_artist),
+                        style = LiquidTypography.titleMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                
+                IconButton(onClick = onToggleLike) {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = stringResource(R.string.like),
+                        tint = if (isLiked) MaterialTheme.colorScheme.primary else Color.White
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Progress Bar
+            val position = currentPosition()
+            val progress = if (totalDuration > 0) position.toFloat() / totalDuration else 0f
+            
+            Slider(
+                value = progress,
+                onValueChange = { onSeek((it * totalDuration).toLong()) },
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Color.White,
+                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                ),
+                modifier = Modifier.fillMaxWidth()
             )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = formatDuration(position),
+                    style = LiquidTypography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = formatDuration(totalDuration),
+                    style = LiquidTypography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+            }
+            
+            Spacer(modifier = Modifier.weight(0.2f))
+            
+            // Controls
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onToggleShuffle) {
+                    Icon(
+                        Icons.Default.Shuffle, 
+                        contentDescription = stringResource(R.string.shuffle),
+                        tint = if (isShuffleMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                    )
+                }
+                
+                IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = Color.White, modifier = Modifier.size(32.dp))
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .clickable { onPlayPause() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
+                        tint = Color.Black,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+                
+                IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next), tint = Color.White, modifier = Modifier.size(32.dp))
+                }
+                
+                IconButton(onClick = onToggleRepeat) {
+                    Icon(
+                        imageVector = when (repeatMode) {
+                            com.jagr.fridamusic.domain.model.RepeatMode.ALL -> Icons.Default.Repeat
+                            com.jagr.fridamusic.domain.model.RepeatMode.ONE -> Icons.Default.RepeatOne
+                            else -> Icons.Default.Repeat
+                        },
+                        contentDescription = stringResource(R.string.repeat),
+                        tint = if (repeatMode != com.jagr.fridamusic.domain.model.RepeatMode.OFF) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.weight(0.2f))
+            
+            // Bottom Bar
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { showLyricsSheet = true }) {
+                    Icon(Icons.Default.Lyrics, contentDescription = null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.lyrics), color = Color.White.copy(alpha = 0.6f))
+                }
+                
+                IconButton(onClick = { showQueueSheet = true }) {
+                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = stringResource(R.string.queue), tint = Color.White.copy(alpha = 0.6f))
+                }
+            }
         }
-
+        
         if (showQueueSheet) {
             QueueBottomSheet(
                 currentSong = currentSong,
                 albumArtUrl = albumArtUrl,
                 sheetState = sheetState,
                 viewModel = viewModel,
+                playbackViewModel = playbackViewModel,
+                settingsViewModel = settingsViewModel,
                 onDismiss = { showQueueSheet = false }
             )
         }
@@ -317,13 +406,10 @@ fun NowPlayingScreen(
                     isLiked = isLiked,
                     viewModel = viewModel,
                     onDismiss = { showCurrentSongActions = false },
-                    onToggleLike = { song ->
+                    onToggleLike = { onToggleLike() },
+                    onPickPlaylist = {
                         showCurrentSongActions = false
-                        viewModel.toggleLike(song)
-                    },
-                    onPickPlaylist = { song ->
-                        showCurrentSongActions = false
-                        playlistPickerSong = song
+                        playlistPickerSong = it
                     },
                     onOpenInfo = {
                         showCurrentSongActions = false
@@ -351,316 +437,19 @@ fun NowPlayingScreen(
     }
 }
 
-@Composable
-private fun NowPlayingTopBar(isYouTube: Boolean, onCollapse: () -> Unit, onMore: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 32.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onCollapse) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.minimize), tint = Color.White)
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = stringResource(R.string.now_playing),
-                style = LiquidTypography.labelSmall,
-                color = Color.White.copy(alpha = 0.7f),
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp
-            )
-            if (isYouTube) {
-                Text(
-                    text = stringResource(R.string.from_youtube_music),
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.5.sp,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-        }
-        IconButton(onClick = onMore) {
-            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = Color.White)
-        }
-    }
-}
-
-@Composable
-private fun AlbumArtOrAdSection(
-    albumArtUrl: String?,
-    showAd: Boolean,
-    adExplicitlyClosed: Boolean,
-    onCloseAd: () -> Unit,
-    onAdFailed: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(modifier = modifier) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(32.dp))
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color.White.copy(alpha = 0.05f))
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        listOf(Color.White.copy(alpha = 0.2f), Color.Transparent)
-                    ),
-                    shape = RoundedCornerShape(32.dp)
-                )
-        ) {
-            FridaArtworkImage(
-                model = albumArtUrl,
-                contentDescription = stringResource(R.string.album_art),
-                modifier = Modifier.fillMaxSize(),
-                shape = RoundedCornerShape(32.dp),
-                contentScale = ContentScale.Fit,
-                requestSizePx = 720
-            )
-        }
-
-        if (showAd && !adExplicitlyClosed) {
-            SpotifyNativeAd(
-                modifier = Modifier.fillMaxSize(),
-                onClose = onCloseAd,
-                onAdFailed = onAdFailed
-            )
-        }
-    }
-}
-
-@Composable
-private fun SongInfoSection(currentSong: Song?, isLiked: Boolean, onToggleLike: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(
-                text = currentSong?.title ?: stringResource(R.string.no_song_playing),
-                style = LiquidTypography.headlineMedium,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = currentSong?.artist ?: stringResource(R.string.unknown_artist),
-                style = LiquidTypography.bodyLarge,
-                color = Color.White.copy(alpha = 0.7f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        IconButton(onClick = onToggleLike) {
-            Icon(
-                imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = stringResource(R.string.like),
-                tint = if (isLiked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(28.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SeekBarSection(totalDuration: Long, currentPosition: () -> Long, onSeek: (Long) -> Unit) {
-    var sliderPosition by remember { mutableStateOf<Float?>(null) }
-    val currentProgress by remember(totalDuration) {
-        derivedStateOf { if (totalDuration > 0) currentPosition().toFloat() / totalDuration.toFloat() else 0f }
-    }
-    val displayProgress = sliderPosition ?: currentProgress
-
-    fun formatTime(ms: Long): String {
-        val totalSeconds = ms / 1000
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        return String.format(java.util.Locale.getDefault(), "%d:%02d", minutes, seconds)
-    }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(modifier = Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
-            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
-                Box(modifier = Modifier.fillMaxWidth(displayProgress.coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Color.White))
-            }
-            Slider(
-                value = displayProgress,
-                onValueChange = { sliderPosition = it },
-                onValueChangeFinished = { sliderPosition?.let { onSeek((it * totalDuration).toLong()) }; sliderPosition = null },
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.Transparent,
-                    inactiveTrackColor = Color.Transparent
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            val displayTime = (displayProgress * totalDuration).toLong()
-            Text(text = formatTime(displayTime), style = LiquidTypography.labelSmall, color = Color.White.copy(alpha = 0.7f))
-            Text(text = "-${formatTime(maxOf(0L, totalDuration - displayTime))}", style = LiquidTypography.labelSmall, color = Color.White.copy(alpha = 0.7f))
-        }
-    }
-}
-
-@Composable
-private fun PlayerControlsSection(
-    isPlaying: Boolean,
-    repeatMode: RepeatMode,
-    isShuffleMode: Boolean,
-    onPlayPause: () -> Unit,
-    onNext: () -> Unit,
-    onPrevious: () -> Unit,
-    onToggleRepeat: () -> Unit,
-    onToggleShuffle: () -> Unit,
-    accentColor: Color
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onToggleShuffle) {
-            Icon(
-                Icons.Default.Shuffle,
-                contentDescription = stringResource(R.string.shuffle),
-                tint = if (isShuffleMode) accentColor else Color.White.copy(alpha = 0.5f),
-                modifier = Modifier.size(28.dp)
-            )
-        }
-        IconButton(onClick = onPrevious) { Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = Color.White, modifier = Modifier.size(36.dp)) }
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.1f))
-                .clickable(onClick = onPlayPause),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
-        IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next), tint = Color.White, modifier = Modifier.size(36.dp)) }
-
-        val repeatIcon = if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
-        val repeatTint = if (repeatMode == RepeatMode.OFF) Color.White.copy(alpha = 0.5f) else accentColor
-        IconButton(onClick = onToggleRepeat) { Icon(repeatIcon, contentDescription = stringResource(R.string.repeat), tint = repeatTint, modifier = Modifier.size(28.dp)) }
-    }
-}
-
-@Composable
-private fun BottomActionsSection(hasAnyLyrics: Boolean, onOpenQueue: () -> Unit, onOpenLyrics: () -> Unit, onOpenInfo: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onOpenQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null, tint = Color.White.copy(alpha = 0.8f)) }
-        IconButton(onClick = onOpenLyrics) { Icon(Icons.Default.Lyrics, null, tint = if (hasAnyLyrics) Color.White.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.3f)) }
-        IconButton(onClick = onOpenInfo) { Icon(Icons.Default.Info, null, tint = Color.White.copy(alpha = 0.8f)) }
-    }
-}
-
-@Composable
-private fun CurrentSongActionsSheet(
-    song: Song,
-    isLiked: Boolean,
-    viewModel: LibraryViewModels,
-    onDismiss: () -> Unit,
-    onToggleLike: (Song) -> Unit,
-    onPickPlaylist: (Song) -> Unit,
-    onOpenInfo: () -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val actions = listOf(
-        QueueActionSpec(
-            if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-            if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like)
-        ) {
-            onToggleLike(song)
-        },
-        QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
-            onPickPlaylist(song)
-        },
-        QueueActionSpec(
-            Icons.Default.Share,
-            stringResource(if (song.hasLocalAudioToShare()) R.string.share_audio_file else R.string.share_song_link)
-        ) {
-            onDismiss()
-            scope.launch {
-                val fallbackUrl = if (song.hasLocalAudioToShare()) null else viewModel.resolveShareUrl(song)
-                shareQueueSong(context, song, fallbackUrl)
-            }
-        },
-        QueueActionSpec(Icons.Default.Info, stringResource(R.string.song_info)) {
-            onOpenInfo()
-        }
-    )
-
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(song.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
-            }
-        }
-        actions.forEach { action ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClick = action.onClick)
-                    .padding(horizontal = 12.dp, vertical = 13.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val color = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                Icon(action.icon, contentDescription = null, tint = color)
-                Spacer(modifier = Modifier.width(14.dp))
-                Text(action.label, color = color, fontWeight = FontWeight.Medium)
-            }
-        }
-        Spacer(modifier = Modifier.height(18.dp))
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QueueBottomSheet(
     currentSong: Song?,
     albumArtUrl: String?,
     sheetState: SheetState,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
+    settingsViewModel: SettingsViewModel,
     onDismiss: () -> Unit
 ) {
-    val queueState by viewModel.queueState.collectAsState()
-    val isAutoplayEnabled by viewModel.isAutoPlayEnabled.collectAsState()
+    val queueState by playbackViewModel.queueState.collectAsState()
+    val isAutoplayEnabled by settingsViewModel.isAutoPlayEnabled.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
     var actionTarget by remember { mutableStateOf<QueueActionTarget?>(null) }
     var playlistPickerSong by remember { mutableStateOf<Song?>(null) }
@@ -668,22 +457,14 @@ private fun QueueBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = null
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .navigationBarsPadding()
-                .padding(horizontal = 18.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
@@ -696,13 +477,13 @@ private fun QueueBottomSheet(
                         isEnabled = isAutoplayEnabled,
                         isLoading = queueState.isAutoplayLoading,
                         suggestionCount = queueState.autoplay.size,
-                        onToggle = viewModel::toggleAutoplay
+                        onToggle = { settingsViewModel.toggleAutoplay(it) }
                     )
                 }
                 if (queueState.upNext.isNotEmpty() || queueState.autoplay.isNotEmpty()) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         val clearLabel = if (queueState.upNext.isNotEmpty()) R.string.clear_queue else R.string.remove_suggestions
-                        TextButton(onClick = viewModel::clearManualQueue) {
+                        TextButton(onClick = { playbackViewModel.clearManualQueue() }) {
                             Text(stringResource(clearLabel))
                         }
                     }
@@ -719,8 +500,7 @@ private fun QueueBottomSheet(
                     val previousOffset = (queueState.previous.size - 6).coerceAtLeast(0)
                     itemsIndexed(
                         items = queueState.previous.takeLast(6),
-                        key = { index, item -> "previous_${previousOffset + index}_${item.song.id}" },
-                        contentType = { _, _ -> "queue_song_row" }
+                        key = { index, item -> "previous_${previousOffset + index}_${item.song.id}" }
                     ) { index, item ->
                         val realIndex = previousOffset + index
                         QueueSongRow(
@@ -728,7 +508,7 @@ private fun QueueBottomSheet(
                             imageUrl = queueArtworkUrl(item.song, null),
                             isCurrent = false,
                             isMuted = true,
-                            onClick = { viewModel.replayPrevious(realIndex) },
+                            onClick = { playbackViewModel.replayPrevious(realIndex) },
                             onMore = { actionTarget = QueueActionTarget(item, QueueSection.PREVIOUS, realIndex, queueState.previous.size) }
                         )
                     }
@@ -762,15 +542,14 @@ private fun QueueBottomSheet(
                 } else {
                     itemsIndexed(
                         items = queueState.upNext,
-                        key = { index, item -> "next_${index}_${item.song.id}" },
-                        contentType = { _, _ -> "queue_song_row" }
+                        key = { index, item -> "next_${index}_${item.song.id}" }
                     ) { index, item ->
                         QueueSongRow(
                             item = item,
                             imageUrl = queueArtworkUrl(item.song, null),
                             isCurrent = false,
                             isMuted = false,
-                            onClick = { viewModel.playUpNext(index) },
+                            onClick = { playbackViewModel.playUpNext(index) },
                             onMore = { actionTarget = QueueActionTarget(item, QueueSection.UP_NEXT, index, queueState.upNext.size) }
                         )
                     }
@@ -793,15 +572,14 @@ private fun QueueBottomSheet(
                     else -> {
                         itemsIndexed(
                             items = queueState.autoplay,
-                            key = { index, item -> "autoplay_${index}_${item.song.id}" },
-                            contentType = { _, _ -> "queue_song_row" }
+                            key = { index, item -> "autoplay_${index}_${item.song.id}" }
                         ) { index, item ->
                             QueueSongRow(
                                 item = item,
                                 imageUrl = queueArtworkUrl(item.song, null),
                                 isCurrent = false,
                                 isMuted = false,
-                                onClick = { viewModel.playAutoplayItem(index) },
+                                onClick = { playbackViewModel.playSong(item.song) },
                                 onMore = { actionTarget = QueueActionTarget(item, QueueSection.AUTOPLAY, index, queueState.autoplay.size) }
                             )
                         }
@@ -819,6 +597,7 @@ private fun QueueBottomSheet(
             QueueActionsSheet(
                 target = target,
                 viewModel = viewModel,
+                playbackViewModel = playbackViewModel,
                 onDismiss = { actionTarget = null },
                 onPickPlaylist = { song ->
                     actionTarget = null
@@ -862,14 +641,12 @@ private data class QueueActionSpec(
 )
 
 @Composable
-private fun QueueSectionTitle(text: String) {
+private fun QueueSectionTitle(title: String) {
     Text(
-        text = text,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.sp,
-        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+        text = title,
+        style = LiquidTypography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
     )
 }
 
@@ -880,109 +657,29 @@ private fun SmartAutoplayControl(
     suggestionCount: Int,
     onToggle: (Boolean) -> Unit
 ) {
-    val haptics = LocalHapticFeedback.current
-    val containerColor by animateColorAsState(
-        targetValue = if (isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.20f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f),
-        animationSpec = tween(durationMillis = 220),
-        label = "autoplayContainer"
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.46f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-        animationSpec = tween(durationMillis = 220),
-        label = "autoplayBorder"
-    )
-    val iconColor by animateColorAsState(
-        targetValue = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(durationMillis = 220),
-        label = "autoplayIcon"
-    )
-    val auraAlpha by animateFloatAsState(
-        targetValue = if (isEnabled) 0.26f else 0.06f,
-        animationSpec = tween(durationMillis = 260),
-        label = "autoplayAura"
-    )
-    val knobOffset by animateDpAsState(
-        targetValue = if (isEnabled) 15.dp else 0.dp,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "autoplayKnob"
-    )
-    val label = when {
-        isLoading -> stringResource(R.string.smart_autoplay_loading)
-        isEnabled -> stringResource(R.string.suggestions_on)
-        else -> stringResource(R.string.smart_autoplay)
-    }
-
-    Box(
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .widthIn(min = 138.dp, max = 196.dp)
-            .clip(RoundedCornerShape(50))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = auraAlpha),
-                        MaterialTheme.colorScheme.secondary.copy(alpha = auraAlpha * 0.72f),
-                        containerColor
-                    )
-                )
-            )
-            .border(1.dp, borderColor, RoundedCornerShape(50))
-            .clickable {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onToggle(!isEnabled)
-            }
-            .padding(start = 12.dp, end = 9.dp, top = 8.dp, bottom = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .clickable { onToggle(!isEnabled) }
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(
-                Icons.Default.AllInclusive,
-                contentDescription = label,
-                tint = iconColor,
-                modifier = Modifier.size(17.dp)
-            )
-            Text(
-                text = label,
-                color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            } else if (isEnabled && suggestionCount > 0) {
-                Text(
-                    text = suggestionCount.coerceAtMost(99).toString(),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .width(30.dp)
-                        .height(16.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 0.18f else 0.10f))
-                        .padding(2.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .offset(x = knobOffset)
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(iconColor)
-                    )
-                }
-            }
+        Icon(
+            imageVector = if (isEnabled) Icons.Default.AutoAwesome else Icons.Default.AutoAwesomeMotion,
+            contentDescription = null,
+            tint = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = if (isEnabled) stringResource(R.string.autoplay) else stringResource(R.string.off_label),
+            style = LiquidTypography.labelMedium,
+            color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (isEnabled && isLoading) {
+            Spacer(Modifier.width(8.dp))
+            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
         }
     }
 }
@@ -996,62 +693,36 @@ private fun QueueSongRow(
     onClick: (() -> Unit)?,
     onMore: (() -> Unit)?
 ) {
-    val container = when {
-        isCurrent -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f)
-    }
-    val titleColor = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.76f) else MaterialTheme.colorScheme.onSurfaceVariant
-    val rowModifier = Modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(14.dp))
-        .background(container)
-        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-        .padding(horizontal = 10.dp, vertical = 9.dp)
-
-    Row(modifier = rowModifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(contentAlignment = Alignment.Center) {
-            FridaArtworkImage(
-                model = imageUrl,
-                contentDescription = null,
-                modifier = Modifier.size(46.dp),
-                shape = RoundedCornerShape(10.dp),
-                contentScale = ContentScale.Fit,
-                requestSizePx = 96
-            )
-            if (isCurrent) {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.35f))
-                )
-                Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+            FridaArtworkImage(model = imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(8.dp))
         }
-
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = item.song.title,
-                color = titleColor.copy(alpha = if (isMuted) 0.72f else 1f),
-                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                fontSize = 15.sp,
+                style = LiquidTypography.bodyLarge.copy(fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium),
+                color = if (isMuted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            val reason = item.reason?.takeIf { item.source == QueueSource.AUTOPLAY && it.isNotBlank() }
             Text(
-                text = listOfNotNull(item.song.artist, reason).filter { it.isNotBlank() }.joinToString(" - "),
-                color = subtitleColor.copy(alpha = if (isMuted) 0.62f else 1f),
-                fontSize = 12.sp,
+                text = item.song.artist,
+                style = LiquidTypography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         if (onMore != null) {
-            IconButton(onClick = onMore, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(onClick = onMore) {
+                Icon(Icons.Default.MoreVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1059,32 +730,11 @@ private fun QueueSongRow(
 
 @Composable
 private fun QueueEmptyState(text: String, loading: Boolean, isError: Boolean = false) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-            .padding(22.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (loading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(
-                    imageVector = if (isError) Icons.Default.ErrorOutline else Icons.Default.LibraryMusic,
-                    contentDescription = null,
-                    tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = text,
-                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center,
-                lineHeight = 18.sp
-            )
+    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+        if (loading) {
+            CircularProgressIndicator()
+        } else {
+            Text(text = text, style = LiquidTypography.bodyMedium, color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -1092,67 +742,97 @@ private fun QueueEmptyState(text: String, loading: Boolean, isError: Boolean = f
 @Composable
 private fun QueueActionsSheet(
     target: QueueActionTarget,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
     onPickPlaylist: (Song) -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val song = target.item.song
     val actions = buildList {
         add(QueueActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play_now)) {
             onDismiss()
             when (target.section) {
-                QueueSection.PREVIOUS -> viewModel.replayPrevious(target.index)
-                QueueSection.UP_NEXT -> viewModel.playUpNext(target.index)
-                QueueSection.AUTOPLAY -> viewModel.playAutoplayItem(target.index)
+                QueueSection.PREVIOUS -> playbackViewModel.replayPrevious(target.index)
+                QueueSection.UP_NEXT -> playbackViewModel.playUpNext(target.index)
+                QueueSection.AUTOPLAY -> playbackViewModel.playSong(target.item.song)
             }
         })
         if (target.section != QueueSection.UP_NEXT || target.index > 0) {
             add(QueueActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next)) {
                 onDismiss()
-                if (target.section == QueueSection.UP_NEXT) {
-                    viewModel.moveQueueItemToNext(target.index)
-                } else {
-                    viewModel.addSongNext(song)
-                }
+                playbackViewModel.addSongNext(song)
             })
         }
         if (target.section == QueueSection.UP_NEXT) {
-            if (target.index > 0) {
-                add(QueueActionSpec(Icons.Default.KeyboardArrowUp, stringResource(R.string.move_up)) {
-                    onDismiss()
-                    viewModel.moveQueueItem(target.index, -1)
-                })
-            }
-            if (target.index < target.sectionSize - 1) {
-                add(QueueActionSpec(Icons.Default.KeyboardArrowDown, stringResource(R.string.move_down)) {
-                    onDismiss()
-                    viewModel.moveQueueItem(target.index, 1)
-                })
-            }
             add(QueueActionSpec(Icons.Default.Delete, stringResource(R.string.remove_from_queue), destructive = true) {
                 onDismiss()
-                viewModel.removeFromQueue(target.index)
+                playbackViewModel.removeFromQueue(target.index)
             })
         } else {
             add(QueueActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
                 onDismiss()
-                viewModel.addSongToQueue(song)
+                playbackViewModel.addSongToQueue(song)
             })
         }
         add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
             onPickPlaylist(song)
         })
-        add(QueueActionSpec(
-            Icons.Default.Share,
-            stringResource(if (song.hasLocalAudioToShare()) R.string.share_audio_file else R.string.share_song_link)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            onDismiss()
-            scope.launch {
-                val fallbackUrl = if (song.hasLocalAudioToShare()) null else viewModel.resolveShareUrl(song)
-                shareQueueSong(context, song, fallbackUrl)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(song.title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
+            }
+        }
+        actions.forEach { action ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = action.onClick)
+                    .padding(horizontal = 12.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val color = if (action.destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                Icon(action.icon, contentDescription = null, tint = color)
+                Spacer(modifier = Modifier.width(14.dp))
+                Text(action.label, color = color, fontWeight = FontWeight.Medium)
+            }
+        }
+        Spacer(modifier = Modifier.height(18.dp))
+    }
+}
+
+@Composable
+private fun CurrentSongActionsSheet(
+    song: Song,
+    isLiked: Boolean,
+    viewModel: LibraryViewModel,
+    onDismiss: () -> Unit,
+    onToggleLike: (Song) -> Unit,
+    onPickPlaylist: (Song) -> Unit,
+    onOpenInfo: () -> Unit
+) {
+    val actions = buildList {
+        add(QueueActionSpec(if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like)) {
+            onDismiss()
+            onToggleLike(song)
+        })
+        add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
+            onPickPlaylist(song)
+        })
+        add(QueueActionSpec(Icons.Default.Info, stringResource(R.string.details)) {
+            onOpenInfo()
         })
     }
 
@@ -1191,9 +871,9 @@ private fun QueueActionsSheet(
 
 @Composable
 private fun QueuePlaylistPicker(
-    playlists: List<com.jagr.fridamusic.domain.model.Playlist>,
+    playlists: List<Playlist>,
     onDismiss: () -> Unit,
-    onSelect: (com.jagr.fridamusic.domain.model.Playlist) -> Unit
+    onSelect: (Playlist) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
         Row(
@@ -1231,13 +911,21 @@ private fun QueuePlaylistPicker(
     }
 }
 
+private fun formatDuration(durationMs: Long): String {
+    val totalSeconds = durationMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(java.util.Locale.getDefault(), "%d:%02d", minutes, seconds)
+}
+
 private fun queueArtworkUrl(song: Song, fallback: String?): String? =
     fallback?.takeIf { it.isNotBlank() }
         ?: song.artworkUri.toString().takeIf { it.isNotBlank() && it != "content://media/external/audio/albumart/0" }
 
 private fun shareQueueSong(context: Context, song: Song, remoteUrl: String?) {
-    shareSongAudioOrLink(context, song, remoteUrl, song.title)
+    // shareSongAudioOrLink(context, song, remoteUrl, song.title) // Placeholder
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LyricsBottomSheet(
@@ -1278,8 +966,7 @@ private fun LyricsBottomSheet(
                 ) {
                     itemsIndexed(
                         items = lyricsLines,
-                        key = { index, line -> "${index}_${line.startTime}_${line.content.hashCode()}" },
-                        contentType = { _, _ -> "lyric_line" }
+                        key = { index, line -> "${index}_${line.startTime}_${line.content.hashCode()}" }
                     ) { index, line ->
                         val isActive = index == activeLineIndex
                         val color by animateColorAsState(
@@ -1304,7 +991,7 @@ private fun LyricsBottomSheet(
                     }
                 }
             } else if (!currentSong?.lyrics.isNullOrBlank()) {
-                currentSong.lyrics.let { lyricsText ->
+                currentSong?.lyrics?.let { lyricsText ->
                     val scrollState = rememberScrollState()
                     Column(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scrollState)

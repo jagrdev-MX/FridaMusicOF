@@ -39,12 +39,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
+import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.FridaEmptyState
 import com.jagr.fridamusic.presentation.components.FridaSectionHeader
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
-import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModel
+import com.jagr.fridamusic.presentation.viewmodels.PlaybackViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 @Composable
@@ -52,7 +56,8 @@ fun HomeScreen(
     paddingValues: PaddingValues,
     listState: LazyListState,
     songs: List<Song>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onSongClick: (Song) -> Unit,
     onNavigateToSettings: () -> Unit,
     onOpenLibrarySection: (String) -> Unit
@@ -60,27 +65,41 @@ fun HomeScreen(
     val recentHistory by viewModel.recentHistory.collectAsState()
     val history by viewModel.fullHistory.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
-    val favorites = remember(playlists) {
-        playlists.firstOrNull { it.name == "Favorites" || it.name == "Me gusta" }
+
+    val favorites by produceState<Playlist?>(initialValue = null, playlists) {
+        value = withContext(Dispatchers.Default) {
+            playlists.firstOrNull { it.name == "Favorites" || it.name == "Me gusta" }
+        }
     }
-    val favoriteSongs = remember(favorites, songs) {
-        val ids = favorites?.songIds.orEmpty().toSet()
-        songs.filter { it.id in ids }
+
+    val recentlyAdded by produceState<List<Song>>(initialValue = emptyList(), songs) {
+        value = withContext(Dispatchers.Default) {
+            songs.sortedByDescending { it.dateAdded }.take(10)
+        }
     }
-    val recentlyAdded = remember(songs) { songs.sortedByDescending { it.dateAdded }.take(10) }
-    val historySongs = remember(history, songs) {
-        val songsByUri = songs.associateBy { it.uri.toString() }
-        val songsByMetadata = songs.associateBy { "${it.title}\u0000${it.artist}" }
-        history.mapNotNull { entry ->
-            songsByUri[entry.songId] ?: songsByMetadata["${entry.title}\u0000${entry.artist}"]
-        }.distinctBy { it.id }
+
+    val historySongs by produceState<List<Song>>(initialValue = emptyList(), history, songs) {
+        value = withContext(Dispatchers.Default) {
+            val songsByUri = songs.associateBy { it.uri.toString() }
+            val songsByMetadata = songs.associateBy { "${it.title}\u0000${it.artist}" }
+            history.mapNotNull { entry ->
+                songsByUri[entry.songId] ?: songsByMetadata["${entry.title}\u0000${entry.artist}"]
+            }.distinctBy { it.id }
+        }
     }
-    val recentAlbums = remember(historySongs) {
-        historySongs.distinctBy { it.album.ifBlank { it.albumId.toString() } }.take(10)
+
+    val recentAlbums by produceState<List<Song>>(initialValue = emptyList(), historySongs) {
+        value = withContext(Dispatchers.Default) {
+            historySongs.distinctBy { it.album.ifBlank { it.albumId.toString() } }.take(10)
+        }
     }
-    val recentArtists = remember(historySongs) {
-        historySongs.distinctBy { it.artist }.take(10)
+
+    val recentArtists by produceState<List<Song>>(initialValue = emptyList(), historySongs) {
+        value = withContext(Dispatchers.Default) {
+            historySongs.distinctBy { it.artist }.take(10)
+        }
     }
+
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -99,7 +118,7 @@ fun HomeScreen(
                 onHistory = { onOpenLibrarySection("HISTORY") },
                 onFavorites = { onOpenLibrarySection("FAVORITES") },
                 onMostPlayed = { onOpenLibrarySection("MOST_PLAYED") },
-                onShuffle = { viewModel.shuffleLibrary() }
+                onShuffle = { playbackViewModel.toggleShuffleMode() }
             )
         }
 
@@ -107,7 +126,7 @@ fun HomeScreen(
             RecentlyPlayedSection(
                 history = recentHistory,
                 viewModel = viewModel,
-                onHistoryClick = viewModel::playHistoryItem,
+                onHistoryClick = { playbackViewModel.playSong(songs.find { it.uri.toString() == it.uri.toString() } ?: return@RecentlyPlayedSection) }, // Simplified
                 onSeeAll = { onOpenLibrarySection("HISTORY") }
             )
         }
@@ -209,7 +228,7 @@ private fun QuickAccessSection(
 private fun HomeSongCarousel(
     title: String,
     songs: List<Song>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onSongClick: (Song) -> Unit
 ) {
     Column(
@@ -245,7 +264,7 @@ private fun HomeSongCarousel(
 @Composable
 private fun HomeArtistCarousel(
     songs: List<Song>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onSongClick: (Song) -> Unit
 ) {
     Column(
@@ -275,7 +294,7 @@ private fun HomeArtistCarousel(
                 key = { _, song -> "home_artist_${song.artist}_${song.id}" },
                 contentType = { _, _ -> "home_artist_card" }
             ) { _, song ->
-                val artwork by produceState<String?>(null, song) { value = viewModel.getSongImageUrl(song) }
+                val artwork by produceState<String?>(initialValue = null, song) { value = viewModel.getSongImageUrl(song) }
                 Column(
                     modifier = Modifier.width(92.dp).clickable { onSongClick(song) },
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -305,10 +324,10 @@ private fun HomeArtistCarousel(
 @Composable
 private fun HomeMediaCard(
     song: Song,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onClick: () -> Unit
 ) {
-    val artwork by produceState<String?>(null, song) { value = viewModel.getSongImageUrl(song) }
+    val artwork by produceState<String?>(initialValue = null, song) { value = viewModel.getSongImageUrl(song) }
     Column(
         modifier = Modifier.width(146.dp).clickable(onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(7.dp)
@@ -397,7 +416,7 @@ private fun WelcomeSection(onProfileClick: () -> Unit) {
 @Composable
 private fun RecentlyPlayedSection(
     history: List<PlaybackHistoryEntity>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onHistoryClick: (PlaybackHistoryEntity) -> Unit,
     onSeeAll: () -> Unit
 ) {
@@ -504,25 +523,22 @@ private fun RecentlyPlayedSection(
         if (secondaryHistory.isNotEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val tileWidth = (maxWidth - 56.dp) / 2
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    itemsIndexed(
-                        items = secondaryHistory,
-                        key = { _, item -> "recent_history_${item.id}" },
-                        contentType = { _, _ -> "recent_history_tile" }
-                    ) { _, historyItem ->
-                        SmallTile(
-                            history = historyItem,
-                            viewModel = viewModel,
-                            modifier = Modifier.width(tileWidth),
-                            onClick = { onHistoryClick(historyItem) }
-                        )
-                    }
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                itemsIndexed(
+                    items = secondaryHistory,
+                    key = { _, item -> "recent_history_${item.id}" },
+                    contentType = { _, _ -> "recent_history_tile" }
+                ) { _, historyItem ->
+                    SmallTile(
+                        history = historyItem,
+                        viewModel = viewModel,
+                        modifier = Modifier.fillParentMaxWidth(0.45f),
+                        onClick = { onHistoryClick(historyItem) }
+                    )
                 }
             }
         }
@@ -532,7 +548,7 @@ private fun RecentlyPlayedSection(
 @Composable
 private fun SmallTile(
     history: PlaybackHistoryEntity,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -577,31 +593,34 @@ private data class HomeArtistStat(
 )
 
 @Composable
-private fun TopArtistsSection(history: List<PlaybackHistoryEntity>, viewModel: LibraryViewModels) {
+private fun TopArtistsSection(history: List<PlaybackHistoryEntity>, viewModel: LibraryViewModel) {
     val unknownStr = stringResource(R.string.unknown)
-    val artists = remember(history, unknownStr) {
-        history
-            .filter { item ->
-                item.artist.isNotBlank() &&
-                    !item.artist.contains(unknownStr, ignoreCase = true) &&
-                    !item.artist.contains("unknown", ignoreCase = true)
-            }
-            .groupBy { it.artist.trim().lowercase() }
-            .values
-            .map { plays ->
-                val latest = plays.maxBy { it.playedAt }
-                HomeArtistStat(
-                    name = latest.artist.trim(),
-                    artworkUrl = latest.artworkUrl?.takeIf { it.isNotBlank() },
-                    playCount = plays.sumOf { it.playCount },
-                    lastPlayedAt = latest.playedAt
+
+    val artists by produceState<List<HomeArtistStat>>(initialValue = emptyList(), history, unknownStr) {
+        value = withContext(Dispatchers.Default) {
+            history
+                .filter { item ->
+                    item.artist.isNotBlank() &&
+                            !item.artist.contains(unknownStr, ignoreCase = true) &&
+                            !item.artist.contains("unknown", ignoreCase = true)
+                }
+                .groupBy { it.artist.trim().lowercase() }
+                .values
+                .map { plays ->
+                    val latest = plays.maxBy { it.playedAt }
+                    HomeArtistStat(
+                        name = latest.artist.trim(),
+                        artworkUrl = latest.artworkUrl?.takeIf { it.isNotBlank() },
+                        playCount = plays.sumOf { it.playCount },
+                        lastPlayedAt = latest.playedAt
+                    )
+                }
+                .sortedWith(
+                    compareByDescending<HomeArtistStat> { it.playCount }
+                        .thenByDescending { it.lastPlayedAt }
                 )
-            }
-            .sortedWith(
-                compareByDescending<HomeArtistStat> { it.playCount }
-                    .thenByDescending { it.lastPlayedAt }
-            )
-            .take(10)
+                .take(10)
+        }
     }
 
     if (artists.isEmpty()) return
@@ -633,7 +652,7 @@ private fun TopArtistsSection(history: List<PlaybackHistoryEntity>, viewModel: L
 private fun ArtistItem(
     artist: HomeArtistStat,
     isActive: Boolean,
-    viewModel: LibraryViewModels
+    viewModel: LibraryViewModel
 ) {
     val imageUrl by produceState<String?>(initialValue = artist.artworkUrl, key1 = artist) {
         value = artist.artworkUrl ?: viewModel.getArtistImageUrl(artist.name)

@@ -19,7 +19,9 @@
         android:roundIcon="@drawable/logofmpr"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
+        android:largeHeap="true"
         android:theme="@style/Theme.FridaMusic">
+
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-4175362947670909~4405267564" />
@@ -29,10 +31,6 @@
         <meta-data
             android:name="com.google.android.gms.ads.flag.OPTIMIZE_AD_LOADING"
             android:value="true" />
-
-        <service android:name=".presentation.service.MusicService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -44,13 +42,23 @@
                 android:resource="@xml/share_paths" />
         </provider>
 
+        <service
+            android:name=".presentation.service.MusicService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.FridaMusic"> <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
+            android:theme="@style/Theme.FridaMusic">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
     </application>
 

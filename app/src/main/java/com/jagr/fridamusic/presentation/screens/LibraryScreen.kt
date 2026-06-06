@@ -139,7 +139,8 @@ import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.FridaEmptyState
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
-import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+import com.jagr.fridamusic.presentation.viewmodels.*
+import kotlinx.coroutines.flow.emptyFlow
 import java.util.Calendar
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -218,7 +219,8 @@ private val LibraryCardRadius = 18.dp
 fun LibraryScreen(
     paddingValues: PaddingValues,
     reselectSignal: Int,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     initialSection: String? = null
 ) {
     val songs by viewModel.songs.collectAsState()
@@ -583,6 +585,7 @@ fun LibraryScreen(
                         customCoverUri = playlistCoverUris[currentPlaylist.id],
                         paddingValues = paddingValues,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         onBack = { detail = null }
                     )
                 }
@@ -592,6 +595,7 @@ fun LibraryScreen(
                     playlists = playlists,
                     paddingValues = paddingValues,
                     viewModel = viewModel,
+                    playbackViewModel = playbackViewModel,
                     onBack = { detail = null },
                     onOpenArtist = visibleArtists
                         .firstOrNull { it.name.equals(currentDetail.album.artist, ignoreCase = true) }
@@ -605,6 +609,7 @@ fun LibraryScreen(
                     isFollowed = currentDetail.artist.name in followedArtists,
                     paddingValues = paddingValues,
                     viewModel = viewModel,
+                    playbackViewModel = playbackViewModel,
                     onBack = { detail = null },
                     onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) },
                     onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
@@ -616,6 +621,7 @@ fun LibraryScreen(
                     playlists = playlists,
                     paddingValues = paddingValues,
                     viewModel = viewModel,
+                    playbackViewModel = playbackViewModel,
                     onBack = { detail = null }
                 )
 
@@ -636,6 +642,7 @@ fun LibraryScreen(
                         listState = allListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         onOpenTab = { target ->
                             scope.launch {
                                 pagerState.animateScrollToPage(
@@ -653,6 +660,7 @@ fun LibraryScreen(
                         listState = historyListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         playlists = playlists
                     )
 
@@ -664,6 +672,7 @@ fun LibraryScreen(
                         listState = playlistsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         onOpenPlaylist = { detail = LibraryDetail.PlaylistDetail(it) },
                         onOpenHistory = {
                             scope.launch {
@@ -684,6 +693,7 @@ fun LibraryScreen(
                         listState = albumsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) }
                     )
 
@@ -695,6 +705,7 @@ fun LibraryScreen(
                         listState = songsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         playlists = playlists,
                         onOpenAlbum = { detail = LibraryDetail.AlbumDetail(it) },
                         onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
@@ -706,6 +717,7 @@ fun LibraryScreen(
                         listState = artistsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         onOpenArtist = { detail = LibraryDetail.ArtistDetail(it) }
                     )
                 }
@@ -925,8 +937,9 @@ private fun AllPage(
     playlistCoverUris: Map<Long, String>,
     paddingValues: PaddingValues,
     listState: LazyListState,
-    headerSpacerHeight: Dp,
-    viewModel: LibraryViewModels,
+    headerSpacerHeight: androidx.compose.ui.unit.Dp,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onOpenTab: (Int) -> Unit,
     onDelete: (Playlist) -> Unit
 ) {
@@ -962,10 +975,14 @@ private fun AllPage(
                         }.distinctBy { it.id },
                         customCoverUri = playlists.firstNotNullOfOrNull { playlistCoverUris[it.id] },
                         onOpen = { onOpenTab(LibraryTab.PLAYLISTS.ordinal) },
-                        onPlay = { playlists.firstOrNull()?.let(viewModel::playPlaylist) },
+                        onPlay = { 
+                            playlists.firstOrNull()?.let { 
+                                playbackViewModel.playPlaylist(it, viewModel.songsForPlaylist(it)) 
+                            } 
+                        },
                         onShuffle = {
                             playlists.firstOrNull { it.songIds.isNotEmpty() }?.let {
-                                viewModel.playPlaylist(it, shuffle = true)
+                                playbackViewModel.playPlaylist(it, viewModel.songsForPlaylist(it), shuffle = true)
                             }
                         }
                     )
@@ -981,8 +998,8 @@ private fun AllPage(
                         viewModel = viewModel,
                         coverSongs = songs,
                         onOpen = { onOpenTab(LibraryTab.SONGS.ordinal) },
-                        onPlay = { viewModel.playSongs(songs) },
-                        onShuffle = { viewModel.playSongs(songs, shuffle = true) }
+                        onPlay = { playbackViewModel.playSongs(songs) },
+                        onShuffle = { playbackViewModel.playSongs(songs, shuffle = true) }
                     )
                 }
             }
@@ -996,8 +1013,8 @@ private fun AllPage(
                         viewModel = viewModel,
                         coverSongs = artists.mapNotNull { it.songs.firstOrNull() },
                         onOpen = { onOpenTab(LibraryTab.ARTISTS.ordinal) },
-                        onPlay = { viewModel.playSongs(artists.flatMap { it.songs }) },
-                        onShuffle = { viewModel.playSongs(artists.flatMap { it.songs }, shuffle = true) }
+                        onPlay = { playbackViewModel.playSongs(artists.flatMap { it.songs }) },
+                        onShuffle = { playbackViewModel.playSongs(artists.flatMap { it.songs }, shuffle = true) }
                     )
                 }
             }
@@ -1012,8 +1029,9 @@ private fun SongsPage(
     artists: List<LibraryArtist>,
     paddingValues: PaddingValues,
     listState: LazyListState,
-    headerSpacerHeight: Dp,
-    viewModel: LibraryViewModels,
+    headerSpacerHeight: androidx.compose.ui.unit.Dp,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>,
     onOpenAlbum: (LibraryAlbum) -> Unit,
     onOpenArtist: (LibraryArtist) -> Unit
@@ -1040,7 +1058,7 @@ private fun SongsPage(
                     )
                 }
                 IconButton(
-                    onClick = { viewModel.playSongs(songs, shuffle = true) },
+                    onClick = { playbackViewModel.playSongs(songs, shuffle = true) },
                     enabled = songs.isNotEmpty()
                 ) {
                     Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.shuffle))
@@ -1064,8 +1082,9 @@ private fun SongsPage(
                 LibrarySongItem(
                     song = song,
                     viewModel = viewModel,
+                    playbackViewModel = playbackViewModel,
                     playlists = playlists,
-                    onClick = { viewModel.playSong(song) },
+                    onClick = { playbackViewModel.playSong(song) },
                     onOpenAlbum = albums.firstOrNull {
                         it.id == song.albumId || it.title == song.album
                     }?.let { album -> { onOpenAlbum(album) } },
@@ -1084,8 +1103,9 @@ private fun HistoryPage(
     songs: List<Song>,
     paddingValues: PaddingValues,
     listState: LazyListState,
-    headerSpacerHeight: Dp,
-    viewModel: LibraryViewModels,
+    headerSpacerHeight: androidx.compose.ui.unit.Dp,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>
 ) {
     val sections = remember(history) { history.toHistorySections() }
@@ -1121,8 +1141,9 @@ private fun HistoryPage(
                         item = item,
                         songs = songs,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         playlists = playlists,
-                        onClick = { viewModel.playHistoryItem(item) }
+                        onClick = { playbackViewModel.playHistoryItem(item, songs) }
                     )
                 }
             }
@@ -1137,8 +1158,9 @@ private fun PlaylistsPage(
     playlistCoverUris: Map<Long, String>,
     paddingValues: PaddingValues,
     listState: LazyListState,
-    headerSpacerHeight: Dp,
-    viewModel: LibraryViewModels,
+    headerSpacerHeight: androidx.compose.ui.unit.Dp,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onOpenPlaylist: (Playlist) -> Unit,
     onOpenHistory: () -> Unit,
     onDelete: (Playlist) -> Unit
@@ -1206,6 +1228,7 @@ private fun PlaylistsPage(
                                 songs = viewModel.songsForPlaylist(playlist),
                                 customCoverUri = playlistCoverUris[playlist.id],
                                 viewModel = viewModel,
+                                playbackViewModel = playbackViewModel,
                                 onOpen = { onOpenPlaylist(playlist) },
                                 onDelete = { onDelete(playlist) },
                                 modifier = Modifier.weight(1f)
@@ -1236,8 +1259,9 @@ private fun AlbumsPage(
     albums: List<LibraryAlbum>,
     paddingValues: PaddingValues,
     listState: LazyListState,
-    headerSpacerHeight: Dp,
-    viewModel: LibraryViewModels,
+    headerSpacerHeight: androidx.compose.ui.unit.Dp,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onOpenAlbum: (LibraryAlbum) -> Unit
 ) {
     var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.albumGridCount) }
@@ -1259,7 +1283,7 @@ private fun AlbumsPage(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SectionHeader(text = stringResource(R.string.albums_tab))
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { viewModel.playSongs(albums.flatMap { it.songs }, shuffle = true) }) {
+                    IconButton(onClick = { playbackViewModel.playSongs(albums.flatMap { it.songs }, shuffle = true) }) {
                         Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.shuffle))
                     }
                     IconButton(onClick = { showGridSheet = true }) {
@@ -1312,8 +1336,9 @@ private fun ArtistsPage(
     artists: List<LibraryArtist>,
     paddingValues: PaddingValues,
     listState: LazyListState,
-    headerSpacerHeight: Dp,
-    viewModel: LibraryViewModels,
+    headerSpacerHeight: androidx.compose.ui.unit.Dp,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onOpenArtist: (LibraryArtist) -> Unit
 ) {
     var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.artistGridCount) }
@@ -1482,7 +1507,8 @@ private fun PlaylistGridCard(
     playlist: Playlist,
     songs: List<Song>,
     customCoverUri: String?,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -1555,9 +1581,9 @@ private fun PlaylistGridCard(
             PlaylistActionsSheet(
                 playlist = playlist,
                 onDismiss = { showActions = false },
-                onPlay = { showActions = false; viewModel.playPlaylist(playlist) },
-                onShuffle = { showActions = false; viewModel.playPlaylist(playlist, shuffle = true) },
-                onAddToQueue = { showActions = false; viewModel.addPlaylistToQueue(playlist) },
+                onPlay = { playbackViewModel.playPlaylist(playlist, viewModel.songsForPlaylist(playlist)) },
+                onShuffle = { playbackViewModel.playPlaylist(playlist, viewModel.songsForPlaylist(playlist)) },
+                onAddToQueue = { playbackViewModel.addPlaylistToQueue(playlist, viewModel.songsForPlaylist(playlist)) },
                 onShare = { showActions = false; sharePlaylist(context, playlist, songs) },
                 onChangeCover = null,
                 onRemoveCover = null,
@@ -1570,7 +1596,7 @@ private fun PlaylistGridCard(
 @Composable
 private fun ArtistGridCard(
     artist: LibraryArtist,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1617,7 +1643,8 @@ private fun SmartSongsDetailPage(
     songs: List<Song>,
     playlists: List<Playlist>,
     paddingValues: PaddingValues,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onBack: () -> Unit
 ) {
     LazyColumn(
@@ -1645,7 +1672,7 @@ private fun SmartSongsDetailPage(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 IconButton(
-                    onClick = { viewModel.playSongs(songs, shuffle = true) },
+                    onClick = { playbackViewModel.playSongs(songs, shuffle = true) },
                     enabled = songs.isNotEmpty()
                 ) {
                     Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.shuffle))
@@ -1671,8 +1698,9 @@ private fun SmartSongsDetailPage(
                 LibrarySongItem(
                     song = song,
                     viewModel = viewModel,
+                    playbackViewModel = playbackViewModel,
                     playlists = playlists,
-                    onClick = { viewModel.playSongFromCollection(song, songs) }
+                    onClick = { playbackViewModel.playSong(song, songs) }
                 )
             }
         }
@@ -1687,7 +1715,8 @@ private fun PlaylistDetailPage(
     playlists: List<Playlist>,
     customCoverUri: String?,
     paddingValues: PaddingValues,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1739,13 +1768,13 @@ private fun PlaylistDetailPage(
         backgroundArtUrl = leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
-        onPlay = { viewModel.playPlaylistSongs(playlist, displayedSongs) },
-        onShuffle = { viewModel.playPlaylistSongs(playlist, displayedSongs, shuffle = true) },
+        onPlay = { playbackViewModel.playSongs(displayedSongs) },
+        onShuffle = { playbackViewModel.playSongs(displayedSongs, shuffle = true) },
         secondaryActions = {
             DetailChipButton(
                 icon = Icons.Default.Radio,
                 label = stringResource(R.string.radio),
-                onClick = { viewModel.playPlaylistSongs(playlist, displayedSongs, shuffle = true) }
+                onClick = { playbackViewModel.playSongs(displayedSongs, shuffle = true) }
             )
             DetailIconButton(
                 icon = Icons.Default.Share,
@@ -1773,19 +1802,20 @@ private fun PlaylistDetailPage(
                 LibrarySongItem(
                     song = song,
                     viewModel = viewModel,
+                    playbackViewModel = playbackViewModel,
                     playlists = playlists,
                     onClick = {
-                        viewModel.playSongFromCollection(
+                        playbackViewModel.playSong(
                             song = song,
-                            collection = displayedSongs,
+                            queue = displayedSongs,
                             source = QueueSource.PLAYLIST,
                             sourceName = playlist.name
                         )
                     },
                     onPlayAction = {
-                        viewModel.playSongFromCollection(
+                        playbackViewModel.playSong(
                             song = song,
-                            collection = displayedSongs,
+                            queue = displayedSongs,
                             source = QueueSource.PLAYLIST,
                             sourceName = playlist.name
                         )
@@ -1821,15 +1851,15 @@ private fun PlaylistDetailPage(
                 },
                 onPlay = {
                     showActions = false
-                    viewModel.playPlaylistSongs(playlist, displayedSongs)
+                    playbackViewModel.playSongs(displayedSongs)
                 },
                 onShuffle = {
                     showActions = false
-                    viewModel.playPlaylistSongs(playlist, displayedSongs, shuffle = true)
+                    playbackViewModel.playSongs(displayedSongs, shuffle = true)
                 },
                 onAddToQueue = {
                     showActions = false
-                    viewModel.addPlaylistSongsToQueue(playlist, displayedSongs)
+                    playbackViewModel.addPlaylistToQueue(playlist, displayedSongs)
                 },
                 onShare = {
                     showActions = false
@@ -1879,7 +1909,8 @@ private fun AlbumDetailPage(
     album: LibraryAlbum,
     playlists: List<Playlist>,
     paddingValues: PaddingValues,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onBack: () -> Unit,
     onOpenArtist: (() -> Unit)?
 ) {
@@ -1914,13 +1945,13 @@ private fun AlbumDetailPage(
         backgroundArtUrl = leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
-        onPlay = { viewModel.playSongs(album.songs) },
-        onShuffle = { viewModel.playSongs(album.songs, shuffle = true) },
+        onPlay = { playbackViewModel.playSongs(album.songs) },
+        onShuffle = { playbackViewModel.playSongs(album.songs, shuffle = true) },
         secondaryActions = {
             DetailChipButton(
                 icon = Icons.Default.Radio,
                 label = stringResource(R.string.radio),
-                onClick = { viewModel.playSongs(album.songs, shuffle = true) }
+                onClick = { playbackViewModel.playSongs(album.songs, shuffle = true) }
             )
             DetailIconButton(
                 icon = Icons.Default.Share,
@@ -1934,8 +1965,9 @@ private fun AlbumDetailPage(
             LibrarySongItem(
                 song = song,
                 viewModel = viewModel,
+                playbackViewModel = playbackViewModel,
                 playlists = playlists,
-                onClick = { viewModel.playSong(song) }
+                onClick = { playbackViewModel.playSong(song) }
             )
         }
     }
@@ -1951,19 +1983,19 @@ private fun AlbumDetailPage(
                 onDismiss = { showActions = false },
                 onPlay = {
                     showActions = false
-                    viewModel.playSongs(album.songs)
+                    playbackViewModel.playSongs(album.songs)
                 },
                 onShuffle = {
                     showActions = false
-                    viewModel.playSongs(album.songs, shuffle = true)
+                    playbackViewModel.playSongs(album.songs, shuffle = true)
                 },
                 onAddToQueue = {
                     showActions = false
-                    viewModel.addSongsToQueue(album.songs)
+                    playbackViewModel.addSongsToQueue(album.songs)
                 },
                 onPlayNext = {
                     showActions = false
-                    album.songs.asReversed().forEach(viewModel::addSongNext)
+                    album.songs.asReversed().forEach(playbackViewModel::addSongNext)
                 },
                 onSaveToPlaylist = {
                     showActions = false
@@ -2050,7 +2082,8 @@ private fun ArtistDetailPage(
     playlists: List<Playlist>,
     isFollowed: Boolean,
     paddingValues: PaddingValues,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onBack: () -> Unit,
     onOpenAlbum: (LibraryAlbum) -> Unit,
     onOpenArtist: (LibraryArtist) -> Unit
@@ -2125,8 +2158,8 @@ private fun ArtistDetailPage(
         backgroundArtUrl = selectedArtworkUri ?: leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
-        onPlay = { viewModel.playSongs(artist.songs) },
-        onShuffle = { viewModel.playSongs(artist.songs, shuffle = true) },
+        onPlay = { playbackViewModel.playSongs(artist.songs) },
+        onShuffle = { playbackViewModel.playSongs(artist.songs, shuffle = true) },
         secondaryActions = {
             DetailChipButton(
                 icon = if (isFollowed) Icons.Default.CheckCircle else Icons.Default.PersonAdd,
@@ -2136,7 +2169,7 @@ private fun ArtistDetailPage(
             DetailIconButton(
                 icon = Icons.Default.Radio,
                 contentDescription = stringResource(R.string.radio),
-                onClick = { viewModel.playSongs(artist.songs, shuffle = true) }
+                onClick = { playbackViewModel.playSongs(artist.songs, shuffle = true) }
             )
             DetailIconButton(
                 icon = Icons.Default.Share,
@@ -2153,6 +2186,7 @@ private fun ArtistDetailPage(
                         title = stringResource(R.string.top_songs),
                         songs = topSongs,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         playlists = playlists
                     )
                 }
@@ -2179,6 +2213,7 @@ private fun ArtistDetailPage(
                         title = stringResource(R.string.from_your_library),
                         songs = fromYourLibrary,
                         viewModel = viewModel,
+                        playbackViewModel = playbackViewModel,
                         playlists = playlists
                     )
                 }
@@ -2209,19 +2244,19 @@ private fun ArtistDetailPage(
                 onDismiss = { showActions = false },
                 onPlay = {
                     showActions = false
-                    viewModel.playSongs(artist.songs)
+                    playbackViewModel.playSongs(artist.songs)
                 },
                 onRadio = {
                     showActions = false
-                    viewModel.playSongs(artist.songs, shuffle = true)
+                    playbackViewModel.playSongs(artist.songs, shuffle = true)
                 },
                 onPlayNext = {
                     showActions = false
-                    artist.songs.asReversed().forEach(viewModel::addSongNext)
+                    artist.songs.asReversed().forEach(playbackViewModel::addSongNext)
                 },
                 onAddToQueue = {
                     showActions = false
-                    viewModel.addSongsToQueue(artist.songs)
+                    playbackViewModel.addSongsToQueue(artist.songs)
                 },
                 onSaveToPlaylist = {
                     showActions = false
@@ -2429,7 +2464,7 @@ private fun DetailCoverPlaceholder(
 private fun rememberLeadArtworkUrl(
     songs: List<Song>,
     customCoverUri: String?,
-    viewModel: LibraryViewModels
+    viewModel: LibraryViewModel
 ) = produceState<String?>(
     initialValue = customCoverUri,
     key1 = songs,
@@ -2442,7 +2477,7 @@ private fun rememberLeadArtworkUrl(
 private fun SmartCollectionCover(
     songs: List<Song>,
     customCoverUri: String?,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     shape: androidx.compose.ui.graphics.Shape,
     fallbackIcon: ImageVector
 ) {
@@ -2547,7 +2582,7 @@ private fun DetailCoverPlaceholderCell(
 private fun SmartCollectionThumbnail(
     songs: List<Song>,
     customCoverUri: String?,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     fallbackIcon: ImageVector
 ) {
     val coverModels by produceState<List<String>>(
@@ -2634,7 +2669,7 @@ private fun SmartCollectionThumbnail(
 @Composable
 private fun DetailSongCover(
     song: Song?,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     shape: androidx.compose.ui.graphics.Shape,
     overrideModel: String? = null
 ) {
@@ -2745,7 +2780,7 @@ private fun PlaylistSongSortSelector(
 @Composable
 private fun ArtistAlbumChip(
     album: LibraryAlbum,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onClick: () -> Unit
 ) {
     val imageUrl by produceState<String?>(initialValue = null, key1 = album.representativeSong) {
@@ -2805,7 +2840,8 @@ private fun AnimatedArtistShelf(
 private fun ArtistSongShelf(
     title: String,
     songs: List<Song>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2817,7 +2853,7 @@ private fun ArtistSongShelf(
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             items(songs, key = { "artist_shelf_song_${it.id}_$title" }) { song ->
-                ArtistSongCard(song = song, viewModel = viewModel, playlists = playlists)
+                ArtistSongCard(song = song, viewModel = viewModel, playbackViewModel = playbackViewModel, playlists = playlists)
             }
         }
     }
@@ -2826,7 +2862,8 @@ private fun ArtistSongShelf(
 @Composable
 private fun ArtistSongCard(
     song: Song,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>
 ) {
     val imageUrl by produceState<String?>(initialValue = null, key1 = song) {
@@ -2834,7 +2871,7 @@ private fun ArtistSongCard(
     }
 
     Column(
-        modifier = Modifier.width(150.dp).clickable { viewModel.playSong(song) },
+        modifier = Modifier.width(150.dp).clickable { playbackViewModel.playSong(song) },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
@@ -2873,7 +2910,7 @@ private fun ArtistSongCard(
 private fun ArtistAlbumShelf(
     title: String,
     albums: List<LibraryAlbum>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onOpenAlbum: (LibraryAlbum) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2898,7 +2935,7 @@ private fun ArtistAlbumShelf(
 @Composable
 private fun RelatedArtistsShelf(
     artists: List<LibraryArtist>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onOpenArtist: (LibraryArtist) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2923,7 +2960,7 @@ private fun RelatedArtistsShelf(
 @Composable
 private fun RelatedArtistCard(
     artist: LibraryArtist,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onOpen: () -> Unit
 ) {
     val imageUrl by produceState<String?>(initialValue = null, key1 = artist.name) {
@@ -2966,7 +3003,7 @@ private fun LibraryCollectionCard(
     title: String,
     subtitle: String,
     icon: ImageVector,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     coverSongs: List<Song>,
     customCoverUri: String? = null,
     onOpen: () -> Unit,
@@ -3055,7 +3092,7 @@ private fun PlaylistListItem(
     playlist: Playlist,
     songs: List<Song>,
     customCoverUri: String?,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
@@ -3544,7 +3581,7 @@ private fun SaveToPlaylistSheet(
 @Composable
 private fun LibraryAlbumCard(
     album: LibraryAlbum,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -3613,7 +3650,8 @@ private fun LibraryAlbumCard(
 @Composable
 private fun LibrarySongItem(
     song: Song,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>,
     onClick: () -> Unit,
     onPlayAction: (() -> Unit)? = null,
@@ -3638,7 +3676,7 @@ private fun LibrarySongItem(
     var showDetails by rememberSaveable { mutableStateOf(false) }
     var showTagEditor by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
-    var lyricsDraft by rememberSaveable(song.id) { mutableStateOf(viewModel.localLyrics(song)) }
+    var lyricsDraft by remember { mutableStateOf(viewModel.localLyrics(song)) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val deleteLauncher = rememberLauncherForActivityResult(
@@ -3713,15 +3751,15 @@ private fun LibrarySongItem(
                 onDismiss = { showActions = false },
                 onPlay = {
                     showActions = false
-                    onPlayAction?.invoke() ?: viewModel.playSongFromLibrary(song)
+                    onPlayAction?.invoke() ?: playbackViewModel.playSong(song)
                 },
                 onPlayNext = {
                     showActions = false
-                    viewModel.addSongNext(song)
+                    playbackViewModel.addSongNext(song)
                 },
                 onAddToQueue = {
                     showActions = false
-                    viewModel.addSongToQueue(song)
+                    playbackViewModel.addSongToQueue(song)
                 },
                 onSaveToPlaylist = {
                     showActions = false
@@ -3820,7 +3858,7 @@ private fun LibrarySongItem(
             title = { Text(stringResource(R.string.edit_lyrics)) },
             text = {
                 OutlinedTextField(
-                    value = lyricsDraft,
+                    value = lyricsDraft ?: "",
                     onValueChange = { lyricsDraft = it },
                     label = { Text(stringResource(R.string.lyrics)) },
                     modifier = Modifier.fillMaxWidth(),
@@ -3829,7 +3867,7 @@ private fun LibrarySongItem(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.saveLocalLyrics(song, lyricsDraft)
+                    viewModel.saveLocalLyrics(song, lyricsDraft ?: "")
                     showLyricsEditor = false
                 }) { Text(stringResource(R.string.save)) }
             },
@@ -3889,7 +3927,8 @@ private fun LibrarySongItem(
 private fun HistorySongItem(
     item: PlaybackHistoryEntity,
     songs: List<Song>,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>,
     onClick: () -> Unit
 ) {
@@ -3968,15 +4007,15 @@ private fun HistorySongItem(
                 onDismiss = { showActions = false },
                 onPlay = {
                     showActions = false
-                    viewModel.playSong(linkedSong)
+                    playbackViewModel.playSong(linkedSong)
                 },
                 onPlayNext = {
                     showActions = false
-                    viewModel.addSongNext(linkedSong)
+                    playbackViewModel.addSongNext(linkedSong)
                 },
                 onAddToQueue = {
                     showActions = false
-                    viewModel.addSongToQueue(linkedSong)
+                    playbackViewModel.addSongToQueue(linkedSong)
                 },
                 onSaveToPlaylist = {
                     showActions = false
@@ -4008,7 +4047,7 @@ private fun HistorySongItem(
                 onDismiss = { showActions = false },
                 onPlay = {
                     showActions = false
-                    viewModel.playHistoryItem(item)
+                    playbackViewModel.playHistoryItem(item, songs)
                 },
                 onShare = {
                     showActions = false
@@ -4071,7 +4110,7 @@ private fun RestrictionBadge(text: String) {
 @Composable
 private fun ArtistListItem(
     artist: LibraryArtist,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onOpen: () -> Unit,
     onPlay: () -> Unit
 ) {
@@ -4545,7 +4584,7 @@ private fun requestSongDeletion(
     context: Context,
     song: Song,
     launcher: ActivityResultLauncher<IntentSenderRequest>,
-    viewModel: LibraryViewModels
+    viewModel: LibraryViewModel
 ) {
     requestSongsDeletion(context, listOf(song), launcher, viewModel)
 }
@@ -4554,7 +4593,7 @@ private fun requestSongsDeletion(
     context: Context,
     songs: List<Song>,
     launcher: ActivityResultLauncher<IntentSenderRequest>,
-    viewModel: LibraryViewModels
+    viewModel: LibraryViewModel
 ) {
     val contentUris = songs.map { it.uri }.filter { it.scheme.equals("content", ignoreCase = true) }
     if (contentUris.isEmpty()) {

@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
-import com.jagr.fridamusic.presentation.viewmodels.AppTheme
-import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+import com.jagr.fridamusic.presentation.viewmodels.SettingsViewModel
+import com.jagr.fridamusic.domain.model.AppTheme
 
 val betaTestersList = listOf(
     "Vicente Contreras",
@@ -44,7 +44,7 @@ val betaTestersList = listOf(
 fun SettingsScreen(
     paddingValues: PaddingValues,
     listState: LazyListState,
-    viewModel: LibraryViewModels,
+    viewModel: SettingsViewModel,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current

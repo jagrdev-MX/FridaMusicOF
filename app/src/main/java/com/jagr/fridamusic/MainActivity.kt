@@ -15,13 +15,18 @@ import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.data.ads.GoogleMobileAdsConsentManager
 import com.jagr.fridamusic.presentation.screens.MainScreen
 import com.jagr.fridamusic.presentation.theme.FridaMusicTheme
-import com.jagr.fridamusic.presentation.viewmodels.AppTheme
-import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+import com.jagr.fridamusic.domain.model.AppTheme
+import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModel
+import com.jagr.fridamusic.presentation.viewmodels.PlaybackViewModel
+import com.jagr.fridamusic.presentation.viewmodels.SearchViewModel
+import com.jagr.fridamusic.presentation.viewmodels.SettingsViewModel
+import com.jagr.fridamusic.presentation.viewmodels.QueueViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private val libraryViewModel: LibraryViewModels by viewModels()
+    private val libraryViewModel: LibraryViewModel by viewModels()
+    private val settingsViewModel: SettingsViewModel by viewModels()
     private lateinit var adManager: AdManager
     private lateinit var consentManager: GoogleMobileAdsConsentManager
 
@@ -51,15 +56,15 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            val currentTheme by libraryViewModel.currentTheme.collectAsState()
+            val currentTheme by settingsViewModel.currentTheme.collectAsState()
 
             val isDarkTheme = when (currentTheme) {
-                AppTheme.SYSTEM -> isSystemInDarkTheme()
-                AppTheme.LIGHT -> false
-                AppTheme.DARK -> true
+                com.jagr.fridamusic.domain.model.AppTheme.SYSTEM -> isSystemInDarkTheme()
+                com.jagr.fridamusic.domain.model.AppTheme.LIGHT -> false
+                com.jagr.fridamusic.domain.model.AppTheme.DARK -> true
             }
 
-            FridaMusicTheme(darkTheme = isDarkTheme) {
+            com.jagr.fridamusic.presentation.theme.FridaMusicTheme(darkTheme = isDarkTheme) {
                 MainScreen()
             }
         }

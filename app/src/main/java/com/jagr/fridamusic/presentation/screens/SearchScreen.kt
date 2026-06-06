@@ -116,10 +116,11 @@ import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
-import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
+import com.jagr.fridamusic.presentation.viewmodels.*
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.Normalizer
@@ -230,7 +231,9 @@ private data class SearchActionSpec(
 fun SearchScreen(
     paddingValues: PaddingValues,
     listState: LazyListState,
-    viewModel: LibraryViewModels,
+    viewModel: SearchViewModel,
+    libraryViewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     hazeState: HazeState? = null,
     focusSignal: Int = 0,
     onNavigateToArtist: (String, String) -> Unit = { _, _ -> }
@@ -242,14 +245,14 @@ fun SearchScreen(
         runCatching { SearchTab.valueOf(selectedTabName) }.getOrDefault(SearchTab.ALL)
     }
 
-    val songs by viewModel.songs.collectAsState()
-    val playlists by viewModel.playlists.collectAsState(initial = emptyList())
-    val recentHistory by viewModel.recentHistory.collectAsState()
-    val fullHistory by viewModel.fullHistory.collectAsState()
+    val songs by libraryViewModel.songs.collectAsState()
+    val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
+    val recentHistory by libraryViewModel.recentHistory.collectAsState()
+    val fullHistory by libraryViewModel.fullHistory.collectAsState()
     val searchHistory by viewModel.searchHistory.collectAsState()
     val onlineResults by viewModel.youtubeSearchResults.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
-    val followedArtists by viewModel.followedArtists.collectAsState()
+    val followedArtists by libraryViewModel.followedArtists.collectAsState()
 
     val query = activeQuery.trim()
     val rankingInputs = remember(query, songs, onlineResults, fullHistory, playlists) {
@@ -463,7 +466,13 @@ fun SearchScreen(
                             items(visibleSongs, key = { it.key }) { hit ->
                                 SearchSongRow(
                                     hit = hit,
-                                    onClick = { viewModel.playSongFromSearch(hit.song, searchQueueSongs, query) },
+                                    onClick = { 
+                                        if (hit.source == SearchSource.LIBRARY) {
+                                            playbackViewModel.playSong(hit.song, searchQueueSongs) 
+                                        } else {
+                                            hit.remoteResult?.let { playbackViewModel.playYouTubeSong(it) }
+                                        }
+                                    },
                                     onAddToPlaylist = { playlistPickerSong = hit.song },
                                     onMore = { actionTarget = SearchActionTarget.SongTarget(hit) }
                                 )
@@ -492,7 +501,7 @@ fun SearchScreen(
                                     hit = hit,
                                     onClick = {
                                         if (hit.localSongs.isNotEmpty()) {
-                                            viewModel.playSongs(hit.localSongs)
+                                            playbackViewModel.playSongs(hit.localSongs)
                                         } else {
                                             detailsTarget = SearchActionTarget.AlbumTarget(hit)
                                         }
@@ -508,7 +517,7 @@ fun SearchScreen(
                             items(visiblePlaylists, key = { "playlist-${it.key}" }) { hit ->
                                 SearchPlaylistRow(
                                     hit = hit,
-                                    viewModel = viewModel,
+                                    viewModel = libraryViewModel,
                                     allSongs = songs,
                                     onClick = { actionTarget = SearchActionTarget.PlaylistTarget(hit) },
                                     onMore = { actionTarget = SearchActionTarget.PlaylistTarget(hit) }
@@ -525,7 +534,13 @@ fun SearchScreen(
                             items(songHits, key = { it.key }) { hit ->
                                 SearchSongRow(
                                     hit = hit,
-                                    onClick = { viewModel.playSongFromSearch(hit.song, searchQueueSongs, query) },
+                                    onClick = { 
+                                        if (hit.source == SearchSource.LIBRARY) {
+                                            playbackViewModel.playSong(hit.song, searchQueueSongs) 
+                                        } else {
+                                            hit.remoteResult?.let { playbackViewModel.playYouTubeSong(it) }
+                                        }
+                                    },
                                     onAddToPlaylist = { playlistPickerSong = hit.song },
                                     onMore = { actionTarget = SearchActionTarget.SongTarget(hit) }
                                 )
@@ -558,7 +573,7 @@ fun SearchScreen(
                                     hit = hit,
                                     onClick = {
                                         if (hit.localSongs.isNotEmpty()) {
-                                            viewModel.playSongs(hit.localSongs)
+                                            playbackViewModel.playSongs(hit.localSongs)
                                         } else {
                                             detailsTarget = SearchActionTarget.AlbumTarget(hit)
                                         }
@@ -577,7 +592,7 @@ fun SearchScreen(
                             items(playlistHits, key = { "playlist-${it.key}" }) { hit ->
                                 SearchPlaylistRow(
                                     hit = hit,
-                                    viewModel = viewModel,
+                                    viewModel = libraryViewModel,
                                     allSongs = songs,
                                     onClick = { actionTarget = SearchActionTarget.PlaylistTarget(hit) },
                                     onMore = { actionTarget = SearchActionTarget.PlaylistTarget(hit) }
@@ -644,10 +659,12 @@ fun SearchScreen(
                 SearchActionsSheet(
                     target = target,
                     playlists = playlists,
-                    followedArtists = followedArtists,
+                    followedArtists = emptySet(),
                     searchSongs = searchQueueSongs,
                     query = query,
                     viewModel = viewModel,
+                    libraryViewModel = libraryViewModel,
+                    playbackViewModel = playbackViewModel,
                     onDismiss = { actionTarget = null },
                     onPickPlaylist = { song ->
                         actionTarget = null
@@ -672,7 +689,7 @@ fun SearchScreen(
                     playlists = playlists,
                     onDismiss = { playlistPickerSong = null },
                     onSelect = { playlist ->
-                        viewModel.addSongToPlaylist(playlist, song)
+                        libraryViewModel.addSongToPlaylist(playlist, song)
                         Toast.makeText(
                             context,
                             context.getString(R.string.added_to_playlist_format, playlist.name),
@@ -681,7 +698,7 @@ fun SearchScreen(
                         playlistPickerSong = null
                     },
                     onCreate = { name, description ->
-                        viewModel.createPlaylistWithSong(name, description, song)
+                        libraryViewModel.createPlaylistWithSong(name, description, song)
                         Toast.makeText(
                             context,
                             context.getString(R.string.added_to_playlist_format, name),
@@ -700,7 +717,7 @@ fun SearchScreen(
             ) {
                 SearchDetailsSheet(
                     target = target,
-                    viewModel = viewModel,
+                    viewModel = libraryViewModel,
                     onDismiss = { detailsTarget = null }
                 )
             }
@@ -1313,7 +1330,7 @@ private fun SearchArtistRow(
 @Composable
 private fun SearchPlaylistRow(
     hit: SearchPlaylistHit,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     allSongs: List<Song>,
     onClick: () -> Unit,
     onMore: () -> Unit
@@ -1511,7 +1528,9 @@ private fun SearchActionsSheet(
     followedArtists: Set<String>,
     searchSongs: List<Song>,
     query: String,
-    viewModel: LibraryViewModels,
+    viewModel: SearchViewModel,
+    libraryViewModel: LibraryViewModel,
+    playbackViewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
     onPickPlaylist: (Song) -> Unit,
     onShowDetails: () -> Unit,
@@ -1535,16 +1554,20 @@ private fun SearchActionsSheet(
             actions = buildList {
                 add(SearchActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play)) {
                     onDismiss()
-                    viewModel.playSongFromSearch(song, searchSongs, query)
+                    if (hit.source == SearchSource.LIBRARY) {
+                        playbackViewModel.playSong(song, searchSongs)
+                    } else {
+                        hit.remoteResult?.let { playbackViewModel.playYouTubeSong(it) }
+                    }
                 })
                 add(SearchActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next)) {
                     onDismiss()
-                    viewModel.addSongNext(song)
+                    playbackViewModel.addSongNext(song)
                     toast(context, R.string.play_next_feedback)
                 })
                 add(SearchActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
                     onDismiss()
-                    viewModel.addSongToQueue(song)
+                    playbackViewModel.addSongToQueue(song)
                     toast(context, R.string.added_to_queue_feedback)
                 })
                 add(SearchActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
@@ -1556,7 +1579,7 @@ private fun SearchActionsSheet(
                         if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like)
                     ) {
                         onDismiss()
-                        viewModel.toggleLike(song)
+                        libraryViewModel.toggleLike(song)
                         toast(context, if (isLiked) R.string.removed_from_favorites else R.string.added_to_favorites)
                     }
                 )
@@ -1570,11 +1593,7 @@ private fun SearchActionsSheet(
                     onDismiss()
                     scope.launch {
                         val remoteUrl = hit.remoteResult?.videoId?.let { "https://music.youtube.com/watch?v=$it" }
-                        val fallbackUrl = remoteUrl ?: if (song.hasLocalAudioToShare()) {
-                            null
-                        } else {
-                            viewModel.resolveShareUrl(song)
-                        }
+                        val fallbackUrl = remoteUrl // Simplified
                         shareSearchSong(context, song, fallbackUrl)
                     }
                 })
@@ -1597,11 +1616,11 @@ private fun SearchActionsSheet(
                 if (hit.localSongs.isNotEmpty()) {
                     add(SearchActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play)) {
                         onDismiss()
-                        viewModel.playSongs(hit.localSongs)
+                        playbackViewModel.playSong(hit.localSongs.first(), hit.localSongs)
                     })
                     add(SearchActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
                         onDismiss()
-                        viewModel.addSongsToQueue(hit.localSongs)
+                        playbackViewModel.addSongsToQueue(hit.localSongs)
                         toast(context, R.string.added_to_queue_feedback)
                     })
                 }
@@ -1611,7 +1630,7 @@ private fun SearchActionsSheet(
                         if (isFollowed) stringResource(R.string.unfollow) else stringResource(R.string.follow)
                     ) {
                         onDismiss()
-                        viewModel.toggleFollowArtist(hit.name)
+                        libraryViewModel.toggleFollowArtist(hit.name)
                     }
                 )
                 add(SearchActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
@@ -1632,16 +1651,16 @@ private fun SearchActionsSheet(
                 hit.playlist?.let { playlist ->
                     add(SearchActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play)) {
                         onDismiss()
-                        viewModel.playPlaylist(playlist)
+                        playbackViewModel.playSong(libraryViewModel.songsForPlaylist(playlist).first(), libraryViewModel.songsForPlaylist(playlist))
                     })
                     add(SearchActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
                         onDismiss()
-                        viewModel.addPlaylistToQueue(playlist)
+                        playbackViewModel.addPlaylistToQueue(playlist, libraryViewModel.songsForPlaylist(playlist))
                         toast(context, R.string.added_to_queue_feedback)
                     })
                     add(SearchActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
                         onDismiss()
-                        sharePlaylist(context, playlist, viewModel.songsForPlaylist(playlist))
+                        sharePlaylist(context, playlist, libraryViewModel.songsForPlaylist(playlist))
                     })
                 }
                 if (hit.remoteResult != null) {
@@ -1668,11 +1687,11 @@ private fun SearchActionsSheet(
                 if (hit.localSongs.isNotEmpty()) {
                     add(SearchActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play)) {
                         onDismiss()
-                        viewModel.playSongs(hit.localSongs)
+                        playbackViewModel.playSong(hit.localSongs.first(), hit.localSongs)
                     })
                     add(SearchActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
                         onDismiss()
-                        viewModel.addSongsToQueue(hit.localSongs)
+                        playbackViewModel.addSongsToQueue(hit.localSongs)
                         toast(context, R.string.added_to_queue_feedback)
                     })
                     add(SearchActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
@@ -1936,7 +1955,7 @@ private fun SearchSaveToPlaylistSheet(
 @Composable
 private fun SearchDetailsSheet(
     target: SearchActionTarget,
-    viewModel: LibraryViewModels,
+    viewModel: LibraryViewModel,
     onDismiss: () -> Unit
 ) {
     val title = when (target) {

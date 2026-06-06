@@ -18,14 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -38,10 +31,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
-import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModels
-import dev.chrisbanes.haze.HazeDefaults
+import com.jagr.fridamusic.presentation.viewmodels.*
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
+import kotlinx.coroutines.flow.map
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.text.Normalizer
@@ -49,20 +42,25 @@ import java.text.Normalizer
 @Composable
 fun MainScreen() {
     val context = LocalContext.current
-    val libraryViewModel: LibraryViewModels = viewModel()
+    val libraryViewModel: LibraryViewModel = viewModel()
+    val playbackViewModel: PlaybackViewModel = viewModel()
+    val searchViewModel: SearchViewModel = viewModel()
+    val settingsViewModel: SettingsViewModel = viewModel()
 
-    val repeatMode by libraryViewModel.repeatMode.collectAsState()
-    val isShuffleMode by libraryViewModel.isShuffleMode.collectAsState()
-    val currentSong by libraryViewModel.currentSong.collectAsState()
-    val isPlaying by libraryViewModel.isPlaying.collectAsState()
-    val playbackState by libraryViewModel.playbackState.collectAsState()
-    val keepScreenOn by libraryViewModel.keepScreenOn.collectAsState()
-    val currentAlbumArt by libraryViewModel.currentAlbumArt.collectAsState()
-    val lyricsLines by libraryViewModel.lyricsLines.collectAsState()
-    val currentPositionState = libraryViewModel.currentPosition.collectAsState()
-    val durationState = libraryViewModel.duration.collectAsState()
-    val isExtracting by libraryViewModel.isExtracting.collectAsState()
-    val errorMessage by libraryViewModel.errorMessage.collectAsState()
+    val repeatMode by playbackViewModel.repeatMode.collectAsState()
+    val isShuffleMode by playbackViewModel.isShuffleMode.collectAsState()
+    val currentSong by playbackViewModel.currentSong.collectAsState()
+    val isPlaying by playbackViewModel.isPlaying.collectAsState()
+    val playbackState by playbackViewModel.playbackState.collectAsState()
+    val keepScreenOn by settingsViewModel.keepScreenOn.collectAsState()
+    val currentAlbumArt = remember(currentSong) { currentSong?.artworkUri?.toString() }
+    val lyricsLines = remember(currentSong) { 
+        currentSong?.lyrics?.let { com.jagr.fridamusic.domain.lyrics.LyricsParser.parseLrc(it) } ?: emptyList() 
+    }
+    val currentPositionState = playbackViewModel.currentPosition.collectAsState()
+    val durationState = playbackViewModel.duration.collectAsState()
+    val isLoading by playbackViewModel.isLoading.collectAsState()
+    val errorMessage by playbackViewModel.errorMessage.collectAsState()
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var libraryReselectSignal by remember { mutableIntStateOf(0) }
@@ -128,14 +126,14 @@ fun MainScreen() {
                         isPlaying = isPlaying,
                         albumArtUrl = currentAlbumArt,
                         playbackState = playbackState,
-                        isLoading = isExtracting,
+                        isLoading = isLoading,
                         errorMessage = errorMessage,
                         currentPosition = currentPositionState.value,
                         duration = durationState.value,
                         hazeState = hazeState,
-                        onPlayPause = { libraryViewModel.togglePlayback() },
-                        onNext = { libraryViewModel.skipToNext() },
-                        onPrevious = { libraryViewModel.skipToPrevious() },
+                        onPlayPause = { playbackViewModel.togglePlayback() },
+                        onNext = { playbackViewModel.skipToNext() },
+                        onPrevious = { playbackViewModel.skipToPrevious() },
                         onNavigate = { route ->
                             if (route == selectedTopLevelRoute) {
                                 if (route == "search") {
@@ -145,13 +143,12 @@ fun MainScreen() {
                                 }
                             } else {
                                 searchFocusSignal = 0
-                                val returnHome = route == "home"
                                 navController.navigate(route) {
                                     popUpTo(navController.graph.startDestinationId) {
-                                        saveState = !returnHome
+                                        saveState = true
                                     }
                                     launchSingleTop = true
-                                    restoreState = !returnHome
+                                    restoreState = true
                                 }
                             }
                         },
@@ -177,7 +174,8 @@ fun MainScreen() {
                         listState = homeListState,
                         songs = songs,
                         viewModel = libraryViewModel,
-                        onSongClick = { libraryViewModel.playSong(it) },
+                        playbackViewModel = playbackViewModel,
+                        onSongClick = { playbackViewModel.playSong(it, songs) },
                         onNavigateToSettings = { navController.navigate("settings") },
                         onOpenLibrarySection = { section -> navController.navigate("library/$section") }
                     )
@@ -187,7 +185,9 @@ fun MainScreen() {
                     SearchScreen(
                         paddingValues = paddingValues,
                         listState = searchListState,
-                        viewModel = libraryViewModel,
+                        viewModel = searchViewModel,
+                        libraryViewModel = libraryViewModel,
+                        playbackViewModel = playbackViewModel,
                         focusSignal = searchFocusSignal,
                         onNavigateToArtist = { name, url ->
                             val encName = URLEncoder.encode(name, "UTF-8")
@@ -202,7 +202,7 @@ fun MainScreen() {
                     val rawUrl = URLDecoder.decode(backStackEntry.arguments?.getString("artistUrl") ?: "", "UTF-8")
                     val songs by libraryViewModel.songs.collectAsState()
                     val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
-                    val onlineResults by libraryViewModel.youtubeSearchResults.collectAsState()
+                    val onlineResults by searchViewModel.youtubeSearchResults.collectAsState()
                     val playlistLabel = stringResource(R.string.playlist_label)
                     val normalizedArtistName = remember(name) { normalizeRouteArtistName(name) }
                     val localArtistSongs = remember(songs, normalizedArtistName) {
@@ -277,7 +277,7 @@ fun MainScreen() {
                         popularReleases = localArtistPlaylists.ifEmpty { onlineArtistPlaylists },
                         onBack = { navController.popBackStack() },
                         onPlaySong = { song ->
-                            libraryViewModel.playSongFromArtist(
+                            playbackViewModel.playSong(
                                 song,
                                 localArtistSongs.ifEmpty { onlineArtistSongs }
                             )
@@ -290,6 +290,7 @@ fun MainScreen() {
                         paddingValues = paddingValues,
                         reselectSignal = libraryReselectSignal,
                         viewModel = libraryViewModel,
+                        playbackViewModel = playbackViewModel,
                         initialSection = null
                     )
                 }
@@ -299,6 +300,7 @@ fun MainScreen() {
                         paddingValues = paddingValues,
                         reselectSignal = libraryReselectSignal,
                         viewModel = libraryViewModel,
+                        playbackViewModel = playbackViewModel,
                         initialSection = backStackEntry.arguments?.getString("section")
                     )
                 }
@@ -307,7 +309,7 @@ fun MainScreen() {
                     SettingsScreen(
                         paddingValues = paddingValues,
                         listState = settingsListState,
-                        viewModel = libraryViewModel,
+                        viewModel = settingsViewModel,
                         onBack = { navController.popBackStack() }
                     )
                 }
@@ -339,14 +341,16 @@ fun MainScreen() {
                 repeatMode = repeatMode,
                 isShuffleMode = isShuffleMode,
                 lyricsLines = lyricsLines,
-                onPlayPause = { libraryViewModel.togglePlayback() },
-                onNext = { libraryViewModel.skipToNext() },
-                onPrevious = { libraryViewModel.skipToPrevious() },
-                onSeek = { libraryViewModel.seekTo(it) },
-                onToggleRepeat = { libraryViewModel.toggleRepeatMode() },
-                onToggleShuffle = { libraryViewModel.toggleShuffleMode() },
+                onPlayPause = { playbackViewModel.togglePlayback() },
+                onNext = { playbackViewModel.skipToNext() },
+                onPrevious = { playbackViewModel.skipToPrevious() },
+                onSeek = { playbackViewModel.seekTo(it) },
+                onToggleRepeat = { playbackViewModel.toggleRepeatMode() },
+                onToggleShuffle = { playbackViewModel.toggleShuffleMode() },
                 onCollapse = { isPlayerExpanded = false },
-                viewModel = libraryViewModel
+                viewModel = libraryViewModel,
+                playbackViewModel = playbackViewModel,
+                settingsViewModel = settingsViewModel
             )
         }
     }
