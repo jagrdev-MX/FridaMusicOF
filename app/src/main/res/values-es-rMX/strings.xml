@@ -42,6 +42,8 @@
     <string name="cancel">Cancelar</string>
     <string name="local_audio_player">Reproductor de audio local</string>
     <string name="min_format">%1$d min</string>
+    <string name="start">Iniciar</string>
+    <string name="end_of_song">Final de la canción</string>
 
     <!-- Themes -->
     <string name="theme_system">Predeterminado del sistema</string>
@@ -219,6 +221,7 @@
     <string name="share">Compartir</string>
     <string name="share_audio_file">Compartir archivo de audio</string>
     <string name="share_song_link">Compartir enlace de la canci&#243;n</string>
+    <string name="share_not_available">No hay una app disponible para compartir esta canci&#243;n.</string>
     <string name="explicit_badge">E</string>
     <string name="radio">Radio</string>
     <string name="unfollow">Dejar de seguir</string>

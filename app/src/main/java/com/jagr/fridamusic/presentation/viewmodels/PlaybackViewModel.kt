@@ -32,6 +32,13 @@ import javax.inject.Inject
 import org.json.JSONArray
 import org.json.JSONObject
 
+data class SleepTimerState(
+    val minutes: Int = 0,
+    val endOfSong: Boolean = false,
+    val expiresAtMs: Long = 0L,
+    val waitingForSongEnd: Boolean = false
+)
+
 @HiltViewModel
 class PlaybackViewModel @Inject constructor(
     application: Application,
@@ -76,12 +83,18 @@ class PlaybackViewModel @Inject constructor(
     val repeatMode = _repeatMode.asStateFlow()
     val isShuffleMode = MutableStateFlow(settingsManager.shuffleEnabled)
 
+    private val _sleepTimerState = MutableStateFlow(SleepTimerState())
+    val sleepTimerState = _sleepTimerState.asStateFlow()
+
     private var mediaController: MediaController? = null
     private val controllerFuture: ListenableFuture<MediaController>
+    private var playerListener: Player.Listener? = null
     private var progressJob: Job? = null
     private var playbackInitiationJob: Job? = null
+    private var sleepTimerJob: Job? = null
 
     private var currentPlaybackConfirmed = false
+    private var lastPlaybackSnapshotAtMs = 0L
     private val failedQueueRetryCounts = mutableMapOf<String, Int>()
 
     init {
@@ -97,16 +110,18 @@ class PlaybackViewModel @Inject constructor(
         )
         
         val savedJson = settingsManager.playbackQueueJson
-        if (savedJson.isNotBlank()) {
+        if (settingsManager.saveLastPlayback && savedJson.isNotBlank()) {
             restoreQueueState(savedJson)?.let { restored ->
                 _queueState.value = restored
                 _currentSong.value = restored.current?.song
             }
+        } else if (!settingsManager.saveLastPlayback) {
+            settingsManager.clearLastPlayback()
         }
     }
 
     private fun setupPlayerListener() {
-        mediaController?.addListener(object : Player.Listener {
+        val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
                 if (isPlaying) {
@@ -120,6 +135,7 @@ class PlaybackViewModel @Inject constructor(
                 _playbackState.value = state
                 if (state == Player.STATE_READY) {
                     _duration.value = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
+                    persistCurrentPlaybackSnapshot()
                 }
                 if (state == Player.STATE_ENDED) {
                     onPlaybackEnded()
@@ -129,7 +145,9 @@ class PlaybackViewModel @Inject constructor(
                 _errorMessage.value = "Playback error: ${error.message}"
                 handlePlaybackError()
             }
-        })
+        }
+        playerListener = listener
+        mediaController?.addListener(listener)
     }
 
     private fun handlePlaybackError() {
@@ -141,6 +159,10 @@ class PlaybackViewModel @Inject constructor(
     }
 
     private fun onPlaybackEnded() {
+        if (_sleepTimerState.value.waitingForSongEnd) {
+            stopAfterSleepTimer()
+            return
+        }
         if (_repeatMode.value == RepeatMode.ONE) {
             seekTo(0)
             mediaController?.play()
@@ -151,8 +173,9 @@ class PlaybackViewModel @Inject constructor(
 
     private fun confirmCurrentPlayback() {
         val song = _currentSong.value ?: return
+        if (currentPlaybackConfirmed) return
         currentPlaybackConfirmed = true
-        // Record history
+        // Registra el historial desde IO y Room emite el cambio a la UI mediante Flow.
         viewModelScope.launch(Dispatchers.IO) {
             playbackHistoryRepository.addToHistory(
                 PlaybackHistoryEntity(
@@ -164,13 +187,20 @@ class PlaybackViewModel @Inject constructor(
             )
         }
         refreshAutoplayRecommendations()
+        persistCurrentPlaybackSnapshot()
     }
 
     private fun startProgressUpdate() {
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (isActive) {
-                _currentPosition.value = mediaController?.currentPosition ?: 0L
+                val position = mediaController?.currentPosition ?: 0L
+                _currentPosition.value = position
+                val now = System.currentTimeMillis()
+                if (now - lastPlaybackSnapshotAtMs >= 2_000L) {
+                    persistCurrentPlaybackSnapshot(position)
+                    lastPlaybackSnapshotAtMs = now
+                }
                 delay(500)
             }
         }
@@ -184,6 +214,7 @@ class PlaybackViewModel @Inject constructor(
         val oldState = _queueState.value
         _currentSong.value = song
         _errorMessage.value = null
+        currentPlaybackConfirmed = false
         
         playbackInitiationJob?.cancel()
         playbackInitiationJob = viewModelScope.launch {
@@ -200,7 +231,11 @@ class PlaybackViewModel @Inject constructor(
                     thumbnailUrl = song.artworkUri.toString(),
                     type = ResultType.SONG
                 )
-                val stream = youtubeRepository.extractAudioStream(result, trustVideoId = true)
+                val stream = try {
+                    youtubeRepository.extractAudioStream(result, trustVideoId = true)
+                } catch (error: Exception) {
+                    null
+                }
                 _isLoading.value = false
                 _errorMessage.value = null // Clear "Extracting audio..." message
                 if (stream != null) {
@@ -260,6 +295,8 @@ class PlaybackViewModel @Inject constructor(
             source = source,
             sourceName = sourceName
         )
+        persistQueueState()
+        persistCurrentPlaybackSnapshot()
     }
 
     fun playPlaylist(playlist: Playlist, songs: List<Song>, shuffle: Boolean = false) {
@@ -275,7 +312,7 @@ class PlaybackViewModel @Inject constructor(
     fun playHistoryItem(item: PlaybackHistoryEntity, songs: List<Song>) {
         val localSong = songs.firstOrNull { it.id.toString() == item.songId || (it.title == item.title && it.artist == item.artist) }
         if (localSong != null) {
-            playSong(localSong, source = QueueSource.HISTORY, sourceName = "History")
+            playSong(localSong, queue = songs, source = QueueSource.HISTORY, sourceName = "History")
         }
     }
 
@@ -314,19 +351,7 @@ class PlaybackViewModel @Inject constructor(
         val queueSongs = if (source == QueueSource.SEARCH) com.jagr.fridamusic.domain.recommendation.AutoplayDiversity.diversifySequence(ordered) else ordered
 
         val currentSong = queueSongs.firstOrNull() ?: return
-        val currentItem = QueueItem(currentSong, source, reason = sourceName)
-        val upNextItems = queueSongs.drop(1).map { QueueItem(it, source, reason = sourceName) }
-
-        _queueState.value = PlaybackQueueState(
-            current = currentItem,
-            previous = emptyList(),
-            upNext = upNextItems,
-            source = source,
-            sourceName = sourceName
-        )
-
-        playSong(currentSong)
-        persistQueueState()
+        playSong(currentSong, queue = queueSongs, source = source, sourceName = sourceName)
     }
 
     fun playUpNext(index: Int) {
@@ -337,6 +362,7 @@ class PlaybackViewModel @Inject constructor(
             previous = state.previous + (state.current?.let { listOf(it) } ?: emptyList()),
             upNext = state.upNext.drop(index + 1)
         )
+        persistQueueState()
         playSong(item.song, source = item.source, sourceName = item.reason)
     }
 
@@ -348,6 +374,7 @@ class PlaybackViewModel @Inject constructor(
             previous = state.previous.take(index),
             upNext = state.previous.drop(index + 1) + (state.current?.let { listOf(it) } ?: emptyList()) + state.upNext
         )
+        persistQueueState()
         playSong(item.song, source = item.source, sourceName = item.reason)
     }
 
@@ -367,6 +394,7 @@ class PlaybackViewModel @Inject constructor(
                     previous = state.previous + (state.current?.let { listOf(it) } ?: emptyList()),
                     upNext = state.upNext.drop(1)
                 )
+                persistQueueState()
                 playSong(next.song, source = next.source, sourceName = next.reason)
                 promoteReadyAutoplayToUpNext()
             }
@@ -378,6 +406,7 @@ class PlaybackViewModel @Inject constructor(
                     autoplay = state.autoplay.drop(1),
                     source = QueueSource.AUTOPLAY
                 )
+                persistQueueState()
                 playSong(next.song, source = QueueSource.AUTOPLAY, sourceName = next.reason)
             }
             _repeatMode.value == RepeatMode.ALL && (state.previous.isNotEmpty() || state.current != null) -> {
@@ -389,6 +418,7 @@ class PlaybackViewModel @Inject constructor(
                         previous = emptyList(),
                         upNext = fullQueue.drop(1)
                     )
+                    persistQueueState()
                     playSong(first.song, source = first.source, sourceName = first.reason)
                 }
             }
@@ -407,6 +437,7 @@ class PlaybackViewModel @Inject constructor(
                 previous = state.previous.dropLast(1),
                 upNext = (state.current?.let { listOf(it) } ?: emptyList()) + state.upNext
             )
+            persistQueueState()
             playSong(prev.song, source = prev.source, sourceName = prev.reason)
         } else {
             mediaController?.seekToPrevious()
@@ -432,10 +463,9 @@ class PlaybackViewModel @Inject constructor(
         val next = !isShuffleMode.value
         isShuffleMode.value = next
         settingsManager.shuffleEnabled = next
-        if (next) {
-            val state = _queueState.value
-            _queueState.value = state.copy(upNext = state.upNext.shuffled())
-        }
+        val state = _queueState.value
+        _queueState.value = state.copy(upNext = state.upNext.shuffled())
+        persistQueueState()
     }
 
     private fun applyPlayerRepeatMode() {
@@ -453,6 +483,7 @@ class PlaybackViewModel @Inject constructor(
             autoplayError = null,
             isAutoplayLoading = false
         )
+        persistQueueState()
     }
 
     fun removeFromQueue(index: Int) {
@@ -461,6 +492,7 @@ class PlaybackViewModel @Inject constructor(
             _queueState.value = state.copy(
                 upNext = state.upNext.filterIndexed { i, _ -> i != index }
             )
+            persistQueueState()
         }
     }
 
@@ -473,6 +505,7 @@ class PlaybackViewModel @Inject constructor(
         val item = next.removeAt(index)
         next.add(targetIndex, item)
         _queueState.value = state.copy(upNext = next)
+        persistQueueState()
     }
 
     fun moveQueueItemToNext(index: Int) {
@@ -481,6 +514,7 @@ class PlaybackViewModel @Inject constructor(
         _queueState.value = state.copy(
             upNext = listOf(item) + state.upNext.filterIndexed { i, _ -> i != index }
         )
+        persistQueueState()
     }
 
     fun addSongsToQueue(songs: List<Song>) {
@@ -488,6 +522,7 @@ class PlaybackViewModel @Inject constructor(
         _queueState.value = state.copy(
             upNext = state.upNext + songs.map { QueueItem(it, QueueSource.USER) }
         )
+        persistQueueState()
     }
 
     fun addPlaylistToQueue(playlist: Playlist, songs: List<Song>) {
@@ -495,6 +530,7 @@ class PlaybackViewModel @Inject constructor(
         _queueState.value = state.copy(
             upNext = state.upNext + songs.map { QueueItem(it, QueueSource.PLAYLIST, reason = playlist.name) }
         )
+        persistQueueState()
     }
 
     fun playYouTubeSong(result: YouTubeResult) {
@@ -512,8 +548,66 @@ class PlaybackViewModel @Inject constructor(
     }
 
     private fun persistQueueState() {
+        if (!settingsManager.saveLastPlayback) {
+            settingsManager.clearLastPlayback()
+            return
+        }
         val state = _queueState.value
         settingsManager.playbackQueueJson = encodeQueueState(state)
+    }
+
+    private fun persistCurrentPlaybackSnapshot(position: Long = mediaController?.currentPosition ?: _currentPosition.value) {
+        val song = _currentSong.value
+        if (!settingsManager.saveLastPlayback || song == null) {
+            if (!settingsManager.saveLastPlayback) settingsManager.clearLastPlayback()
+            return
+        }
+        settingsManager.lastSongId = song.id
+        settingsManager.lastSongTitle = song.title
+        settingsManager.lastSongArtist = song.artist
+        settingsManager.lastSongUri = song.uri.toString()
+        settingsManager.lastSongArtwork = song.artworkUri.toString()
+        settingsManager.lastSongDuration = _duration.value.takeIf { it > 0L } ?: song.duration
+        settingsManager.lastPosition = position.coerceAtLeast(0L)
+    }
+
+    fun setSleepTimer(minutes: Int, endOfSong: Boolean) {
+        sleepTimerJob?.cancel()
+        if (minutes <= 0) {
+            _sleepTimerState.value = SleepTimerState()
+            return
+        }
+
+        val clampedMinutes = minutes.coerceIn(5, 120)
+        val expiresAt = System.currentTimeMillis() + clampedMinutes * 60_000L
+        _sleepTimerState.value = SleepTimerState(
+            minutes = clampedMinutes,
+            endOfSong = endOfSong,
+            expiresAtMs = expiresAt
+        )
+
+        sleepTimerJob = viewModelScope.launch {
+            delay(clampedMinutes * 60_000L)
+            if (endOfSong && _currentSong.value != null && _isPlaying.value) {
+                _sleepTimerState.value = _sleepTimerState.value.copy(waitingForSongEnd = true)
+            } else {
+                stopAfterSleepTimer()
+            }
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        _sleepTimerState.value = SleepTimerState()
+    }
+
+    private fun stopAfterSleepTimer() {
+        sleepTimerJob?.cancel()
+        mediaController?.pause()
+        mediaController?.stop()
+        _isPlaying.value = false
+        _sleepTimerState.value = SleepTimerState()
+        persistCurrentPlaybackSnapshot()
     }
 
     private fun encodeQueueState(state: PlaybackQueueState): String {
@@ -669,11 +763,13 @@ class PlaybackViewModel @Inject constructor(
         items.take(2).forEach { item ->
             if (item.song.uri.toString().startsWith("http")) {
                 viewModelScope.launch(Dispatchers.IO) {
-                    youtubeRepository.getCachedStream(item.song.data) ?: run {
-                        // Prefetch remote stream
-                        // extractAudioStream already caches it
-                        val ytMatch = YouTube.search("${item.song.title} ${item.song.artist} audio").firstOrNull { it.type == ResultType.SONG }
-                        ytMatch?.let { youtubeRepository.extractAudioStream(it, true) }
+                    try {
+                        youtubeRepository.getCachedStream(item.song.data) ?: run {
+                            val ytMatch = YouTube.search("${item.song.title} ${item.song.artist} audio").firstOrNull { it.type == ResultType.SONG }
+                            ytMatch?.let { youtubeRepository.extractAudioStream(it, true) }
+                        }
+                    } catch (error: Exception) {
+                        Log.w("FridaPlayback", "Remote prefetch skipped for ${item.song.title}: ${error.message}")
                     }
                 }
             }
@@ -693,6 +789,13 @@ class PlaybackViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        playerListener?.let { listener ->
+            mediaController?.removeListener(listener)
+        }
+        playerListener = null
+        persistQueueState()
+        persistCurrentPlaybackSnapshot()
+        sleepTimerJob?.cancel()
         super.onCleared()
         mediaController?.release()
     }

@@ -65,6 +65,7 @@ fun HomeScreen(
     val recentHistory by viewModel.recentHistory.collectAsState()
     val history by viewModel.fullHistory.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
+    val queueState by playbackViewModel.queueState.collectAsState()
 
     val favorites by produceState<Playlist?>(initialValue = null, playlists) {
         value = withContext(Dispatchers.Default) {
@@ -94,12 +95,6 @@ fun HomeScreen(
         }
     }
 
-    val recentArtists by produceState<List<Song>>(initialValue = emptyList(), historySongs) {
-        value = withContext(Dispatchers.Default) {
-            historySongs.distinctBy { it.artist }.take(10)
-        }
-    }
-
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -118,7 +113,13 @@ fun HomeScreen(
                 onHistory = { onOpenLibrarySection("HISTORY") },
                 onFavorites = { onOpenLibrarySection("FAVORITES") },
                 onMostPlayed = { onOpenLibrarySection("MOST_PLAYED") },
-                onShuffle = { playbackViewModel.toggleShuffleMode() }
+                onShuffle = {
+                    if (queueState.current == null && songs.isNotEmpty()) {
+                        playbackViewModel.playSongs(songs, shuffle = true)
+                    } else {
+                        playbackViewModel.toggleShuffleMode()
+                    }
+                }
             )
         }
 
@@ -126,7 +127,9 @@ fun HomeScreen(
             RecentlyPlayedSection(
                 history = recentHistory,
                 viewModel = viewModel,
-                onHistoryClick = { playbackViewModel.playSong(songs.find { it.uri.toString() == it.uri.toString() } ?: return@RecentlyPlayedSection) }, // Simplified
+                onHistoryClick = { item ->
+                    playbackViewModel.playHistoryItem(item, songs)
+                },
                 onSeeAll = { onOpenLibrarySection("HISTORY") }
             )
         }
@@ -148,14 +151,6 @@ fun HomeScreen(
             HomeSongCarousel(
                 title = stringResource(R.string.recently_played_albums),
                 songs = recentAlbums,
-                viewModel = viewModel,
-                onSongClick = onSongClick
-            )
-        }
-
-        item {
-            HomeArtistCarousel(
-                songs = recentArtists,
                 viewModel = viewModel,
                 onSongClick = onSongClick
             )

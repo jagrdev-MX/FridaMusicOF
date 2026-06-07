@@ -1084,7 +1084,7 @@ private fun SongsPage(
                     viewModel = viewModel,
                     playbackViewModel = playbackViewModel,
                     playlists = playlists,
-                    onClick = { playbackViewModel.playSong(song) },
+                    onClick = { playbackViewModel.playSong(song, songs) },
                     onOpenAlbum = albums.firstOrNull {
                         it.id == song.albumId || it.title == song.album
                     }?.let { album -> { onOpenAlbum(album) } },
@@ -1967,7 +1967,7 @@ private fun AlbumDetailPage(
                 viewModel = viewModel,
                 playbackViewModel = playbackViewModel,
                 playlists = playlists,
-                onClick = { playbackViewModel.playSong(song) }
+                onClick = { playbackViewModel.playSong(song, album.songs) }
             )
         }
     }
@@ -2124,6 +2124,9 @@ private fun ArtistDetailPage(
         customCoverUri = null,
         viewModel = viewModel
     )
+    val artistArtworkUrl by produceState<String?>(initialValue = null, key1 = artist.name) {
+        value = viewModel.getArtistImageUrl(artist.name)
+    }
     val topSongs = remember(artist, sortSongsByName) {
         val songs = if (sortSongsByName) artist.songs.sortedBy { it.title.lowercase() }
         else artist.songs.sortedByDescending { it.dateAdded }
@@ -2151,11 +2154,11 @@ private fun ArtistDetailPage(
                 song = artist.songs.firstOrNull(),
                 viewModel = viewModel,
                 shape = CircleShape,
-                overrideModel = selectedArtworkUri
+                overrideModel = selectedArtworkUri ?: artistArtworkUrl ?: leadArtworkUrl
             )
         },
         countLabel = pluralStringResource(R.plurals.library_songs_count, artist.songs.size, artist.songs.size),
-        backgroundArtUrl = selectedArtworkUri ?: leadArtworkUrl,
+        backgroundArtUrl = selectedArtworkUri ?: artistArtworkUrl ?: leadArtworkUrl,
         onBack = onBack,
         onMore = { showActions = true },
         onPlay = { playbackViewModel.playSongs(artist.songs) },
@@ -2337,7 +2340,7 @@ private fun DetailPageShell(
         FridaArtworkImage(
             model = backgroundArtUrl,
             contentDescription = null,
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
                 .blur(40.dp)
@@ -2505,7 +2508,7 @@ private fun SmartCollectionCover(
                 FridaArtworkImage(
                     model = coverModels.first(),
                     contentDescription = null,
-                    contentScale = ContentScale.Fit,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                     requestSizePx = 512
                 )
@@ -2525,7 +2528,7 @@ private fun SmartCollectionCover(
                             FridaArtworkImage(
                                 model = model,
                                 contentDescription = null,
-                                contentScale = ContentScale.Fit,
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxSize(),
@@ -2609,7 +2612,7 @@ private fun SmartCollectionThumbnail(
                 FridaArtworkImage(
                     model = coverModels.first(),
                     contentDescription = null,
-                    contentScale = ContentScale.Fit,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                     requestSizePx = 128
                 )
@@ -2623,7 +2626,7 @@ private fun SmartCollectionThumbnail(
                                 FridaArtworkImage(
                                     model = model,
                                     contentDescription = null,
-                                    contentScale = ContentScale.Fit,
+                                    contentScale = ContentScale.Crop,
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxSize(),
@@ -2688,7 +2691,7 @@ private fun DetailSongCover(
         FridaArtworkImage(
             model = overrideModel ?: imageUrl,
             contentDescription = null,
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
             shape = shape,
             requestSizePx = 720
@@ -2800,7 +2803,7 @@ private fun ArtistAlbumChip(
             FridaArtworkImage(
                 model = imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(12.dp),
                 requestSizePx = 320
@@ -2853,7 +2856,7 @@ private fun ArtistSongShelf(
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             items(songs, key = { "artist_shelf_song_${it.id}_$title" }) { song ->
-                ArtistSongCard(song = song, viewModel = viewModel, playbackViewModel = playbackViewModel, playlists = playlists)
+                ArtistSongCard(song = song, songs = songs, viewModel = viewModel, playbackViewModel = playbackViewModel, playlists = playlists)
             }
         }
     }
@@ -2862,6 +2865,7 @@ private fun ArtistSongShelf(
 @Composable
 private fun ArtistSongCard(
     song: Song,
+    songs: List<Song>,
     viewModel: LibraryViewModel,
     playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>
@@ -2871,7 +2875,7 @@ private fun ArtistSongCard(
     }
 
     Column(
-        modifier = Modifier.width(150.dp).clickable { playbackViewModel.playSong(song) },
+        modifier = Modifier.width(150.dp).clickable { playbackViewModel.playSong(song, songs) },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
@@ -2883,7 +2887,7 @@ private fun ArtistSongCard(
             FridaArtworkImage(
                 model = imageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(12.dp),
                 requestSizePx = 320
@@ -2964,7 +2968,8 @@ private fun RelatedArtistCard(
     onOpen: () -> Unit
 ) {
     val imageUrl by produceState<String?>(initialValue = null, key1 = artist.name) {
-        value = artist.songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
+        value = viewModel.getArtistImageUrl(artist.name)
+            ?: artist.songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
     }
 
     Column(

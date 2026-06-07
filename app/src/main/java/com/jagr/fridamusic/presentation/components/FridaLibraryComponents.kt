@@ -85,7 +85,7 @@ fun FridaArtworkImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(14.dp),
-    contentScale: ContentScale = ContentScale.Fit,
+    contentScale: ContentScale = ContentScale.Crop,
     requestSizePx: Int? = null,
     crossfadeMillis: Int = 120
 ) {

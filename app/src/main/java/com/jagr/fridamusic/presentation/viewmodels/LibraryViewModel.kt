@@ -54,7 +54,7 @@ class LibraryViewModel @Inject constructor(
 
     init {
         loadSongs()
-        loadRecentHistory()
+        observePlaybackHistory()
         refreshPlaylistCoverUris()
     }
 
@@ -70,6 +70,24 @@ class LibraryViewModel @Inject constructor(
             _recentHistory.value = playbackHistoryRepository.getRecentHistory(10)
             _fullHistory.value = playbackHistoryRepository.getFullHistory()
             _mostPlayedHistory.value = playbackHistoryRepository.getMostPlayed(20)
+        }
+    }
+
+    private fun observePlaybackHistory() {
+        viewModelScope.launch {
+            playbackHistoryRepository.observeRecentHistory(10)
+                .flowOn(Dispatchers.IO)
+                .collect { _recentHistory.value = it }
+        }
+        viewModelScope.launch {
+            playbackHistoryRepository.observeFullHistory()
+                .flowOn(Dispatchers.IO)
+                .collect { _fullHistory.value = it }
+        }
+        viewModelScope.launch {
+            playbackHistoryRepository.observeMostPlayed(20)
+                .flowOn(Dispatchers.IO)
+                .collect { _mostPlayedHistory.value = it }
         }
     }
 

@@ -41,6 +41,8 @@
     <string name="cancel">Cancel</string>
     <string name="local_audio_player">Local Audio Player</string>
     <string name="min_format">%1$d min</string>
+    <string name="start">Start</string>
+    <string name="end_of_song">End of song</string>
 
     <!-- Themes -->
     <string name="theme_system">System Default</string>
@@ -215,6 +217,7 @@
     <string name="share">Share</string>
     <string name="share_audio_file">Share audio file</string>
     <string name="share_song_link">Share song link</string>
+    <string name="share_not_available">No app is available to share this song.</string>
     <string name="explicit_badge">E</string>
     <string name="radio">Radio</string>
     <string name="unfollow">Unfollow</string>

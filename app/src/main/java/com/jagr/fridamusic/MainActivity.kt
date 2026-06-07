@@ -15,12 +15,8 @@ import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.data.ads.GoogleMobileAdsConsentManager
 import com.jagr.fridamusic.presentation.screens.MainScreen
 import com.jagr.fridamusic.presentation.theme.FridaMusicTheme
-import com.jagr.fridamusic.domain.model.AppTheme
 import com.jagr.fridamusic.presentation.viewmodels.LibraryViewModel
-import com.jagr.fridamusic.presentation.viewmodels.PlaybackViewModel
-import com.jagr.fridamusic.presentation.viewmodels.SearchViewModel
 import com.jagr.fridamusic.presentation.viewmodels.SettingsViewModel
-import com.jagr.fridamusic.presentation.viewmodels.QueueViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -64,7 +60,9 @@ class MainActivity : ComponentActivity() {
                 com.jagr.fridamusic.domain.model.AppTheme.DARK -> true
             }
 
-            com.jagr.fridamusic.presentation.theme.FridaMusicTheme(darkTheme = isDarkTheme) {
+            FridaMusicTheme(
+                darkTheme = isDarkTheme
+            ) {
                 MainScreen()
             }
         }

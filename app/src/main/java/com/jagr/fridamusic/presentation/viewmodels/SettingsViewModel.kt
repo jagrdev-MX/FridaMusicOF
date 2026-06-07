@@ -57,6 +57,7 @@ class SettingsViewModel @Inject constructor(
     fun toggleSaveLastPlayback(enabled: Boolean) {
         saveLastPlayback.value = enabled
         settingsManager.saveLastPlayback = enabled
+        if (!enabled) settingsManager.clearLastPlayback()
     }
 
     fun toggleBlurEffect(enabled: Boolean) {
@@ -103,6 +104,7 @@ class SettingsViewModel @Inject constructor(
     fun updateSaveLastPlayback(enabled: Boolean) {
         saveLastPlayback.value = enabled
         settingsManager.saveLastPlayback = enabled
+        if (!enabled) settingsManager.clearLastPlayback()
     }
 
     fun toggleAutoplay(enabled: Boolean) {
