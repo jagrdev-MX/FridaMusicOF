@@ -62,6 +62,19 @@ class SettingsManager(context: Context) {
         get() = prefs.getLong("last_position", 0L)
         set(value) = prefs.edit().putLong("last_position", value).apply()
 
+    fun clearLastPlayback() {
+        prefs.edit()
+            .remove("last_song_id")
+            .remove("last_song_title")
+            .remove("last_song_artist")
+            .remove("last_song_uri")
+            .remove("last_song_artwork")
+            .remove("last_song_duration")
+            .remove("last_position")
+            .remove("playback_queue_json")
+            .apply()
+    }
+
     var playbackQueueJson: String
         get() = prefs.getString("playback_queue_json", "") ?: ""
         set(value) = prefs.edit().putString("playback_queue_json", value).apply()

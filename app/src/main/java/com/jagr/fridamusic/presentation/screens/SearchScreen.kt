@@ -126,11 +126,13 @@ import kotlinx.coroutines.withContext
 import java.text.Normalizer
 import kotlin.math.min
 
-private const val SEARCH_HISTORY_LIMIT = 30
+private const val SEARCH_HISTORY_LIMIT = 20
 private const val SEARCH_RECENT_CARD_LIMIT = 4
 private const val SEARCH_RECOMMENDATION_LIMIT = 15
 private const val SEARCH_ALL_SECTION_LIMIT = 10
 private const val SEARCH_TAB_LIMIT = 20
+private const val SEARCH_SUGGESTION_HISTORY_SAMPLE = 120
+private const val SEARCH_SUGGESTION_SONG_SAMPLE = 220
 
 private enum class SearchTab(val labelRes: Int) {
     ALL(R.string.all_filter),
@@ -1459,7 +1461,7 @@ private fun SearchArtworkBox(
         FridaArtworkImage(
             model = imageUrl,
             contentDescription = null,
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.Crop,
             shape = shape,
             modifier = Modifier.fillMaxSize(),
             requestSizePx = 128
@@ -2140,6 +2142,7 @@ private fun buildSongHits(
     return byMetadata.values
         .sortedWith(
             compareByDescending<SearchSongHit> { it.score }
+                .thenBy { if (it.source == SearchSource.ONLINE) 0 else 1 }
                 .thenBy { stableRank(normalizedQuery, it.key) }
         )
 }
@@ -2333,12 +2336,14 @@ private fun buildSmartSearchSuggestions(
     localSongs: List<Song>
 ): List<String> {
     val suggestions = LinkedHashSet<String>()
+    val sampledHistory = playbackHistory.take(SEARCH_SUGGESTION_HISTORY_SAMPLE)
+    val sampledSongs = localSongs.take(SEARCH_SUGGESTION_SONG_SAMPLE)
     val blocked = searchHistory
         .map { normalizeForSearch(it) }
         .filter { it.isNotBlank() }
         .toSet()
 
-    playbackHistory
+    val topArtists = sampledHistory
         .asSequence()
         .map { it.artist.trim() }
         .filter { isKnownArtist(it) }
@@ -2347,10 +2352,31 @@ private fun buildSmartSearchSuggestions(
         .entries
         .sortedByDescending { it.value }
         .map { it.key }
+        .toList()
+
+    topArtists
         .filter { normalizeForSearch(it) !in blocked }
         .forEach { suggestions += it }
 
-    localSongs
+    topArtists
+        .take(6)
+        .map { "$it songs" }
+        .filter { normalizeForSearch(it) !in blocked }
+        .forEach { suggestions += it }
+
+    searchHistory
+        .asSequence()
+        .flatMap { normalizeForSearch(it).split(" ").asSequence() }
+        .filter { it.length > 2 && it !in searchStopWords }
+        .groupingBy { it }
+        .eachCount()
+        .entries
+        .sortedByDescending { it.value }
+        .map { "${it.key} mix" }
+        .filter { normalizeForSearch(it) !in blocked }
+        .forEach { suggestions += it }
+
+    sampledSongs
         .asSequence()
         .filter { isKnownAlbum(it.album) }
         .groupBy { it.album.trim() }
@@ -2360,9 +2386,8 @@ private fun buildSmartSearchSuggestions(
         .filter { normalizeForSearch(it) !in blocked }
         .forEach { suggestions += it }
 
-    localSongs
+    sampledSongs
         .asSequence()
-        .sortedByDescending { it.dateAdded }
         .map { it.title.trim() }
         .filter { it.length > 1 }
         .filter { normalizeForSearch(it) !in blocked }
@@ -2392,7 +2417,7 @@ private fun scoreRemoteResult(
         ResultType.PLAYLIST -> 8
         ResultType.ALBUM -> 7
     }
-    return typeBoost +
+    return 18 + typeBoost +
             scoreText(result.title, normalizedQuery, tokens, 1.25f) +
             scoreText(result.artist, normalizedQuery, tokens, 0.9f)
 }

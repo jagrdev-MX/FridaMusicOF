@@ -240,7 +240,7 @@ private fun PopularSongItem(
             FridaArtworkImage(
                 model = song.artworkUri ?: fallbackImageUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(8.dp),
                 requestSizePx = 128
@@ -303,7 +303,7 @@ private fun ReleaseCard(release: Song, onClick: () -> Unit) {
             FridaArtworkImage(
                 model = release.artworkUri,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
                 shape = RoundedCornerShape(16.dp),
                 requestSizePx = 320

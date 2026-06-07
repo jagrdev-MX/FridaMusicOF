@@ -6,7 +6,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -31,12 +34,10 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,7 +59,7 @@ import com.jagr.fridamusic.presentation.viewmodels.*
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun NowPlayingScreen(
     currentSong: Song?,
@@ -107,6 +108,12 @@ fun NowPlayingScreen(
 
     val supportsNativeBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val shouldApplyBlur = enableBlur && supportsNativeBlur
+    val playerBackgroundColor = if (shouldApplyBlur) Color.Black else MaterialTheme.colorScheme.background
+    val playerPrimaryContent = if (shouldApplyBlur) Color.White else MaterialTheme.colorScheme.onBackground
+    val playerSecondaryContent = playerPrimaryContent.copy(alpha = 0.66f)
+    val playerSubtleContent = playerPrimaryContent.copy(alpha = 0.2f)
+    val playButtonBackground = if (shouldApplyBlur) Color.White else MaterialTheme.colorScheme.primary
+    val playButtonContent = if (shouldApplyBlur) Color.Black else MaterialTheme.colorScheme.onPrimary
 
     val artworkPalette by rememberMiniPlayerArtworkPalette(albumArtUrl)
     val immersiveDarkGradient = remember(artworkPalette) {
@@ -151,10 +158,8 @@ fun NowPlayingScreen(
         modifier = Modifier
             .fillMaxSize()
             .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
-            .background(Color.Black) 
-            .background(
-                if (shouldApplyBlur) SolidColor(Color(0xFF121212)) else immersiveDarkGradient
-            )
+            .background(playerBackgroundColor)
+            .then(if (shouldApplyBlur) Modifier.background(immersiveDarkGradient) else Modifier)
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = {
@@ -178,6 +183,33 @@ fun NowPlayingScreen(
                 onClick = {}
             )
     ) {
+        if (shouldApplyBlur) {
+            key(albumArtUrl) {
+                AsyncImage(
+                    model = rememberFridaArtworkRequest(
+                        model = albumArtUrl,
+                        requestSizePx = 360,
+                        crossfadeMillis = 0
+                    ),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = 0.36f
+                            scaleX = 1.18f
+                            scaleY = 1.18f
+                        }
+                        .blur(56.dp)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.48f))
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -192,19 +224,19 @@ fun NowPlayingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onCollapse) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.minimize), tint = Color.White)
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.minimize), tint = playerPrimaryContent)
                 }
                 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = if (isYouTube) stringResource(R.string.from_youtube_music) else stringResource(R.string.local_audio_player),
                         style = LiquidTypography.labelSmall,
-                        color = Color.White.copy(alpha = 0.6f)
+                        color = playerSecondaryContent
                     )
                 }
                 
                 IconButton(onClick = { showCurrentSongActions = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = Color.White)
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = playerPrimaryContent)
                 }
             }
             
@@ -216,7 +248,7 @@ fun NowPlayingScreen(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .clip(RoundedCornerShape(24.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+                    .border(1.dp, playerPrimaryContent.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
             ) {
                 FridaArtworkImage(
                     model = albumArtUrl,
@@ -236,16 +268,18 @@ fun NowPlayingScreen(
                     Text(
                         text = currentSong?.title ?: stringResource(R.string.no_song_playing),
                         style = LiquidTypography.headlineSmall,
-                        color = Color.White,
+                        color = playerPrimaryContent,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Clip
                     )
                     Text(
                         text = currentSong?.artist ?: stringResource(R.string.unknown_artist),
                         style = LiquidTypography.titleMedium,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = playerSecondaryContent,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Clip
                     )
                 }
                 
@@ -253,7 +287,7 @@ fun NowPlayingScreen(
                     Icon(
                         imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = stringResource(R.string.like),
-                        tint = if (isLiked) MaterialTheme.colorScheme.primary else Color.White
+                        tint = if (isLiked) MaterialTheme.colorScheme.primary else playerPrimaryContent
                     )
                 }
             }
@@ -263,14 +297,15 @@ fun NowPlayingScreen(
             // Progress Bar
             val position = currentPosition()
             val progress = if (totalDuration > 0) position.toFloat() / totalDuration else 0f
+            var showRemainingTime by rememberSaveable(currentSong?.id) { mutableStateOf(false) }
             
             Slider(
                 value = progress,
                 onValueChange = { onSeek((it * totalDuration).toLong()) },
                 colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.White,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                    thumbColor = playerPrimaryContent,
+                    activeTrackColor = playerPrimaryContent,
+                    inactiveTrackColor = playerSubtleContent
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -282,12 +317,19 @@ fun NowPlayingScreen(
                 Text(
                     text = formatDuration(position),
                     style = LiquidTypography.labelSmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = playerSecondaryContent
                 )
                 Text(
-                    text = formatDuration(totalDuration),
+                    text = if (showRemainingTime) {
+                        "-${formatDuration((totalDuration - position).coerceAtLeast(0L))}"
+                    } else {
+                        formatDuration(totalDuration)
+                    },
                     style = LiquidTypography.labelSmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = playerSecondaryContent,
+                    modifier = Modifier.clickable {
+                        showRemainingTime = !showRemainingTime
+                    }
                 )
             }
             
@@ -303,32 +345,32 @@ fun NowPlayingScreen(
                     Icon(
                         Icons.Default.Shuffle, 
                         contentDescription = stringResource(R.string.shuffle),
-                        tint = if (isShuffleMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                        tint = if (isShuffleMode) MaterialTheme.colorScheme.primary else playerSecondaryContent
                     )
                 }
                 
                 IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = Color.White, modifier = Modifier.size(32.dp))
+                    Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = playerPrimaryContent, modifier = Modifier.size(32.dp))
                 }
                 
                 Box(
                     modifier = Modifier
                         .size(72.dp)
                         .clip(CircleShape)
-                        .background(Color.White)
+                        .background(playButtonBackground)
                         .clickable { onPlayPause() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.play),
-                        tint = Color.Black,
+                        tint = playButtonContent,
                         modifier = Modifier.size(40.dp)
                     )
                 }
                 
                 IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next), tint = Color.White, modifier = Modifier.size(32.dp))
+                    Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next), tint = playerPrimaryContent, modifier = Modifier.size(32.dp))
                 }
                 
                 IconButton(onClick = onToggleRepeat) {
@@ -339,7 +381,7 @@ fun NowPlayingScreen(
                             else -> Icons.Default.Repeat
                         },
                         contentDescription = stringResource(R.string.repeat),
-                        tint = if (repeatMode != com.jagr.fridamusic.domain.model.RepeatMode.OFF) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
+                        tint = if (repeatMode != com.jagr.fridamusic.domain.model.RepeatMode.OFF) MaterialTheme.colorScheme.primary else playerSecondaryContent
                     )
                 }
             }
@@ -353,13 +395,13 @@ fun NowPlayingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = { showLyricsSheet = true }) {
-                    Icon(Icons.Default.Lyrics, contentDescription = null, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Lyrics, contentDescription = null, tint = playerSecondaryContent, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.lyrics), color = Color.White.copy(alpha = 0.6f))
+                    Text(stringResource(R.string.lyrics), color = playerSecondaryContent)
                 }
                 
                 IconButton(onClick = { showQueueSheet = true }) {
-                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = stringResource(R.string.queue), tint = Color.White.copy(alpha = 0.6f))
+                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = stringResource(R.string.queue), tint = playerSecondaryContent)
                 }
             }
         }
@@ -778,6 +820,10 @@ private fun QueueActionsSheet(
         add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
             onPickPlaylist(song)
         })
+        add(QueueActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
+            onDismiss()
+            shareQueueSong(context, song, song.remoteShareUrl())
+        })
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -823,6 +869,7 @@ private fun CurrentSongActionsSheet(
     onPickPlaylist: (Song) -> Unit,
     onOpenInfo: () -> Unit
 ) {
+    val context = LocalContext.current
     val actions = buildList {
         add(QueueActionSpec(if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like)) {
             onDismiss()
@@ -830,6 +877,10 @@ private fun CurrentSongActionsSheet(
         })
         add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
             onPickPlaylist(song)
+        })
+        add(QueueActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
+            onDismiss()
+            shareQueueSong(context, song, song.remoteShareUrl())
         })
         add(QueueActionSpec(Icons.Default.Info, stringResource(R.string.details)) {
             onOpenInfo()
@@ -923,7 +974,12 @@ private fun queueArtworkUrl(song: Song, fallback: String?): String? =
         ?: song.artworkUri.toString().takeIf { it.isNotBlank() && it != "content://media/external/audio/albumart/0" }
 
 private fun shareQueueSong(context: Context, song: Song, remoteUrl: String?) {
-    // shareSongAudioOrLink(context, song, remoteUrl, song.title) // Placeholder
+    shareSongAudioOrLink(context, song, remoteUrl)
+}
+
+private fun Song.remoteShareUrl(): String? {
+    val uriText = uri.toString()
+    return uriText.takeIf { it.startsWith("http://") || it.startsWith("https://") }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

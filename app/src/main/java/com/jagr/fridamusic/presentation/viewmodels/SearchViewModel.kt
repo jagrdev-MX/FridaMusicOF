@@ -6,18 +6,20 @@ import androidx.lifecycle.viewModelScope
 import com.jagr.fridamusic.data.remote.innertube.YouTube
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
 import com.jagr.fridamusic.data.repository.*
-import com.jagr.fridamusic.domain.model.Song
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+
+private const val SEARCH_HISTORY_MAX_ITEMS = 20
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     application: Application,
-    private val settingsManager: SettingsManager,
-    private val youtubeRepository: YouTubeRepository
+    private val settingsManager: SettingsManager
 ) : AndroidViewModel(application) {
 
     private val _isSearching = MutableStateFlow(false)
@@ -31,7 +33,7 @@ class SearchViewModel @Inject constructor(
     val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
 
     private val _searchHistory = MutableStateFlow<List<String>>(
-        settingsManager.searchHistory.split("||").filter { it.isNotBlank() }
+        settingsManager.searchHistory.split("||").filter { it.isNotBlank() }.take(SEARCH_HISTORY_MAX_ITEMS)
     )
     val searchHistory = _searchHistory.asStateFlow()
 
@@ -55,9 +57,8 @@ class SearchViewModel @Inject constructor(
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            delay(300)
-            
             _isSearching.value = true
+            delay(120)
             try {
                 val results = withContext(Dispatchers.IO) {
                     YouTube.search(trimmed)
@@ -68,12 +69,13 @@ class SearchViewModel @Inject constructor(
                 }
                 
                 _youtubeSearchResults.value = results
-                if (settingsManager.gaplessPlayback) {
-                    results.take(2).forEach { result ->
-                        launch { youtubeRepository.prefetchStream(result) }
-                    }
-                }
-            } catch (e: Exception) {
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IOException) {
+                _youtubeSearchResults.value = emptyList()
+            } catch (error: HttpRequestTimeoutException) {
+                _youtubeSearchResults.value = emptyList()
+            } catch (error: Exception) {
                 _youtubeSearchResults.value = emptyList()
             } finally {
                 _isSearching.value = false
@@ -108,7 +110,7 @@ class SearchViewModel @Inject constructor(
         val current = _searchHistory.value.toMutableList()
         current.removeAll { it.equals(cleanQuery, ignoreCase = true) }
         current.add(0, cleanQuery)
-        while (current.size > 30) current.removeAt(current.lastIndex)
+        while (current.size > SEARCH_HISTORY_MAX_ITEMS) current.removeAt(current.lastIndex)
 
         _searchHistory.value = current
         settingsManager.searchHistory = current.joinToString("||")
