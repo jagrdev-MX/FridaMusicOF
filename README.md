@@ -126,7 +126,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 ### Repositorio oficial
 
-**Commits humanos visibles:** 280 · **Commits de automatización:** 108
+**Commits humanos visibles:** 280 · **Commits de automatización:** 109
 
 | Colaborador | Commits | % de contribución humana |
 | --- | ---: | ---: |
@@ -143,7 +143,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 > Los porcentajes del repositorio oficial se calculan con commits humanos visibles. Los bots se separan para no distorsionar la métrica. Los forks muestran trabajo independiente que aún no necesariamente fue integrado al proyecto principal.
 
-Última actualización automática (UTC): `2026-06-07`
+Última actualización automática (UTC): `2026-06-08`
 <!-- CONTRIBUTOR-STATS:END -->
 
 ---
