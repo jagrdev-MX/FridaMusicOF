@@ -49,6 +49,8 @@ import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
+import com.jagr.fridamusic.domain.lyrics.LyricsResult
+import com.jagr.fridamusic.domain.lyrics.LyricsSyncState
 import com.jagr.fridamusic.domain.model.*
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
@@ -68,7 +70,7 @@ fun NowPlayingScreen(
     albumArtUrl: String?,
     repeatMode: com.jagr.fridamusic.domain.model.RepeatMode,
     isShuffleMode: Boolean,
-    lyricsLines: List<LyricsLine>,
+    lyricsResult: LyricsResult,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -78,7 +80,9 @@ fun NowPlayingScreen(
     onCollapse: () -> Unit,
     viewModel: LibraryViewModel,
     playbackViewModel: PlaybackViewModel,
-    settingsViewModel: SettingsViewModel
+    settingsViewModel: SettingsViewModel,
+    onOpenArtist: (String) -> Unit,
+    onOpenAlbum: (Song) -> Unit
 ) {
     val context = LocalContext.current
     val adManager = remember { AdManager.getInstance(context) }
@@ -95,7 +99,6 @@ fun NowPlayingScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
-    val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
     val totalDuration by playbackViewModel.duration.collectAsState()
     val enableBlur by settingsViewModel.enableBlurEffect.collectAsState()
@@ -215,7 +218,7 @@ fun NowPlayingScreen(
                 .fillMaxSize()
                 .padding(horizontal = 28.dp)
         ) {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp))
             
             // Top Bar
             Row(
@@ -298,10 +301,27 @@ fun NowPlayingScreen(
             val position = currentPosition()
             val progress = if (totalDuration > 0) position.toFloat() / totalDuration else 0f
             var showRemainingTime by rememberSaveable(currentSong?.id) { mutableStateOf(false) }
+            var isDraggingProgress by remember(currentSong?.id) { mutableStateOf(false) }
+            var dragProgress by remember(currentSong?.id) { mutableFloatStateOf(progress) }
+            val visualProgress = if (isDraggingProgress) dragProgress else progress
+            val visualPosition = if (isDraggingProgress) {
+                (dragProgress * totalDuration).toLong()
+            } else {
+                position
+            }
             
             Slider(
-                value = progress,
-                onValueChange = { onSeek((it * totalDuration).toLong()) },
+                value = visualProgress.coerceIn(0f, 1f),
+                onValueChange = {
+                    isDraggingProgress = true
+                    dragProgress = it.coerceIn(0f, 1f)
+                },
+                onValueChangeFinished = {
+                    val seekPosition = (dragProgress * totalDuration).toLong().coerceIn(0L, totalDuration.coerceAtLeast(0L))
+                    onSeek(seekPosition)
+                    isDraggingProgress = false
+                },
+                enabled = totalDuration > 0L,
                 colors = SliderDefaults.colors(
                     thumbColor = playerPrimaryContent,
                     activeTrackColor = playerPrimaryContent,
@@ -315,13 +335,13 @@ fun NowPlayingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = formatDuration(position),
+                    text = formatDuration(visualPosition),
                     style = LiquidTypography.labelSmall,
                     color = playerSecondaryContent
                 )
                 Text(
                     text = if (showRemainingTime) {
-                        "-${formatDuration((totalDuration - position).coerceAtLeast(0L))}"
+                        "-${formatDuration((totalDuration - visualPosition).coerceAtLeast(0L))}"
                     } else {
                         formatDuration(totalDuration)
                     },
@@ -421,7 +441,7 @@ fun NowPlayingScreen(
         if (showLyricsSheet) {
             LyricsBottomSheet(
                 currentSong = currentSong,
-                lyricsLines = lyricsLines,
+                lyricsResult = lyricsResult,
                 currentPosition = currentPosition,
                 sheetState = sheetState,
                 onSeek = onSeek,
@@ -456,6 +476,23 @@ fun NowPlayingScreen(
                     onOpenInfo = {
                         showCurrentSongActions = false
                         showInfoSheet = true
+                    },
+                    onPlayNext = {
+                        playbackViewModel.addSongNext(it)
+                    },
+                    onAddToQueue = {
+                        playbackViewModel.addSongToQueue(it)
+                    },
+                    onOpenArtist = {
+                        showCurrentSongActions = false
+                        onOpenArtist(it.artist)
+                    },
+                    onOpenAlbum = {
+                        showCurrentSongActions = false
+                        onOpenAlbum(it)
+                    },
+                    onRemoveFromHistory = {
+                        playbackViewModel.removeCurrentFromHistory()
                     }
                 )
             }
@@ -867,10 +904,23 @@ private fun CurrentSongActionsSheet(
     onDismiss: () -> Unit,
     onToggleLike: (Song) -> Unit,
     onPickPlaylist: (Song) -> Unit,
-    onOpenInfo: () -> Unit
+    onOpenInfo: () -> Unit,
+    onPlayNext: (Song) -> Unit,
+    onAddToQueue: (Song) -> Unit,
+    onOpenArtist: (Song) -> Unit,
+    onOpenAlbum: (Song) -> Unit,
+    onRemoveFromHistory: (Song) -> Unit
 ) {
     val context = LocalContext.current
     val actions = buildList {
+        add(QueueActionSpec(Icons.Default.SkipNext, stringResource(R.string.play_next)) {
+            onDismiss()
+            onPlayNext(song)
+        })
+        add(QueueActionSpec(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.add_to_queue)) {
+            onDismiss()
+            onAddToQueue(song)
+        })
         add(QueueActionSpec(if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like)) {
             onDismiss()
             onToggleLike(song)
@@ -878,12 +928,26 @@ private fun CurrentSongActionsSheet(
         add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
             onPickPlaylist(song)
         })
+        if (song.artist.isNotBlank()) {
+            add(QueueActionSpec(Icons.Default.Person, stringResource(R.string.go_to_artist)) {
+                onOpenArtist(song)
+            })
+        }
+        if (song.album.isNotBlank() || song.albumId > 0L) {
+            add(QueueActionSpec(Icons.Default.Album, stringResource(R.string.go_to_album)) {
+                onOpenAlbum(song)
+            })
+        }
         add(QueueActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
             onDismiss()
             shareQueueSong(context, song, song.remoteShareUrl())
         })
         add(QueueActionSpec(Icons.Default.Info, stringResource(R.string.details)) {
             onOpenInfo()
+        })
+        add(QueueActionSpec(Icons.Default.History, stringResource(R.string.remove_from_history), destructive = true) {
+            onDismiss()
+            onRemoveFromHistory(song)
         })
     }
 
@@ -986,7 +1050,7 @@ private fun Song.remoteShareUrl(): String? {
 @Composable
 private fun LyricsBottomSheet(
     currentSong: Song?,
-    lyricsLines: List<LyricsLine>,
+    lyricsResult: LyricsResult,
     currentPosition: () -> Long,
     sheetState: SheetState,
     onSeek: (Long) -> Unit,
@@ -996,83 +1060,136 @@ private fun LyricsBottomSheet(
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
             Text(stringResource(R.string.lyrics), style = LiquidTypography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = 16.dp))
 
-            if (lyricsLines.isNotEmpty()) {
-                val listState = rememberLazyListState()
-                val activeLineIndex by remember(lyricsLines, currentPosition) {
-                    derivedStateOf {
-                        val pos = currentPosition()
-                        val index = lyricsLines.indexOfLast { it.startTime <= pos }
-                        if (index >= 0) index else 0
-                    }
-                }
-
-                LaunchedEffect(activeLineIndex) {
-                    val targetIndex = maxOf(0, activeLineIndex - 2)
-                    listState.animateScrollToItem(
-                        index = targetIndex,
-                        scrollOffset = 0
+            when (lyricsResult) {
+                LyricsResult.Loading -> {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Text(
+                        text = stringResource(R.string.looking_for_lyrics),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp)
                     )
                 }
-
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
-                    contentPadding = PaddingValues(vertical = 64.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    itemsIndexed(
-                        items = lyricsLines,
-                        key = { index, line -> "${index}_${line.startTime}_${line.content.hashCode()}" }
-                    ) { index, line ->
-                        val isActive = index == activeLineIndex
-                        val color by animateColorAsState(
-                            targetValue = if (isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            animationSpec = spring(stiffness = Spring.StiffnessLow),
-                            label = "lyricsColor"
+                is LyricsResult.Available -> {
+                    if (lyricsResult.syncState == LyricsSyncState.SYNCED && lyricsResult.lines.isNotEmpty()) {
+                        SyncedLyricsList(
+                            lyricsLines = lyricsResult.lines,
+                            currentPosition = currentPosition,
+                            onSeek = onSeek
                         )
-                        val fontSize by animateFloatAsState(
-                            targetValue = if (isActive) 24f else 20f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
-                            label = "lyricsSize"
-                        )
-
-                        Text(
-                            text = line.content,
-                            color = color,
-                            fontSize = fontSize.sp,
-                            lineHeight = (fontSize + 8f).sp,
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).clickable { onSeek(line.startTime) }
-                        )
+                    } else {
+                        PlainLyricsText(lyricsResult.plainText ?: currentSong?.lyrics.orEmpty())
                     }
                 }
-            } else if (!currentSong?.lyrics.isNullOrBlank()) {
-                currentSong?.lyrics?.let { lyricsText ->
-                    val scrollState = rememberScrollState()
-                    Column(
-                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scrollState)
-                    ) {
-                        Text(
-                            text = lyricsText,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                            fontSize = 20.sp,
-                            lineHeight = 32.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(40.dp))
+                LyricsResult.NotAvailable -> {
+                    if (!currentSong?.lyrics.isNullOrBlank()) {
+                        PlainLyricsText(currentSong?.lyrics.orEmpty())
+                    } else {
+                        LyricsMessage(text = stringResource(R.string.lyrics_not_available))
                     }
                 }
-            } else {
-                Text(
-                    text = stringResource(R.string.looking_for_lyrics),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp)
-                )
+                is LyricsResult.Error -> {
+                    LyricsMessage(text = lyricsResult.message ?: stringResource(R.string.lyrics_error))
+                }
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
+}
+
+@Composable
+private fun ColumnScope.SyncedLyricsList(
+    lyricsLines: List<LyricsLine>,
+    currentPosition: () -> Long,
+    onSeek: (Long) -> Unit
+) {
+    val listState = rememberLazyListState()
+    var pauseAutoScrollUntilMs by remember { mutableLongStateOf(0L) }
+    val activeLineIndex by remember(lyricsLines, currentPosition) {
+        derivedStateOf {
+            val pos = currentPosition()
+            val index = lyricsLines.indexOfLast { line ->
+                val end = line.endTime.takeIf { it > 0L } ?: Long.MAX_VALUE
+                pos >= line.startTime && pos < end
+            }
+            if (index >= 0) index else 0
+        }
+    }
+
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            pauseAutoScrollUntilMs = System.currentTimeMillis() + 3_500L
+        }
+    }
+
+    LaunchedEffect(activeLineIndex) {
+        if (System.currentTimeMillis() >= pauseAutoScrollUntilMs) {
+            listState.animateScrollToItem(
+                index = maxOf(0, activeLineIndex - 2),
+                scrollOffset = 0
+            )
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+        contentPadding = PaddingValues(vertical = 64.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        itemsIndexed(
+            items = lyricsLines,
+            key = { index, line -> "${index}_${line.startTime}_${line.content.hashCode()}" }
+        ) { index, line ->
+            val isActive = index == activeLineIndex
+            val color by animateColorAsState(
+                targetValue = if (isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                animationSpec = spring(stiffness = Spring.StiffnessLow),
+                label = "lyricsColor"
+            )
+            val fontSize by animateFloatAsState(
+                targetValue = if (isActive) 24f else 20f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
+                label = "lyricsSize"
+            )
+
+            Text(
+                text = line.content,
+                color = color,
+                fontSize = fontSize.sp,
+                lineHeight = (fontSize + 8f).sp,
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).clickable { onSeek(line.startTime) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.PlainLyricsText(lyricsText: String) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scrollState)
+    ) {
+        Text(
+            text = lyricsText,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+            fontSize = 20.sp,
+            lineHeight = 32.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun LyricsMessage(text: String) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

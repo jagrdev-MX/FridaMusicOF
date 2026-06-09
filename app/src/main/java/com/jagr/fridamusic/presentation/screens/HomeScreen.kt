@@ -65,7 +65,6 @@ fun HomeScreen(
     val recentHistory by viewModel.recentHistory.collectAsState()
     val history by viewModel.fullHistory.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
-    val queueState by playbackViewModel.queueState.collectAsState()
 
     val favorites by produceState<Playlist?>(initialValue = null, playlists) {
         value = withContext(Dispatchers.Default) {
@@ -114,11 +113,7 @@ fun HomeScreen(
                 onFavorites = { onOpenLibrarySection("FAVORITES") },
                 onMostPlayed = { onOpenLibrarySection("MOST_PLAYED") },
                 onShuffle = {
-                    if (queueState.current == null && songs.isNotEmpty()) {
-                        playbackViewModel.playSongs(songs, shuffle = true)
-                    } else {
-                        playbackViewModel.toggleShuffleMode()
-                    }
+                    playbackViewModel.playHomeShuffle(songs)
                 }
             )
         }

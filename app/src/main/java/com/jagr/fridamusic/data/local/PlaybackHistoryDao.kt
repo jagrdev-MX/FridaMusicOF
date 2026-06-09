@@ -30,6 +30,9 @@ interface PlaybackHistoryDao {
     @Query("DELETE FROM playback_history WHERE songId = :songId")
     suspend fun deleteBySongId(songId: String)
 
+    @Query("DELETE FROM playback_history WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Query(
         """
         DELETE FROM playback_history

@@ -136,6 +136,19 @@ class SettingsManager(context: Context) {
         editor.apply()
     }
 
+    fun cachedLyrics(cacheKey: String): String? =
+        prefs.getString("lyrics_cache_$cacheKey", null)
+
+    fun setCachedLyrics(cacheKey: String, lyrics: String?) {
+        val editor = prefs.edit()
+        if (lyrics.isNullOrBlank()) {
+            editor.remove("lyrics_cache_$cacheKey")
+        } else {
+            editor.putString("lyrics_cache_$cacheKey", lyrics)
+        }
+        editor.apply()
+    }
+
     fun playlistCoverUri(playlistId: Long): String? =
         prefs.getString("playlist_cover_$playlistId", null)
 

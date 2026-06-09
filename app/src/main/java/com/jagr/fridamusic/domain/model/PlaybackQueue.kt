@@ -25,6 +25,7 @@ data class PlaybackQueueState(
     val autoplay: List<QueueItem> = emptyList(),
     val source: QueueSource = QueueSource.LIBRARY,
     val sourceName: String? = null,
+    val shuffleSnapshot: List<QueueItem> = emptyList(),
     val isAutoplayLoading: Boolean = false,
     val autoplayError: String? = null
 ) {

@@ -146,6 +146,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import java.net.URLDecoder
 import kotlin.math.min
 
 private enum class LibraryTab {
@@ -458,7 +459,7 @@ fun LibraryScreen(
     val favoritesName = stringResource(R.string.favorites_playlist_name)
     val mostPlayedTitle = stringResource(R.string.most_played)
 
-    LaunchedEffect(initialSection, playlists, mostPlayedSongs, fullHistory) {
+    LaunchedEffect(initialSection, playlists, mostPlayedSongs, fullHistory, visibleAlbums) {
         if (initialSectionConsumed) return@LaunchedEffect
         when (initialSection) {
             "HISTORY", "ALBUMS", "SONGS", "ARTISTS", "PLAYLISTS" -> {
@@ -483,6 +484,24 @@ fun LibraryScreen(
                 )
                 if (mostPlayedSongs.isNotEmpty() || fullHistory.isNotEmpty()) {
                     initialSectionConsumed = true
+                }
+            }
+            else -> {
+                when {
+                    initialSection?.startsWith("ALBUM_ID_") == true -> {
+                        val albumId = initialSection.removePrefix("ALBUM_ID_").toLongOrNull()
+                        visibleAlbums.firstOrNull { it.id == albumId }?.let {
+                            detail = LibraryDetail.AlbumDetail(it)
+                            initialSectionConsumed = true
+                        }
+                    }
+                    initialSection?.startsWith("ALBUM_NAME_") == true -> {
+                        val albumName = URLDecoder.decode(initialSection.removePrefix("ALBUM_NAME_"), "UTF-8")
+                        visibleAlbums.firstOrNull { it.title.equals(albumName, ignoreCase = true) }?.let {
+                            detail = LibraryDetail.AlbumDetail(it)
+                            initialSectionConsumed = true
+                        }
+                    }
                 }
             }
         }
@@ -3347,6 +3366,7 @@ private fun SongActionsSheet(
     onDetails: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
+    onRemoveFromHistory: (() -> Unit)? = null,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
     onShare: () -> Unit
@@ -3376,6 +3396,9 @@ private fun SongActionsSheet(
             if (onRemoveFromPlaylist != null) {
                 add(ActionSpec(Icons.Default.Delete, stringResource(R.string.remove_from_playlist), destructive = true, onClick = onRemoveFromPlaylist))
             }
+            if (onRemoveFromHistory != null) {
+                add(ActionSpec(Icons.Default.History, stringResource(R.string.remove_from_history), destructive = true, onClick = onRemoveFromHistory))
+            }
             add(
                 ActionSpec(
                     if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -3396,7 +3419,8 @@ private fun HistoryActionsSheet(
     item: PlaybackHistoryEntity,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onRemoveFromHistory: () -> Unit
 ) {
     ActionSheetFrame(
         title = item.title,
@@ -3404,7 +3428,8 @@ private fun HistoryActionsSheet(
         onDismiss = onDismiss,
         actions = listOf(
             ActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play), onClick = onPlay),
-            ActionSpec(Icons.Default.Share, stringResource(R.string.share), onClick = onShare)
+            ActionSpec(Icons.Default.Share, stringResource(R.string.share), onClick = onShare),
+            ActionSpec(Icons.Default.History, stringResource(R.string.remove_from_history), destructive = true, onClick = onRemoveFromHistory)
         )
     )
 }
@@ -3811,6 +3836,7 @@ private fun LibrarySongItem(
                         it()
                     }
                 },
+                onRemoveFromHistory = null,
                 onMoveUp = if (playlist != null && canMoveUp && onMoveUp != null) {
                     {
                         showActions = false
@@ -4030,6 +4056,10 @@ private fun HistorySongItem(
                     showActions = false
                     viewModel.toggleLike(linkedSong)
                 },
+                onRemoveFromHistory = {
+                    showActions = false
+                    viewModel.removeFromHistory(item)
+                },
                 onShare = {
                     showActions = false
                     scope.launch {
@@ -4073,6 +4103,10 @@ private fun HistorySongItem(
                             )
                         }
                     }
+                },
+                onRemoveFromHistory = {
+                    showActions = false
+                    viewModel.removeFromHistory(item)
                 }
             )
         }

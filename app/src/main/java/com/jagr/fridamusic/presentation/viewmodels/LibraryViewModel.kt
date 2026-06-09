@@ -1,6 +1,10 @@
 package com.jagr.fridamusic.presentation.viewmodels
 
 import android.app.Application
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jagr.fridamusic.R
@@ -8,10 +12,12 @@ import com.jagr.fridamusic.data.local.MusicDatabase
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.data.local.PlaylistEntity
 import com.jagr.fridamusic.data.repository.*
+import com.jagr.fridamusic.domain.lyrics.LyricsResult
 import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.Song
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -27,6 +33,9 @@ class LibraryViewModel @Inject constructor(
     private val lyricsRepository: LyricsRepository
 ) : AndroidViewModel(application) {
     private val playlistDao = MusicDatabase.getDatabase(application).playlistDao()
+    private var loadSongsJob: Job? = null
+    private var mediaStoreScanJob: Job? = null
+    private var mediaStoreObserver: ContentObserver? = null
 
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs = _songs.asStateFlow()
@@ -53,15 +62,47 @@ class LibraryViewModel @Inject constructor(
     }
 
     init {
+        startMediaStoreObserver()
         loadSongs()
         observePlaybackHistory()
         refreshPlaylistCoverUris()
     }
 
     fun loadSongs() {
-        viewModelScope.launch(Dispatchers.IO) {
+        loadSongsJob?.cancel()
+        loadSongsJob = viewModelScope.launch(Dispatchers.IO) {
             val loadedSongs = audioRepository.getAudioFiles(settingsManager.filterVoiceNotes)
-            _songs.value = loadedSongs
+            if (loadedSongs.mediaSignature() != _songs.value.mediaSignature()) {
+                _songs.value = loadedSongs
+                refreshPlaylistCoverUris()
+            }
+        }
+    }
+
+    private fun startMediaStoreObserver() {
+        if (mediaStoreObserver != null) return
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                scheduleMediaStoreRefresh()
+            }
+
+            override fun onChange(selfChange: Boolean, uri: android.net.Uri?) {
+                scheduleMediaStoreRefresh()
+            }
+        }
+        getApplication<Application>().contentResolver.registerContentObserver(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            true,
+            observer
+        )
+        mediaStoreObserver = observer
+    }
+
+    private fun scheduleMediaStoreRefresh() {
+        mediaStoreScanJob?.cancel()
+        mediaStoreScanJob = viewModelScope.launch {
+            delay(900)
+            loadSongs()
         }
     }
 
@@ -259,6 +300,8 @@ class LibraryViewModel @Inject constructor(
     
     fun localLyrics(song: Song): String? = settingsManager.localLyrics(song.id)
 
+    suspend fun getLyricsResult(song: Song): LyricsResult = lyricsRepository.getLyricsResult(song)
+
     fun saveLocalLyrics(song: Song, lyrics: String) {
         settingsManager.setLocalLyrics(song.id, lyrics)
     }
@@ -307,5 +350,24 @@ class LibraryViewModel @Inject constructor(
     fun clearCaches() {
         artworkRepository.clearCache()
     }
+
+    fun removeFromHistory(item: PlaybackHistoryEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playbackHistoryRepository.removeFromHistory(item)
+        }
+    }
+
+    override fun onCleared() {
+        mediaStoreScanJob?.cancel()
+        loadSongsJob?.cancel()
+        mediaStoreObserver?.let { observer ->
+            getApplication<Application>().contentResolver.unregisterContentObserver(observer)
+        }
+        mediaStoreObserver = null
+        super.onCleared()
+    }
+
+    private fun List<Song>.mediaSignature(): List<String> =
+        map { "${it.id}:${it.dateAdded}:${it.duration}:${it.uri}" }
 
 }

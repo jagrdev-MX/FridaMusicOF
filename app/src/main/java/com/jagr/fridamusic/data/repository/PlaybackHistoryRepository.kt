@@ -56,4 +56,13 @@ class PlaybackHistoryRepository(
     suspend fun clearHistory() {
         dao.clearHistory()
     }
+
+    suspend fun removeFromHistory(songId: String, title: String, artist: String) {
+        dao.deleteDuplicateEntries(songId, title, artist)
+        dao.deleteBySongId(songId)
+    }
+
+    suspend fun removeFromHistory(item: PlaybackHistoryEntity) {
+        dao.deleteById(item.id)
+    }
 }

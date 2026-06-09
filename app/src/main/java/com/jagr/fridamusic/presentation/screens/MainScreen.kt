@@ -30,11 +30,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
+import com.jagr.fridamusic.domain.lyrics.LyricsResult
 import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
 import com.jagr.fridamusic.presentation.viewmodels.*
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
-import kotlinx.coroutines.flow.map
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.text.Normalizer
@@ -54,8 +54,16 @@ fun MainScreen() {
     val playbackState by playbackViewModel.playbackState.collectAsState()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt = remember(currentSong) { currentSong?.artworkUri?.toString() }
-    val lyricsLines = remember(currentSong) { 
-        currentSong?.lyrics?.let { com.jagr.fridamusic.domain.lyrics.LyricsParser.parseLrc(it) } ?: emptyList() 
+    val lyricsResult by produceState<LyricsResult>(initialValue = LyricsResult.NotAvailable, currentSong) {
+        val song = currentSong
+        value = if (song == null) {
+            LyricsResult.NotAvailable
+        } else {
+            LyricsResult.Loading
+        }
+        if (song != null) {
+            value = libraryViewModel.getLyricsResult(song)
+        }
     }
     val currentPositionState = playbackViewModel.currentPosition.collectAsState()
     val durationState = playbackViewModel.duration.collectAsState()
@@ -69,7 +77,11 @@ fun MainScreen() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
-    var selectedTopLevelRoute by remember { mutableStateOf("home") }
+    val selectedTopLevelRoute = when {
+        currentRoute.startsWith("library") -> "library"
+        currentRoute in setOf("home", "search") -> currentRoute
+        else -> "home"
+    }
 
     val homeListState = rememberLazyListState()
     val searchListState = rememberLazyListState()
@@ -109,12 +121,6 @@ fun MainScreen() {
         }
     }
 
-    LaunchedEffect(currentRoute) {
-        if (currentRoute in setOf("home", "search", "library") || currentRoute.startsWith("library/")) {
-            selectedTopLevelRoute = if (currentRoute.startsWith("library")) "library" else currentRoute
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
@@ -135,7 +141,7 @@ fun MainScreen() {
                         onNext = { playbackViewModel.skipToNext() },
                         onPrevious = { playbackViewModel.skipToPrevious() },
                         onNavigate = { route ->
-                            if (route == selectedTopLevelRoute) {
+                            if (route == selectedTopLevelRoute && currentRoute == route) {
                                 if (route == "search") {
                                     searchFocusSignal++
                                 } else if (route == "library") {
@@ -143,12 +149,34 @@ fun MainScreen() {
                                 }
                             } else {
                                 searchFocusSignal = 0
-                                navController.navigate(route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+                                when (route) {
+                                    "home" -> {
+                                        navController.navigate("home") {
+                                            popUpTo("home") {
+                                                inclusive = false
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = false
+                                        }
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                    "library" -> {
+                                        navController.navigate("library") {
+                                            popUpTo("home") {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = false
+                                        }
+                                    }
+                                    else -> {
+                                        navController.navigate(route) {
+                                            popUpTo("home") {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -177,7 +205,12 @@ fun MainScreen() {
                         playbackViewModel = playbackViewModel,
                         onSongClick = { playbackViewModel.playSong(it, songs) },
                         onNavigateToSettings = { navController.navigate("settings") },
-                        onOpenLibrarySection = { section -> navController.navigate("library/$section") }
+                        onOpenLibrarySection = { section ->
+                            navController.navigate("library/${URLEncoder.encode(section, "UTF-8")}") {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
                     )
                 }
 
@@ -341,7 +374,7 @@ fun MainScreen() {
                 albumArtUrl = currentAlbumArt,
                 repeatMode = repeatMode,
                 isShuffleMode = isShuffleMode,
-                lyricsLines = lyricsLines,
+                lyricsResult = lyricsResult,
                 onPlayPause = { playbackViewModel.togglePlayback() },
                 onNext = { playbackViewModel.skipToNext() },
                 onPrevious = { playbackViewModel.skipToPrevious() },
@@ -351,7 +384,26 @@ fun MainScreen() {
                 onCollapse = { isPlayerExpanded = false },
                 viewModel = libraryViewModel,
                 playbackViewModel = playbackViewModel,
-                settingsViewModel = settingsViewModel
+                settingsViewModel = settingsViewModel,
+                onOpenArtist = { artist ->
+                    isPlayerExpanded = false
+                    val encName = URLEncoder.encode(artist, "UTF-8")
+                    navController.navigate("artist?name=$encName&url=none") {
+                        launchSingleTop = true
+                    }
+                },
+                onOpenAlbum = { song ->
+                    isPlayerExpanded = false
+                    val section = if (song.albumId > 0L) {
+                        "ALBUM_ID_${song.albumId}"
+                    } else {
+                        "ALBUM_NAME_${song.album}"
+                    }
+                    navController.navigate("library/${URLEncoder.encode(section, "UTF-8")}") {
+                        launchSingleTop = true
+                        restoreState = false
+                    }
+                }
             )
         }
     }
