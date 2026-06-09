@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -93,6 +94,8 @@ class PlaybackViewModel @Inject constructor(
     private var progressJob: Job? = null
     private var playbackInitiationJob: Job? = null
     private var sleepTimerJob: Job? = null
+    private var nativeQueueItems: List<QueueItem> = emptyList()
+    private var updatingNativeQueue = false
 
     private var currentPlaybackConfirmed = false
     private var lastPlaybackSnapshotAtMs = 0L
@@ -141,6 +144,11 @@ class PlaybackViewModel @Inject constructor(
                 }
                 if (state == Player.STATE_ENDED) {
                     onPlaybackEnded()
+                }
+            }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (!updatingNativeQueue) {
+                    syncStateFromNativeQueue(mediaItem)
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -217,12 +225,49 @@ class PlaybackViewModel @Inject constructor(
         _currentSong.value = song
         _errorMessage.value = null
         currentPlaybackConfirmed = false
-        
+
+        val startIndex = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+        val currentItem = QueueItem(song, source, reason = sourceName)
+        val previousItems = if (queue.isNotEmpty()) {
+            queue.take(startIndex).map { QueueItem(it, source, reason = sourceName) }
+        } else {
+            oldState.previous
+        }
+        val upNextItems = if (queue.isNotEmpty()) {
+            queue.drop(startIndex + 1).map { QueueItem(it, source, reason = sourceName) }
+        } else {
+            oldState.upNext
+        }
+
+        val isNavigational = source == QueueSource.AUTOPLAY || source == QueueSource.USER || source == QueueSource.RESTORED
+        val autoplayItems = if (isNavigational) {
+            oldState.autoplay
+        } else {
+            emptyList()
+        }
+
+        val nextQueueState = PlaybackQueueState(
+            current = currentItem,
+            previous = previousItems,
+            upNext = upNextItems,
+            autoplay = autoplayItems,
+            source = source,
+            sourceName = sourceName,
+            shuffleSnapshot = if (isShuffleMode.value) {
+                if (queue.isNotEmpty()) previousItems + currentItem + upNextItems else oldState.shuffleSnapshot
+            } else {
+                emptyList()
+            }
+        )
+        _queueState.value = nextQueueState
+        persistQueueState()
+        persistCurrentPlaybackSnapshot()
+
         playbackInitiationJob?.cancel()
         playbackInitiationJob = viewModelScope.launch {
             val uriString = song.uri.toString()
             val isYouTubeUrl = uriString.contains("youtube.com/watch") || uriString.contains("youtu.be/")
-            
+
             val finalUri = if (isYouTubeUrl) {
                 _isLoading.value = true
                 _errorMessage.value = "Extracting audio..."
@@ -250,60 +295,14 @@ class PlaybackViewModel @Inject constructor(
                 song.uri
             }
 
-            val metadata = MediaMetadata.Builder()
-                .setTitle(song.title)
-                .setArtist(song.artist)
-                .setArtworkUri(song.artworkUri)
-                .build()
-
-            val mediaItem = MediaItem.Builder()
-                .setMediaId(song.id.toString())
-                .setUri(finalUri)
-                .setMediaMetadata(metadata)
-                .build()
-
-            mediaController?.apply {
-                setMediaItem(mediaItem)
-                prepare()
-                play()
-            }
+            setNativePlayerQueue(
+                queueItems = nextQueueState.nativePlaybackQueue().ifEmpty { listOf(currentItem) },
+                currentItem = currentItem,
+                currentPlaybackUri = finalUri,
+                startPositionMs = C.TIME_UNSET,
+                playWhenReady = true
+            )
         }
-        
-        val startIndex = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
-        val currentItem = QueueItem(song, source, reason = sourceName)
-        val previousItems = if (queue.isNotEmpty()) {
-            queue.take(startIndex).map { QueueItem(it, source, reason = sourceName) }
-        } else {
-            oldState.previous
-        }
-        val upNextItems = if (queue.isNotEmpty()) {
-            queue.drop(startIndex + 1).map { QueueItem(it, source, reason = sourceName) }
-        } else {
-            oldState.upNext
-        }
-        
-        val isNavigational = source == QueueSource.AUTOPLAY || source == QueueSource.USER || source == QueueSource.RESTORED
-        val autoplayItems = if (isNavigational) {
-            oldState.autoplay
-        } else {
-            emptyList()
-        }
-
-        _queueState.value = PlaybackQueueState(
-            current = currentItem,
-            previous = previousItems,
-            upNext = upNextItems,
-            autoplay = autoplayItems,
-            source = source,
-            sourceName = sourceName,
-            shuffleSnapshot = if (isShuffleMode.value) {
-                if (queue.isNotEmpty()) previousItems + currentItem + upNextItems else oldState.shuffleSnapshot
-            } else {
-                emptyList()
-            }
-        )
-        persistQueueState()
-        persistCurrentPlaybackSnapshot()
     }
 
     fun playPlaylist(playlist: Playlist, songs: List<Song>, shuffle: Boolean = false) {
@@ -358,6 +357,7 @@ class PlaybackViewModel @Inject constructor(
             shuffleSnapshot = state.shuffleSnapshot.insertAfterCurrent(state.current, item)
         )
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     fun addSongToQueue(song: Song) {
@@ -368,6 +368,7 @@ class PlaybackViewModel @Inject constructor(
             shuffleSnapshot = state.shuffleSnapshot.appendIfActive(item)
         )
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     private fun startQueueSession(
@@ -449,6 +450,12 @@ class PlaybackViewModel @Inject constructor(
     }
 
     fun skipToNext() {
+        mediaController?.takeIf { it.hasNextMediaItem() }?.let { controller ->
+            controller.seekToNextMediaItem()
+            controller.play()
+            return
+        }
+
         val state = _queueState.value
         when {
             state.upNext.isNotEmpty() -> {
@@ -493,6 +500,12 @@ class PlaybackViewModel @Inject constructor(
     }
 
     fun skipToPrevious() {
+        mediaController?.takeIf { it.hasPreviousMediaItem() }?.let { controller ->
+            controller.seekToPreviousMediaItem()
+            controller.play()
+            return
+        }
+
         val state = _queueState.value
         if (state.previous.isNotEmpty()) {
             val prev = state.previous.last()
@@ -527,13 +540,14 @@ class PlaybackViewModel @Inject constructor(
         val next = !isShuffleMode.value
         isShuffleMode.value = next
         settingsManager.shuffleEnabled = next
-        mediaController?.shuffleModeEnabled = next
+        mediaController?.shuffleModeEnabled = false
         _queueState.value = if (next) {
             _queueState.value.shuffleEnabled()
         } else {
             _queueState.value.shuffleRestored()
         }
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     private fun applyPlayerRepeatMode() {
@@ -542,7 +556,7 @@ class PlaybackViewModel @Inject constructor(
         } else {
             Player.REPEAT_MODE_OFF
         }
-        mediaController?.shuffleModeEnabled = isShuffleMode.value
+        mediaController?.shuffleModeEnabled = false
     }
 
     fun clearManualQueue() {
@@ -554,6 +568,7 @@ class PlaybackViewModel @Inject constructor(
         )
         _queueState.value = nextState.copy(shuffleSnapshot = nextState.shuffleSnapshot.syncWithQueue(nextState))
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     fun removeFromQueue(index: Int) {
@@ -565,6 +580,7 @@ class PlaybackViewModel @Inject constructor(
                 shuffleSnapshot = state.shuffleSnapshot.removeIfActive(removed)
             )
             persistQueueState()
+            refreshNativeQueueIfNeeded()
         }
     }
 
@@ -578,6 +594,7 @@ class PlaybackViewModel @Inject constructor(
         next.add(targetIndex, item)
         _queueState.value = state.copy(upNext = next)
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     fun moveQueueItemToNext(index: Int) {
@@ -587,6 +604,7 @@ class PlaybackViewModel @Inject constructor(
             upNext = listOf(item) + state.upNext.filterIndexed { i, _ -> i != index }
         )
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     fun addSongsToQueue(songs: List<Song>) {
@@ -597,6 +615,7 @@ class PlaybackViewModel @Inject constructor(
             shuffleSnapshot = items.fold(state.shuffleSnapshot) { snapshot, item -> snapshot.appendIfActive(item) }
         )
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     fun addPlaylistToQueue(playlist: Playlist, songs: List<Song>) {
@@ -607,6 +626,7 @@ class PlaybackViewModel @Inject constructor(
             shuffleSnapshot = items.fold(state.shuffleSnapshot) { snapshot, item -> snapshot.appendIfActive(item) }
         )
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     fun playYouTubeSong(result: YouTubeResult) {
@@ -835,6 +855,7 @@ class PlaybackViewModel @Inject constructor(
                     )
                     persistQueueState()
                     prefetchUpcomingQueueItems(recommendations)
+                    refreshNativeQueueIfNeeded()
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -848,14 +869,17 @@ class PlaybackViewModel @Inject constructor(
     }
 
     private fun prefetchUpcomingQueueItems(items: List<QueueItem>) {
-        if (!settingsManager.gaplessPlayback) return
-        items.take(2).forEach { item ->
+        val prefetchLimit = if (settingsManager.gaplessPlayback) 2 else 1
+        items.take(prefetchLimit).forEach { item ->
             if (item.song.uri.toString().startsWith("http")) {
                 viewModelScope.launch(Dispatchers.IO) {
                     try {
                         youtubeRepository.getCachedStream(item.song.data) ?: run {
                             val ytMatch = YouTube.search("${item.song.title} ${item.song.artist} audio").firstOrNull { it.type == ResultType.SONG }
                             ytMatch?.let { youtubeRepository.extractAudioStream(it, true) }
+                        }
+                        withContext(Dispatchers.Main) {
+                            refreshNativeQueueIfNeeded()
                         }
                     } catch (error: Exception) {
                         Log.w("FridaPlayback", "Remote prefetch skipped for ${item.song.title}: ${error.message}")
@@ -875,6 +899,7 @@ class PlaybackViewModel @Inject constructor(
             autoplay = state.autoplay.filter { it != ready }
         )
         persistQueueState()
+        refreshNativeQueueIfNeeded()
     }
 
     private fun List<Song>.firstOrRandom(shuffle: Boolean): Song? =
@@ -882,6 +907,149 @@ class PlaybackViewModel @Inject constructor(
 
     private fun PlaybackQueueState.fullQueue(): List<QueueItem> =
         previous + listOfNotNull(current) + upNext
+
+    private fun PlaybackQueueState.nativePlaybackQueue(): List<QueueItem> =
+        previous + listOfNotNull(current) + upNext + autoplay
+
+    private fun setNativePlayerQueue(
+        queueItems: List<QueueItem>,
+        currentItem: QueueItem,
+        currentPlaybackUri: Uri,
+        startPositionMs: Long,
+        playWhenReady: Boolean
+    ) {
+        val controller = mediaController ?: return
+        val nativeQueue = buildNativeQueue(queueItems, currentItem, currentPlaybackUri)
+        if (nativeQueue.mediaItems.isEmpty()) return
+
+        nativeQueueItems = nativeQueue.items
+        updatingNativeQueue = true
+        try {
+            controller.setMediaItems(nativeQueue.mediaItems, nativeQueue.currentIndex, startPositionMs)
+            controller.shuffleModeEnabled = false
+            controller.prepare()
+            if (playWhenReady) {
+                controller.play()
+            }
+        } finally {
+            updatingNativeQueue = false
+        }
+    }
+
+    private fun refreshNativeQueueIfNeeded() {
+        val controller = mediaController ?: return
+        val state = _queueState.value
+        val currentItem = state.current ?: return
+        val currentUri = controller.currentMediaItem?.localConfiguration?.uri
+            ?: currentItem.song.nativePlaybackUriOrNull()
+            ?: return
+        val requestedQueue = state.nativePlaybackQueue().ifEmpty { listOf(currentItem) }
+        val nativeQueue = buildNativeQueue(requestedQueue, currentItem, currentUri)
+        val nextKeys = nativeQueue.items.map { it.stableKey() }
+        val currentKeys = nativeQueueItems.map { it.stableKey() }
+        if (nextKeys == currentKeys) return
+
+        setNativePlayerQueue(
+            queueItems = requestedQueue,
+            currentItem = currentItem,
+            currentPlaybackUri = currentUri,
+            startPositionMs = controller.currentPosition.coerceAtLeast(0L),
+            playWhenReady = controller.playWhenReady
+        )
+    }
+
+    private fun buildNativeQueue(
+        queueItems: List<QueueItem>,
+        currentItem: QueueItem,
+        currentPlaybackUri: Uri
+    ): NativeQueue {
+        val mediaItems = mutableListOf<MediaItem>()
+        val playableItems = mutableListOf<QueueItem>()
+        var currentIndex = -1
+        val currentKey = currentItem.stableKey()
+
+        queueItems.distinctBy { it.stableKey() }.forEach { item ->
+            val playbackUri = if (item.stableKey() == currentKey) {
+                currentPlaybackUri
+            } else {
+                item.song.nativePlaybackUriOrNull()
+            } ?: return@forEach
+
+            if (item.stableKey() == currentKey) {
+                currentIndex = mediaItems.size
+            }
+            playableItems += item
+            mediaItems += item.song.toMediaItem(playbackUri)
+        }
+
+        if (currentIndex == -1) {
+            playableItems.add(0, currentItem)
+            mediaItems.add(0, currentItem.song.toMediaItem(currentPlaybackUri))
+            currentIndex = 0
+        }
+
+        return NativeQueue(mediaItems, playableItems, currentIndex)
+    }
+
+    private fun syncStateFromNativeQueue(mediaItem: MediaItem?) {
+        if (mediaItem == null || nativeQueueItems.isEmpty()) return
+        val index = mediaController?.currentMediaItemIndex?.takeIf { it in nativeQueueItems.indices }
+            ?: nativeQueueItems.indexOfFirst { it.song.id.toString() == mediaItem.mediaId }
+        val item = nativeQueueItems.getOrNull(index) ?: return
+        if (_queueState.value.current?.stableKey() == item.stableKey()) return
+
+        val state = _queueState.value
+        val nativeKeys = nativeQueueItems.map { it.stableKey() }.toSet()
+        val consumedNativeKeys = nativeQueueItems.take(index + 1).map { it.stableKey() }.toSet()
+        val futureNativeItems = nativeQueueItems.drop(index + 1)
+        _currentSong.value = item.song
+        currentPlaybackConfirmed = false
+        _currentPosition.value = mediaController?.currentPosition ?: 0L
+        _duration.value = mediaController?.duration?.takeIf { it > 0L } ?: item.song.duration
+        _queueState.value = state.copy(
+            current = item,
+            previous = nativeQueueItems.take(index),
+            upNext = futureNativeItems.filter { it.source != QueueSource.AUTOPLAY } +
+                    state.upNext.filter { it.stableKey() !in nativeKeys },
+            autoplay = state.autoplay.filter { it.stableKey() !in consumedNativeKeys },
+            source = item.source,
+            sourceName = item.reason ?: state.sourceName
+        )
+        persistQueueState()
+        if (mediaController?.isPlaying == true) {
+            confirmCurrentPlayback()
+        } else {
+            persistCurrentPlaybackSnapshot()
+        }
+    }
+
+    private fun Song.toMediaItem(playbackUri: Uri): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(id.toString())
+            .setUri(playbackUri)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .setArtworkUri(artworkUri)
+                    .build()
+            )
+            .build()
+
+    private fun Song.nativePlaybackUriOrNull(): Uri? {
+        val uriText = uri.toString()
+        if (uriText.isBlank() || uri == Uri.EMPTY) return null
+        if (uriText.startsWith("http", ignoreCase = true)) {
+            val videoId = youtubeVideoIdOrNull() ?: return null
+            return youtubeRepository.getCachedStream(videoId)?.let(Uri::parse)
+        }
+        return uri
+    }
+
+    private fun Song.youtubeVideoIdOrNull(): String? =
+        data.takeIf { YOUTUBE_VIDEO_ID.matches(it) }
+            ?: runCatching { uri.getQueryParameter("v") }.getOrNull()
+            ?: YOUTUBE_VIDEO_ID.find(uri.toString())?.value
 
     private fun PlaybackQueueState.shuffleEnabled(): PlaybackQueueState {
         val snapshot = shuffleSnapshot.ifEmpty { fullQueue().distinctBy { it.stableKey() } }
@@ -957,6 +1125,12 @@ class PlaybackViewModel @Inject constructor(
     }
 
     private fun QueueItem.stableKey(): String = song.stablePlaybackKey()
+
+    private data class NativeQueue(
+        val mediaItems: List<MediaItem>,
+        val items: List<QueueItem>,
+        val currentIndex: Int
+    )
 
     private fun Song.stablePlaybackKey(): String =
         uri.toString().takeIf { it.isNotBlank() && it != Uri.EMPTY.toString() }
