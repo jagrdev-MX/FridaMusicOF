@@ -126,7 +126,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 ### Repositorio oficial
 
-**Commits humanos visibles:** 283 · **Commits de automatización:** 135
+**Commits humanos visibles:** 283 · **Commits de automatización:** 136
 
 | Colaborador | Commits | % de contribución humana |
 | --- | ---: | ---: |
@@ -135,7 +135,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 ### Forks con trabajo independiente
 
-**Forks inspeccionados:** 0 · **Forks activos:** 0
+**Forks inspeccionados:** 1 · **Forks activos:** 0
 
 | Fork | Rama | Commits por delante | % de actividad independiente | Último push |
 | --- | --- | ---: | ---: | --- |
