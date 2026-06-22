@@ -666,14 +666,26 @@ class PlaybackViewModel @Inject constructor(
 
     private fun prefetchUpcomingQueueItems(items: List<QueueItem>) {
         if (!settingsManager.gaplessPlayback) return
-        items.take(2).forEach { item ->
-            if (item.song.uri.toString().startsWith("http")) {
-                viewModelScope.launch(Dispatchers.IO) {
-                    youtubeRepository.getCachedStream(item.song.data) ?: run {
-                        // Prefetch remote stream
-                        // extractAudioStream already caches it
-                        val ytMatch = YouTube.search("${item.song.title} ${item.song.artist} audio").firstOrNull { it.type == ResultType.SONG }
-                        ytMatch?.let { youtubeRepository.extractAudioStream(it, true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            items.take(3).forEach { item ->
+                val song = item.song
+                val uriString = song.uri.toString()
+                if (uriString.startsWith("http") || uriString.contains("youtube.com") || uriString.contains("youtu.be")) {
+                    val videoId = if (uriString.startsWith("http")) song.data else {
+                        // Extract video ID from URL if possible
+                        uriString.substringAfter("v=").substringBefore("&")
+                    }
+                    
+                    if (youtubeRepository.getCachedStream(videoId) == null) {
+                        Log.d("PlaybackVM", "Prefetching stream for: ${song.title}")
+                        val result = YouTubeResult(
+                            videoId = videoId,
+                            title = song.title,
+                            artist = song.artist,
+                            thumbnailUrl = song.artworkUri.toString(),
+                            type = ResultType.SONG
+                        )
+                        youtubeRepository.prefetchStream(result)
                     }
                 }
             }

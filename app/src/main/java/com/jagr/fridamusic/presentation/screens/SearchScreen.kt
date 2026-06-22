@@ -251,6 +251,7 @@ fun SearchScreen(
     val fullHistory by libraryViewModel.fullHistory.collectAsState()
     val searchHistory by viewModel.searchHistory.collectAsState()
     val onlineResults by viewModel.youtubeSearchResults.collectAsState()
+    val suggestions by viewModel.suggestions.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val followedArtists by libraryViewModel.followedArtists.collectAsState()
 
@@ -404,11 +405,24 @@ fun SearchScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = headerHeight + 8.dp,
-                bottom = paddingValues.calculateBottomPadding() + 112.dp
+                bottom = paddingValues.calculateBottomPadding() + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 112.dp
             ),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (query.isBlank()) {
+                if (suggestions.isNotEmpty()) {
+                    item { SectionTitle("Sugerencias", 0) }
+                    items(suggestions) { suggestion ->
+                        SearchHistoryRow(
+                            query = suggestion,
+                            icon = Icons.Default.Search,
+                            onClick = { submitSearch(suggestion) },
+                            onFill = { fillSearchField(suggestion) },
+                            onRemove = null
+                        )
+                    }
+                }
+
                 if (recentCards.isNotEmpty()) {
                     item {
                         SearchRecentCardsSection(
@@ -619,6 +633,7 @@ fun SearchScreen(
             focusRequester = focusRequester,
             onQueryChange = {
                 searchQuery = it
+                viewModel.getSuggestions(it)
                 if (activeQuery.isNotEmpty() && it.trim() != activeQuery) {
                     activeQuery = ""
                     selectedTabName = SearchTab.ALL.name

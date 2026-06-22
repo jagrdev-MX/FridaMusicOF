@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
@@ -70,7 +71,9 @@ import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
@@ -136,6 +139,8 @@ import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
 import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.QueueSource
 import com.jagr.fridamusic.domain.model.Song
+import com.jagr.fridamusic.presentation.components.ModernFilterChip
+import com.jagr.fridamusic.presentation.components.ModernLibraryItem
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.FridaEmptyState
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
@@ -572,6 +577,8 @@ fun LibraryScreen(
         }
     }
 
+    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (detail != null) {
             when (val currentDetail = detail) {
@@ -583,7 +590,10 @@ fun LibraryScreen(
                         songs = viewModel.songsForPlaylist(currentPlaylist),
                         playlists = playlists,
                         customCoverUri = playlistCoverUris[currentPlaylist.id],
-                        paddingValues = paddingValues,
+                        paddingValues = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                        ),
                         viewModel = viewModel,
                         playbackViewModel = playbackViewModel,
                         onBack = { detail = null }
@@ -593,7 +603,10 @@ fun LibraryScreen(
                 is LibraryDetail.AlbumDetail -> AlbumDetailPage(
                     album = currentDetail.album,
                     playlists = playlists,
-                    paddingValues = paddingValues,
+                    paddingValues = PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                    ),
                     viewModel = viewModel,
                     playbackViewModel = playbackViewModel,
                     onBack = { detail = null },
@@ -607,7 +620,10 @@ fun LibraryScreen(
                     allArtists = visibleArtists,
                     playlists = playlists,
                     isFollowed = currentDetail.artist.name in followedArtists,
-                    paddingValues = paddingValues,
+                    paddingValues = PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                    ),
                     viewModel = viewModel,
                     playbackViewModel = playbackViewModel,
                     onBack = { detail = null },
@@ -619,7 +635,10 @@ fun LibraryScreen(
                     title = currentDetail.title,
                     songs = currentDetail.songs,
                     playlists = playlists,
-                    paddingValues = paddingValues,
+                    paddingValues = PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                    ),
                     viewModel = viewModel,
                     playbackViewModel = playbackViewModel,
                     onBack = { detail = null }
@@ -638,7 +657,10 @@ fun LibraryScreen(
                         songs = visibleSongs,
                         artists = visibleArtists,
                         playlistCoverUris = playlistCoverUris,
-                        paddingValues = paddingValues,
+                        paddingValues = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                        ),
                         listState = allListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
@@ -656,7 +678,10 @@ fun LibraryScreen(
                     LibraryTab.HISTORY -> HistoryPage(
                         history = visibleHistory,
                         songs = songs,
-                        paddingValues = paddingValues,
+                        paddingValues = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                        ),
                         listState = historyListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
@@ -668,7 +693,10 @@ fun LibraryScreen(
                         playlists = visiblePlaylists,
                         songs = songs,
                         playlistCoverUris = playlistCoverUris,
-                        paddingValues = paddingValues,
+                        paddingValues = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                        ),
                         listState = playlistsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
@@ -689,7 +717,10 @@ fun LibraryScreen(
 
                     LibraryTab.ALBUMS -> AlbumsPage(
                         albums = visibleAlbums,
-                        paddingValues = paddingValues,
+                        paddingValues = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                        ),
                         listState = albumsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
@@ -701,7 +732,10 @@ fun LibraryScreen(
                         songs = visibleSongs,
                         albums = visibleAlbums,
                         artists = visibleArtists,
-                        paddingValues = paddingValues,
+                        paddingValues = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                        ),
                         listState = songsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
@@ -713,7 +747,10 @@ fun LibraryScreen(
 
                     LibraryTab.ARTISTS -> ArtistsPage(
                         artists = visibleArtists,
-                        paddingValues = paddingValues,
+                        paddingValues = PaddingValues(
+                            top = paddingValues.calculateTopPadding(),
+                            bottom = paddingValues.calculateBottomPadding() + navBarPadding
+                        ),
                         listState = artistsListState,
                         headerSpacerHeight = headerSpacerHeight,
                         viewModel = viewModel,
@@ -757,7 +794,7 @@ fun LibraryScreen(
                 .align(Alignment.BottomEnd)
                 .padding(
                     end = 20.dp,
-                    bottom = paddingValues.calculateBottomPadding() + 20.dp
+                    bottom = paddingValues.calculateBottomPadding() + navBarPadding + 20.dp
                 )
         )
     }
@@ -809,102 +846,55 @@ private fun LibraryHeader(
     onOpenSort: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val tabsState = rememberLazyListState()
-
-    LaunchedEffect(selectedPage) {
-        tabsState.animateScrollToItem(selectedPage)
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f))
             .padding(
-                start = 20.dp,
-                end = 20.dp,
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp
+                start = 24.dp,
+                end = 24.dp,
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
+                bottom = 8.dp
             )
     ) {
-        Text(
-            text = stringResource(R.string.library),
-            fontSize = 34.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.02).em,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 18.dp)
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                .padding(4.dp)
-        ) {
-            LazyRow(
-                state = tabsState,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(tabs, key = { it.first.name }) { (tab, title) ->
-                    val index = tabs.indexOfFirst { it.first == tab }
-                    val selected = selectedPage == index
-                    val selectedAlpha by animateFloatAsState(
-                        targetValue = if (selected) 1f else 0f,
-                        label = "tab-selection-alpha"
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = selectedAlpha)
-                            )
-                            .clickable { onTabSelected(index) }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = title,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.surface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            LibraryActionButton(
-                icon = Icons.Default.Search,
-                selected = searchVisible,
-                contentDescription = stringResource(R.string.search)
-            ) {
-                onToggleSearch()
+            IconButton(onClick = { /* Menu */ }) {
+                Icon(Icons.Default.Menu, contentDescription = "Menu")
             }
+            
+            Text(
+                text = "Frida Music",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary
+            )
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            LibraryActionButton(
-                icon = Icons.Default.FilterList,
-                selected = sortSheetVisible,
-                contentDescription = stringResource(R.string.sort_and_filter)
-            ) {
-                onOpenSort()
+            IconButton(onClick = { onToggleSearch() }) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings")
             }
         }
 
-        AnimatedVisibility(visible = searchVisible) {
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = 8.dp)
+        ) {
+            items(tabs.size) { index ->
+                val (tab, title) = tabs[index]
+                ModernFilterChip(
+                    label = title,
+                    isSelected = selectedPage == index,
+                    onClick = { onTabSelected(index) }
+                )
+            }
+        }
+
+        if (searchVisible) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
@@ -914,18 +904,9 @@ private fun LibraryHeader(
                 singleLine = true,
                 label = { Text(stringResource(R.string.search)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = { onSearchQueryChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_all))
-                        }
-                    }
-                },
                 shape = RoundedCornerShape(28.dp)
             )
         }
-
-        Spacer(modifier = Modifier.height(14.dp))
     }
 }
 
@@ -1040,31 +1021,13 @@ private fun SongsPage(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 20.dp,
-            end = 20.dp,
-            bottom = paddingValues.calculateBottomPadding() + 140.dp
+            start = 24.dp,
+            end = 24.dp,
+            bottom = paddingValues.calculateBottomPadding() + 160.dp
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    SectionHeader(text = stringResource(R.string.local_songs))
-                    Text(
-                        pluralStringResource(R.plurals.library_songs_count, songs.size, songs.size),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
-                }
-                IconButton(
-                    onClick = { playbackViewModel.playSongs(songs, shuffle = true) },
-                    enabled = songs.isNotEmpty()
-                ) {
-                    Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.shuffle))
-                }
-            }
-        }
 
         if (songs.isEmpty()) {
             item {
@@ -1079,18 +1042,15 @@ private fun SongsPage(
                 key = { "local_${it.id}" },
                 contentType = { "song_row" }
             ) { song ->
-                LibrarySongItem(
-                    song = song,
-                    viewModel = viewModel,
-                    playbackViewModel = playbackViewModel,
-                    playlists = playlists,
-                    onClick = { playbackViewModel.playSong(song) },
-                    onOpenAlbum = albums.firstOrNull {
-                        it.id == song.albumId || it.title == song.album
-                    }?.let { album -> { onOpenAlbum(album) } },
-                    onOpenArtist = artists.firstOrNull {
-                        it.name == song.artist
-                    }?.let { artist -> { onOpenArtist(artist) } }
+                val artworkUrl by produceState<String?>(initialValue = null, song) { 
+                    value = viewModel.getSongImageUrl(song) 
+                }
+                ModernLibraryItem(
+                    title = song.title,
+                    subtitle = song.artist,
+                    imageUrl = artworkUrl,
+                    icon = Icons.Default.Folder, // Placeholder icon
+                    onClick = { playbackViewModel.playSong(song) }
                 )
             }
         }
@@ -1108,15 +1068,13 @@ private fun HistoryPage(
     playbackViewModel: PlaybackViewModel,
     playlists: List<Playlist>
 ) {
-    val sections = remember(history) { history.toHistorySections() }
-
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 20.dp,
-            end = 20.dp,
-            bottom = paddingValues.calculateBottomPadding() + 140.dp
+            start = 24.dp,
+            end = 24.dp,
+            bottom = paddingValues.calculateBottomPadding() + 160.dp
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1130,22 +1088,18 @@ private fun HistoryPage(
                 )
             }
         } else {
-            sections.forEach { section ->
-                item { SectionHeader(text = stringResource(section.titleRes)) }
-                items(
-                    items = section.items,
-                    key = { "history_${it.id}" },
-                    contentType = { "history_row" }
-                ) { item ->
-                    HistorySongItem(
-                        item = item,
-                        songs = songs,
-                        viewModel = viewModel,
-                        playbackViewModel = playbackViewModel,
-                        playlists = playlists,
-                        onClick = { playbackViewModel.playHistoryItem(item, songs) }
-                    )
-                }
+            items(
+                items = history,
+                key = { "history_${it.id}" },
+                contentType = { "history_row" }
+            ) { item ->
+                ModernLibraryItem(
+                    title = item.title,
+                    subtitle = item.artist,
+                    imageUrl = item.artworkUrl,
+                    icon = Icons.Default.History,
+                    onClick = { playbackViewModel.playHistoryItem(item, songs) }
+                )
             }
         }
     }
@@ -1165,91 +1119,40 @@ private fun PlaylistsPage(
     onOpenHistory: () -> Unit,
     onDelete: (Playlist) -> Unit
 ) {
-    var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.playlistGridCount) }
-    var showGridSheet by rememberSaveable { mutableStateOf(false) }
-    val rows = remember(playlists, columns) { playlists.chunked(columns) }
-    val favoritesName = stringResource(R.string.favorites_playlist_name)
-    val favorites = playlists.firstOrNull {
-        it.name == favoritesName || it.name == "Favorites" || it.name == "Me gusta"
-    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 24.dp,
+            end = 24.dp,
+            bottom = paddingValues.calculateBottomPadding() + 160.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
-                bottom = paddingValues.calculateBottomPadding() + 140.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionHeader(text = stringResource(R.string.playlists_tab))
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { showGridSheet = true }) {
-                        Icon(Icons.Default.GridView, contentDescription = stringResource(R.string.grid_count))
-                    }
+        if (playlists.isEmpty()) {
+            item { FridaEmptyState(title = stringResource(R.string.no_playlists)) }
+        } else {
+            items(
+                items = playlists,
+                key = { it.id },
+                contentType = { "playlist_row" }
+            ) { playlist ->
+                val playlistSongs = remember(playlist, songs) { 
+                    viewModel.songsForPlaylist(playlist) 
                 }
+                val artworkUrl by produceState<String?>(initialValue = playlistCoverUris[playlist.id], playlist.id) {
+                    value = playlistCoverUris[playlist.id] ?: playlistSongs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
+                }
+                ModernLibraryItem(
+                    title = playlist.name,
+                    subtitle = pluralStringResource(R.plurals.library_songs_count, playlist.songIds.size, playlist.songIds.size),
+                    imageUrl = artworkUrl,
+                    icon = Icons.Default.Favorite, // Placeholder icon
+                    onClick = { onOpenPlaylist(playlist) }
+                )
             }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LibraryShortcutCard(
-                        icon = Icons.Default.Favorite,
-                        title = favoritesName,
-                        onClick = { favorites?.let(onOpenPlaylist) },
-                        enabled = favorites != null,
-                        modifier = Modifier.weight(1f)
-                    )
-                    LibraryShortcutCard(
-                        icon = Icons.Default.History,
-                        title = stringResource(R.string.history_tab),
-                        onClick = onOpenHistory,
-                        enabled = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            if (playlists.isEmpty()) {
-                item { FridaEmptyState(title = stringResource(R.string.no_playlists)) }
-            } else {
-                items(
-                    items = rows,
-                    key = { row -> row.joinToString("_") { it.id.toString() } },
-                    contentType = { "playlist_grid_row" }
-                ) { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        row.forEach { playlist ->
-                            PlaylistGridCard(
-                                playlist = playlist,
-                                songs = viewModel.songsForPlaylist(playlist),
-                                customCoverUri = playlistCoverUris[playlist.id],
-                                viewModel = viewModel,
-                                playbackViewModel = playbackViewModel,
-                                onOpen = { onOpenPlaylist(playlist) },
-                                onDelete = { onDelete(playlist) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-        }
-
-        if (showGridSheet) {
-            GridCountSheet(
-                selected = columns,
-                onDismiss = { showGridSheet = false },
-                onSelected = {
-                    columns = it
-                    viewModel.settingsManager.playlistGridCount = it
-                    showGridSheet = false
-                }
-            )
         }
     }
 }
@@ -1264,69 +1167,37 @@ private fun AlbumsPage(
     playbackViewModel: PlaybackViewModel,
     onOpenAlbum: (LibraryAlbum) -> Unit
 ) {
-    var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.albumGridCount) }
-    var showGridSheet by rememberSaveable { mutableStateOf(false) }
-    val rows = remember(albums, columns) { albums.chunked(columns) }
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
-                bottom = paddingValues.calculateBottomPadding() + 140.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionHeader(text = stringResource(R.string.albums_tab))
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { playbackViewModel.playSongs(albums.flatMap { it.songs }, shuffle = true) }) {
-                        Icon(Icons.Default.Shuffle, contentDescription = stringResource(R.string.shuffle))
-                    }
-                    IconButton(onClick = { showGridSheet = true }) {
-                        Icon(Icons.Default.GridView, contentDescription = stringResource(R.string.grid_count))
-                    }
-                }
-            }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 24.dp,
+            end = 24.dp,
+            bottom = paddingValues.calculateBottomPadding() + 160.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
 
-            if (albums.isEmpty()) {
-                item { FridaEmptyState(title = stringResource(R.string.no_albums)) }
-            } else {
-                items(
-                    items = rows,
-                    key = { row -> row.joinToString("_") { it.id.toString() } },
-                    contentType = { "album_grid_row" }
-                ) { rowItems ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        rowItems.forEach { album ->
-                            LibraryAlbumCard(
-                                album = album,
-                                viewModel = viewModel,
-                                onOpen = { onOpenAlbum(album) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        repeat(columns - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                    }
+        if (albums.isEmpty()) {
+            item { FridaEmptyState(title = stringResource(R.string.no_albums)) }
+        } else {
+            items(
+                items = albums,
+                key = { it.id },
+                contentType = { "album_row" }
+            ) { album ->
+                val artworkUrl by produceState<String?>(initialValue = null, album.id) {
+                    value = viewModel.getSongImageUrl(album.representativeSong)
                 }
+                ModernLibraryItem(
+                    title = album.title,
+                    subtitle = album.artist,
+                    imageUrl = artworkUrl,
+                    icon = Icons.Default.Album,
+                    onClick = { onOpenAlbum(album) }
+                )
             }
-        }
-        if (showGridSheet) {
-            GridCountSheet(
-                selected = columns,
-                onDismiss = { showGridSheet = false },
-                onSelected = {
-                    columns = it
-                    viewModel.settingsManager.albumGridCount = it
-                    showGridSheet = false
-                }
-            )
         }
     }
 }
@@ -1341,62 +1212,37 @@ private fun ArtistsPage(
     playbackViewModel: PlaybackViewModel,
     onOpenArtist: (LibraryArtist) -> Unit
 ) {
-    var columns by rememberSaveable { mutableIntStateOf(viewModel.settingsManager.artistGridCount) }
-    var showGridSheet by rememberSaveable { mutableStateOf(false) }
-    val rows = remember(artists, columns) { artists.chunked(columns) }
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
-                bottom = paddingValues.calculateBottomPadding() + 140.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionHeader(text = stringResource(R.string.artists_tab))
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { showGridSheet = true }) {
-                        Icon(Icons.Default.GridView, contentDescription = stringResource(R.string.grid_count))
-                    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 24.dp,
+            end = 24.dp,
+            bottom = paddingValues.calculateBottomPadding() + 160.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item(key = "header-spacer") { Spacer(modifier = Modifier.height(headerSpacerHeight)) }
+
+        if (artists.isEmpty()) {
+            item { FridaEmptyState(title = stringResource(R.string.no_artists)) }
+        } else {
+            items(
+                items = artists,
+                key = { it.name },
+                contentType = { "artist_row" }
+            ) { artist ->
+                val artworkUrl by produceState<String?>(initialValue = null, artist.name) {
+                    value = viewModel.getArtistImageUrl(artist.name) ?: artist.songs.firstOrNull()?.let { viewModel.getSongImageUrl(it) }
                 }
+                ModernLibraryItem(
+                    title = artist.name,
+                    subtitle = pluralStringResource(R.plurals.library_songs_count, artist.songs.size, artist.songs.size),
+                    imageUrl = artworkUrl,
+                    icon = Icons.Default.Person,
+                    onClick = { onOpenArtist(artist) }
+                )
             }
-            if (artists.isEmpty()) {
-                item { FridaEmptyState(title = stringResource(R.string.no_artists)) }
-            } else {
-                items(
-                    items = rows,
-                    key = { row -> row.joinToString("_") { it.name } },
-                    contentType = { "artist_grid_row" }
-                ) { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        row.forEach { artist ->
-                            ArtistGridCard(
-                                artist = artist,
-                                viewModel = viewModel,
-                                onOpen = { onOpenArtist(artist) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-        }
-        if (showGridSheet) {
-            GridCountSheet(
-                selected = columns,
-                onDismiss = { showGridSheet = false },
-                onSelected = {
-                    columns = it
-                    viewModel.settingsManager.artistGridCount = it
-                    showGridSheet = false
-                }
-            )
         }
     }
 }

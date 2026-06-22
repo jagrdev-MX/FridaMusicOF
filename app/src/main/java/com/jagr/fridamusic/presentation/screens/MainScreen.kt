@@ -14,15 +14,25 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -30,11 +40,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
-import com.jagr.fridamusic.presentation.components.VitreaBottomNavigation
+import com.jagr.fridamusic.presentation.components.ModernBottomNav
+import com.jagr.fridamusic.presentation.components.ModernSideNav
+import com.jagr.fridamusic.presentation.components.ModernGlassPlaybar
+import com.jagr.fridamusic.presentation.onboarding.OnboardingScreen
+import com.jagr.fridamusic.presentation.onboarding.SetupViewModel
 import com.jagr.fridamusic.presentation.viewmodels.*
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
-import kotlinx.coroutines.flow.map
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.text.Normalizer
@@ -46,21 +59,30 @@ fun MainScreen() {
     val playbackViewModel: PlaybackViewModel = viewModel()
     val searchViewModel: SearchViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
+    val onboardingCompleted by settingsViewModel.onboardingCompleted.collectAsState()
+    val useFloatingNavBar by settingsViewModel.useFloatingNavBar.collectAsState()
+
+    if (!onboardingCompleted) {
+        val setupViewModel: SetupViewModel = viewModel()
+        OnboardingScreen(
+            viewModel = setupViewModel,
+            settingsViewModel = settingsViewModel,
+            libraryViewModel = libraryViewModel,
+            onFinish = { settingsViewModel.completeOnboarding() }
+        )
+        return
+    }
 
     val repeatMode by playbackViewModel.repeatMode.collectAsState()
     val isShuffleMode by playbackViewModel.isShuffleMode.collectAsState()
     val currentSong by playbackViewModel.currentSong.collectAsState()
     val isPlaying by playbackViewModel.isPlaying.collectAsState()
-    val playbackState by playbackViewModel.playbackState.collectAsState()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt = remember(currentSong) { currentSong?.artworkUri?.toString() }
     val lyricsLines = remember(currentSong) { 
         currentSong?.lyrics?.let { com.jagr.fridamusic.domain.lyrics.LyricsParser.parseLrc(it) } ?: emptyList() 
     }
     val currentPositionState = playbackViewModel.currentPosition.collectAsState()
-    val durationState = playbackViewModel.duration.collectAsState()
-    val isLoading by playbackViewModel.isLoading.collectAsState()
-    val errorMessage by playbackViewModel.errorMessage.collectAsState()
 
     var isPlayerExpanded by remember { mutableStateOf(false) }
     var libraryReselectSignal by remember { mutableIntStateOf(0) }
@@ -115,203 +137,228 @@ fun MainScreen() {
         }
     }
 
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp > 600
+
     Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            bottomBar = {
-                if (currentRoute != "settings") {
-                    VitreaBottomNavigation(
-                        isCollapsed = false,
-                        currentRoute = selectedTopLevelRoute,
-                        currentSong = currentSong,
-                        isPlaying = isPlaying,
-                        albumArtUrl = currentAlbumArt,
-                        playbackState = playbackState,
-                        isLoading = isLoading,
-                        errorMessage = errorMessage,
-                        currentPosition = currentPositionState.value,
-                        duration = durationState.value,
-                        hazeState = hazeState,
-                        onPlayPause = { playbackViewModel.togglePlayback() },
-                        onNext = { playbackViewModel.skipToNext() },
-                        onPrevious = { playbackViewModel.skipToPrevious() },
-                        onNavigate = { route ->
-                            if (route == selectedTopLevelRoute) {
-                                if (route == "search") {
-                                    searchFocusSignal++
-                                } else if (route == "library") {
-                                    libraryReselectSignal++
-                                }
-                            } else {
-                                searchFocusSignal = 0
-                                navController.navigate(route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (isTablet && currentRoute != "settings") {
+                ModernSideNav(
+                    currentRoute = selectedTopLevelRoute,
+                    userProfileUrl = null,
+                    onNavigate = { route ->
+                        if (route != selectedTopLevelRoute) {
+                            navController.navigate(route) {
+                                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                        },
-                        onExpandPlayer = { isPlayerExpanded = true }
-                    )
-                }
-            },
-            containerColor = Color.Transparent,
-            modifier = Modifier.background(fluidBackground)
-        ) { paddingValues ->
-
-            NavHost(
-                navController = navController,
-                startDestination = "home",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .haze(state = hazeState)
-            ) {
-                composable("home") {
-                    val songs by libraryViewModel.songs.collectAsState()
-                    HomeScreen(
-                        paddingValues = paddingValues,
-                        listState = homeListState,
-                        songs = songs,
-                        viewModel = libraryViewModel,
-                        playbackViewModel = playbackViewModel,
-                        onSongClick = { playbackViewModel.playSong(it, songs) },
-                        onNavigateToSettings = { navController.navigate("settings") },
-                        onOpenLibrarySection = { section -> navController.navigate("library/$section") }
-                    )
-                }
-
-                composable("search") {
-                    SearchScreen(
-                        paddingValues = paddingValues,
-                        listState = searchListState,
-                        viewModel = searchViewModel,
-                        libraryViewModel = libraryViewModel,
-                        playbackViewModel = playbackViewModel,
-                        focusSignal = searchFocusSignal,
-                        onNavigateToArtist = { name, url ->
-                            val encName = URLEncoder.encode(name, "UTF-8")
-                            val encUrl = URLEncoder.encode(if (url.isBlank()) "none" else url, "UTF-8")
-                            navController.navigate("artist?name=$encName&url=$encUrl")
                         }
-                    )
-                }
-
-                composable("artist?name={artistName}&url={artistUrl}") { backStackEntry ->
-                    val name = URLDecoder.decode(backStackEntry.arguments?.getString("artistName") ?: "", "UTF-8")
-                    val rawUrl = URLDecoder.decode(backStackEntry.arguments?.getString("artistUrl") ?: "", "UTF-8")
-                    val songs by libraryViewModel.songs.collectAsState()
-                    val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
-                    val onlineResults by searchViewModel.youtubeSearchResults.collectAsState()
-                    val playlistLabel = stringResource(R.string.playlist_label)
-                    val normalizedArtistName = remember(name) { normalizeRouteArtistName(name) }
-                    val localArtistSongs = remember(songs, normalizedArtistName) {
-                        songs.filter { normalizeRouteArtistName(it.artist) == normalizedArtistName }
                     }
-                    val onlineArtistSongs = remember(onlineResults, normalizedArtistName) {
-                        onlineResults
-                            .filter {
-                                it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.SONG &&
-                                        normalizeRouteArtistName(it.artist).let { artist ->
-                                            artist.isNotBlank() && (
-                                                    artist == normalizedArtistName ||
-                                                            artist.contains(normalizedArtistName) ||
-                                                            normalizedArtistName.contains(artist)
-                                                    )
+                )
+            }
+
+            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Scaffold(
+                    bottomBar = {
+                        if (!isTablet && currentRoute != "settings") {
+                            ModernBottomNav(
+                                currentRoute = selectedTopLevelRoute,
+                                useFloatingStyle = useFloatingNavBar,
+                                onNavigate = { route ->
+                                    if (route == selectedTopLevelRoute) {
+                                        if (route == "search") searchFocusSignal++
+                                        else if (route == "library") libraryReselectSignal++
+                                    } else {
+                                        searchFocusSignal = 0
+                                        navController.navigate(route) {
+                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                            }
-                            .map { result ->
-                                com.jagr.fridamusic.domain.model.Song(
-                                    id = result.videoId.hashCode().toLong(),
-                                    title = result.title,
-                                    artist = result.artist,
-                                    data = result.videoId,
-                                    duration = 0L,
-                                    albumId = 0L,
-                                    uri = Uri.parse("https://music.youtube.com/watch?v=${result.videoId}"),
-                                    artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
-                                )
-                            }
-                    }
-                    val localArtistPlaylists = remember(playlists, localArtistSongs, playlistLabel) {
-                        val artistSongIds = localArtistSongs.map { it.id }.toSet()
-                        playlists
-                            .filter { playlist -> playlist.songIds.any { it in artistSongIds } }
-                            .map { playlist ->
-                                com.jagr.fridamusic.domain.model.Song(
-                                    id = playlist.id,
-                                    title = playlist.name,
-                                    artist = playlistLabel,
-                                    data = playlist.id.toString(),
-                                    duration = 0L,
-                                    albumId = 0L,
-                                    uri = Uri.EMPTY,
-                                    artworkUri = Uri.EMPTY
-                                )
-                            }
-                    }
-                    val onlineArtistPlaylists = remember(onlineResults, normalizedArtistName, playlistLabel) {
-                        onlineResults
-                            .filter {
-                                it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.PLAYLIST &&
-                                        normalizeRouteArtistName("${it.title} ${it.artist}").contains(normalizedArtistName)
-                            }
-                            .map { result ->
-                                com.jagr.fridamusic.domain.model.Song(
-                                    id = result.videoId.hashCode().toLong(),
-                                    title = result.title,
-                                    artist = playlistLabel,
-                                    data = result.videoId,
-                                    duration = 0L,
-                                    albumId = 0L,
-                                    uri = Uri.parse("https://www.youtube.com/playlist?list=${result.videoId}"),
-                                    artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: Uri.EMPTY
-                                )
-                            }
-                    }
-
-                    ArtistScreen(
-                        artistName = name,
-                        artistImageUrl = if (rawUrl == "none") "" else rawUrl,
-                        popularSongs = localArtistSongs.ifEmpty { onlineArtistSongs },
-                        popularReleases = localArtistPlaylists.ifEmpty { onlineArtistPlaylists },
-                        onBack = { navController.popBackStack() },
-                        onPlaySong = { song ->
-                            playbackViewModel.playSong(
-                                song,
-                                localArtistSongs.ifEmpty { onlineArtistSongs }
+                                    }
+                                }
                             )
                         }
-                    )
+                    },
+                    containerColor = Color.Transparent,
+                    modifier = Modifier.background(fluidBackground)
+                ) { paddingValues ->
+                    NavHost(
+                        navController = navController,
+                        startDestination = "home",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .haze(state = hazeState)
+                    ) {
+                        composable("home") {
+                            val songs by libraryViewModel.songs.collectAsState()
+                            HomeScreen(
+                                paddingValues = paddingValues,
+                                listState = homeListState,
+                                songs = songs,
+                                viewModel = libraryViewModel,
+                                playbackViewModel = playbackViewModel,
+                                onSongClick = { playbackViewModel.playSong(it, songs) },
+                                onNavigateToSettings = { navController.navigate("settings") },
+                                onOpenLibrarySection = { section -> navController.navigate("library/$section") }
+                            )
+                        }
+
+                        composable("search") {
+                            SearchScreen(
+                                paddingValues = paddingValues,
+                                listState = searchListState,
+                                viewModel = searchViewModel,
+                                libraryViewModel = libraryViewModel,
+                                playbackViewModel = playbackViewModel,
+                                focusSignal = searchFocusSignal,
+                                onNavigateToArtist = { name, url ->
+                                    val encName = URLEncoder.encode(name, "UTF-8")
+                                    val encUrl = URLEncoder.encode(url.ifBlank { "none" }, "UTF-8")
+                                    navController.navigate("artist?name=$encName&url=$encUrl")
+                                }
+                            )
+                        }
+
+                        composable("artist?name={artistName}&url={artistUrl}") { backStackEntry ->
+                            val name = URLDecoder.decode(backStackEntry.arguments?.getString("artistName") ?: "", "UTF-8")
+                            val rawUrl = URLDecoder.decode(backStackEntry.arguments?.getString("artistUrl") ?: "", "UTF-8")
+                            val songs by libraryViewModel.songs.collectAsState()
+                            val playlists by libraryViewModel.playlists.collectAsState(initial = emptyList())
+                            val onlineResults by searchViewModel.youtubeSearchResults.collectAsState()
+                            val playlistLabel = stringResource(R.string.playlist_label)
+                            val normalizedArtistName = remember(name) { normalizeRouteArtistName(name) }
+                            val localArtistSongs = remember(songs, normalizedArtistName) {
+                                songs.filter { normalizeRouteArtistName(it.artist) == normalizedArtistName }
+                            }
+                            val onlineArtistSongs = remember(onlineResults, normalizedArtistName) {
+                                onlineResults
+                                    .filter {
+                                        it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.SONG &&
+                                                normalizeRouteArtistName(it.artist).let { artist ->
+                                                    artist.isNotBlank() && (
+                                                            artist == normalizedArtistName ||
+                                                                    artist.contains(normalizedArtistName) ||
+                                                                    normalizedArtistName.contains(artist)
+                                                            )
+                                                }
+                                    }
+                                    .map { result ->
+                                        com.jagr.fridamusic.domain.model.Song(
+                                            id = result.videoId.hashCode().toLong(),
+                                            title = result.title,
+                                            artist = result.artist,
+                                            data = result.videoId,
+                                            duration = 0L,
+                                            albumId = 0L,
+                                            uri = "https://music.youtube.com/watch?v=${result.videoId}".toUri(),
+                                            artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.toUri() ?: Uri.EMPTY
+                                        )
+                                    }
+                            }
+                            val localArtistPlaylists = remember(playlists, localArtistSongs, playlistLabel) {
+                                val artistSongIds = localArtistSongs.map { it.id }.toSet()
+                                playlists
+                                    .filter { playlist -> playlist.songIds.any { it in artistSongIds } }
+                                    .map { playlist ->
+                                        com.jagr.fridamusic.domain.model.Song(
+                                            id = playlist.id,
+                                            title = playlist.name,
+                                            artist = playlistLabel,
+                                            data = playlist.id.toString(),
+                                            duration = 0L,
+                                            albumId = 0L,
+                                            uri = Uri.EMPTY,
+                                            artworkUri = Uri.EMPTY
+                                        )
+                                    }
+                            }
+                            val onlineArtistPlaylists = remember(onlineResults, normalizedArtistName, playlistLabel) {
+                                onlineResults
+                                    .filter {
+                                        it.type == com.jagr.fridamusic.data.remote.innertube.ResultType.PLAYLIST &&
+                                                normalizeRouteArtistName("${it.title} ${it.artist}").contains(normalizedArtistName)
+                                    }
+                                    .map { result ->
+                                        com.jagr.fridamusic.domain.model.Song(
+                                            id = result.videoId.hashCode().toLong(),
+                                            title = result.title,
+                                            artist = playlistLabel,
+                                            data = result.videoId,
+                                            duration = 0L,
+                                            albumId = 0L,
+                                            uri = "https://www.youtube.com/playlist?list=${result.videoId}".toUri(),
+                                            artworkUri = result.thumbnailUrl.takeIf { it.isNotBlank() }?.toUri() ?: Uri.EMPTY
+                                        )
+                                    }
+                            }
+
+                            ArtistScreen(
+                                artistName = name,
+                                artistImageUrl = if (rawUrl == "none") "" else rawUrl,
+                                popularSongs = localArtistSongs.ifEmpty { onlineArtistSongs },
+                                popularReleases = localArtistPlaylists.ifEmpty { onlineArtistPlaylists },
+                                onBack = { navController.popBackStack() },
+                                onPlaySong = { song ->
+                                    playbackViewModel.playSong(
+                                        song,
+                                        localArtistSongs.ifEmpty { onlineArtistSongs }
+                                    )
+                                }
+                            )
+                        }
+
+                        composable("library") {
+                            LibraryScreen(
+                                paddingValues = paddingValues,
+                                reselectSignal = libraryReselectSignal,
+                                viewModel = libraryViewModel,
+                                playbackViewModel = playbackViewModel,
+                                initialSection = null
+                            )
+                        }
+
+                        composable("library/{section}") { backStackEntry ->
+                            LibraryScreen(
+                                paddingValues = paddingValues,
+                                reselectSignal = libraryReselectSignal,
+                                viewModel = libraryViewModel,
+                                playbackViewModel = playbackViewModel,
+                                initialSection = backStackEntry.arguments?.getString("section")
+                            )
+                        }
+
+                        composable("settings") {
+                            SettingsScreen(
+                                paddingValues = paddingValues,
+                                listState = settingsListState,
+                                viewModel = settingsViewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                    }
                 }
 
-                composable("library") {
-                    LibraryScreen(
-                        paddingValues = paddingValues,
-                        reselectSignal = libraryReselectSignal,
-                        viewModel = libraryViewModel,
-                        playbackViewModel = playbackViewModel,
-                        initialSection = null
-                    )
-                }
-
-                composable("library/{section}") { backStackEntry ->
-                    LibraryScreen(
-                        paddingValues = paddingValues,
-                        reselectSignal = libraryReselectSignal,
-                        viewModel = libraryViewModel,
-                        playbackViewModel = playbackViewModel,
-                        initialSection = backStackEntry.arguments?.getString("section")
-                    )
-                }
-
-                composable("settings") {
-                    SettingsScreen(
-                        paddingValues = paddingValues,
-                        listState = settingsListState,
-                        viewModel = settingsViewModel,
-                        onBack = { navController.popBackStack() }
-                    )
+                // Modern Glass Playbar integration
+                if (currentRoute != "settings" && currentSong != null) {
+                    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = (if (isTablet) 24.dp else 92.dp) + navBarPadding)
+                    ) {
+                        ModernGlassPlaybar(
+                            currentSong = currentSong,
+                            isPlaying = isPlaying,
+                            artworkUrl = currentAlbumArt,
+                            onPlayPause = { playbackViewModel.togglePlayback() },
+                            onNext = { playbackViewModel.skipToNext() },
+                            onPrevious = { playbackViewModel.skipToPrevious() },
+                            onFavoriteClick = { /* Handle favorite */ },
+                            onExpand = { isPlayerExpanded = true }
+                        )
+                    }
                 }
             }
         }

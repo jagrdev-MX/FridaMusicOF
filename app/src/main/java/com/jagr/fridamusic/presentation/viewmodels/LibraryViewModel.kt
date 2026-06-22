@@ -60,7 +60,10 @@ class LibraryViewModel @Inject constructor(
 
     fun loadSongs() {
         viewModelScope.launch(Dispatchers.IO) {
-            val loadedSongs = audioRepository.getAudioFiles(settingsManager.filterVoiceNotes)
+            val loadedSongs = audioRepository.getAudioFiles(
+                settingsManager.filterVoiceNotes,
+                settingsManager.excludedFolderUris
+            )
             _songs.value = loadedSongs
         }
     }

@@ -152,4 +152,16 @@ class SettingsManager(context: Context) {
     var followedArtists: Set<String>
         get() = prefs.getStringSet("followed_artists", emptySet())?.toSet().orEmpty()
         set(value) = prefs.edit().putStringSet("followed_artists", value).apply()
+
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean("onboarding_completed", false)
+        set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
+    var useFloatingNavBar: Boolean
+        get() = prefs.getBoolean("use_floating_nav_bar", true)
+        set(value) = prefs.edit().putBoolean("use_floating_nav_bar", value).apply()
+
+    var excludedFolderUris: Set<String>
+        get() = prefs.getStringSet("excluded_folder_uris", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("excluded_folder_uris", value).apply()
 }

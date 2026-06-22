@@ -23,6 +23,9 @@ class SettingsViewModel @Inject constructor(
     val saveLastPlayback = MutableStateFlow(settingsManager.saveLastPlayback)
     val enableBlurEffect = MutableStateFlow(settingsManager.enableBlurEffect)
     val isAutoPlayEnabled = MutableStateFlow(settingsManager.autoplayEnabled)
+    val onboardingCompleted = MutableStateFlow(settingsManager.onboardingCompleted)
+    val useFloatingNavBar = MutableStateFlow(settingsManager.useFloatingNavBar)
+    val excludedFolderUris = MutableStateFlow(settingsManager.excludedFolderUris)
 
     private val _currentTheme = MutableStateFlow(
         AppTheme.entries.toTypedArray().getOrNull(settingsManager.appThemePreference) ?: AppTheme.SYSTEM
@@ -108,6 +111,32 @@ class SettingsViewModel @Inject constructor(
     fun toggleAutoplay(enabled: Boolean) {
         isAutoPlayEnabled.value = enabled
         settingsManager.autoplayEnabled = enabled
+    }
+
+    fun completeOnboarding() {
+        onboardingCompleted.value = true
+        settingsManager.onboardingCompleted = true
+    }
+
+    fun updateNavBarStyle(isFloating: Boolean) {
+        useFloatingNavBar.value = isFloating
+        settingsManager.useFloatingNavBar = isFloating
+    }
+
+    fun addExcludedFolder(uri: String) {
+        val current = excludedFolderUris.value.toMutableSet()
+        if (current.add(uri)) {
+            excludedFolderUris.value = current
+            settingsManager.excludedFolderUris = current
+        }
+    }
+
+    fun removeExcludedFolder(uri: String) {
+        val current = excludedFolderUris.value.toMutableSet()
+        if (current.remove(uri)) {
+            excludedFolderUris.value = current
+            settingsManager.excludedFolderUris = current
+        }
     }
 
     fun openSystemEqualizer(onIntent: (android.content.Intent) -> Unit) {

@@ -145,7 +145,9 @@ class AutoplayRepository(private val context: Context) {
                 context = context
             ) + baseScore
             
-            if (score < 22) return
+            Log.d(AUTOPLAY_LOG_TAG, "Candidate: ${song.title} - ${song.artist}, Score: $score")
+            
+            if (score < 15) return // Lowered from 22
             
             val existing = candidates[key]
             if (existing == null || score > existing.score) {
@@ -163,14 +165,17 @@ class AutoplayRepository(private val context: Context) {
         if (allowRemote) {
             val queries = getRecommendationQueries(anchorSeed, context)
             queries.take(AUTOPLAY_REMOTE_QUERY_LIMIT).forEach { query ->
+                Log.d(AUTOPLAY_LOG_TAG, "Searching remote: $query")
                 val results = getCachedRemoteSearch(query)
+                Log.d(AUTOPLAY_LOG_TAG, "Remote results count: ${results.size}")
                 results.filter { it.type == ResultType.SONG }.forEachIndexed { index, result ->
-                    addCandidate(resultToSong(result), (30 - index).coerceAtLeast(12))
+                    addCandidate(resultToSong(result), (40 - index).coerceAtLeast(15)) // Increased base score
                 }
             }
         }
 
         val selected = selectDiverseRecommendations(candidates.values.toList(), anchorSeed, reservedAutoplaySongs)
+        Log.d(AUTOPLAY_LOG_TAG, "Selected recommendations: ${selected.size}")
         selected.map { QueueItem(it.song, QueueSource.AUTOPLAY, reason = it.reason) }
     }
 
@@ -184,25 +189,31 @@ class AutoplayRepository(private val context: Context) {
         context: RecommendationContext
     ): Int {
         var score = 0
-        if (candidate.primaryArtist == seed.primaryArtist) score += 25
+        if (candidate.primaryArtist == seed.primaryArtist) score += 20 // Reduced from 25
         if (candidate.styles.intersect(seed.styles).isNotEmpty()) score += 15
         if (candidate.tokens.intersect(seed.tokens).isNotEmpty()) score += 10
         
-        score += (historyCounts[candidate.metadataKey] ?: 0) * 2
-        if (recentMetadataKeys.contains(candidate.metadataKey)) score -= 15
+        score += (historyCounts[candidate.metadataKey] ?: 0) * 3 // Increased weight
+        if (recentMetadataKeys.contains(candidate.metadataKey)) score -= 10 // Reduced penalty
         
         val baseCount = activeBaseCounts[candidate.titleBase] ?: 0
-        score -= baseCount * 20
+        score -= baseCount * 25
         
         return score
     }
 
     private fun recommendationReason(seed: Song, candidate: Song): String {
-        return if (seed.artist == candidate.artist) "More from ${seed.artist}" else "Similar to ${seed.title}"
+        return if (seed.artist == candidate.artist) "Más de ${seed.artist}" else "Similar a ${seed.title}"
     }
 
     private fun getRecommendationQueries(song: Song, context: RecommendationContext): List<String> {
-        return listOf("${song.title} ${song.artist} radio", "${song.artist} top songs")
+        val primaryArtist = primaryArtistName(song.artist) ?: song.artist
+        return listOf(
+            "$primaryArtist radio",
+            "${song.title} ${song.artist} audio",
+            "$primaryArtist top tracks",
+            "similar to ${song.title} ${song.artist}"
+        )
     }
 
     private suspend fun getCachedRemoteSearch(query: String): List<YouTubeResult> {

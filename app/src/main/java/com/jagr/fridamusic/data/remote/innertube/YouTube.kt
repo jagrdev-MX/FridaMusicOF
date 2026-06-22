@@ -1,5 +1,6 @@
 package com.jagr.fridamusic.data.remote.innertube
 
+import android.util.Log
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.HttpTimeout
@@ -14,8 +15,8 @@ import java.util.concurrent.ConcurrentHashMap
 import io.ktor.client.engine.cio.*
 
 object YouTube {
-    private const val SEARCH_CACHE_TTL_MS = 5 * 60 * 1000L
-    private const val SEARCH_CACHE_LIMIT = 25
+    private const val SEARCH_CACHE_TTL_MS = 15 * 60 * 1000L
+    private const val SEARCH_CACHE_LIMIT = 50
 
     private data class CachedSearch(
         val results: List<YouTubeResult>,
@@ -24,9 +25,9 @@ object YouTube {
 
     private val client = HttpClient(CIO) {
         install(HttpTimeout) {
-            requestTimeoutMillis = 3_000
-            connectTimeoutMillis = 3_000
-            socketTimeoutMillis = 3_000
+            requestTimeoutMillis = 10_000
+            connectTimeoutMillis = 10_000
+            socketTimeoutMillis = 10_000
         }
         install(ContentNegotiation) {
             json(Json {
@@ -35,13 +36,6 @@ object YouTube {
             })
         }
     }
-
-    private val PIPED_INSTANCES = listOf(
-        "https://pipedapi.kavin.rocks",
-        "https://pipedapi.syncapp.store",
-        "https://api.piped.yt",
-        "https://piped-api.lunar.icu"
-    )
 
     private val searchCache = ConcurrentHashMap<String, CachedSearch>()
     private val searchesInFlight = ConcurrentHashMap<String, CompletableDeferred<List<YouTubeResult>>>()
@@ -80,48 +74,104 @@ object YouTube {
         searchesInFlight.clear()
     }
 
-    private suspend fun searchUncached(query: String): List<YouTubeResult> {
-        for (baseUrl in PIPED_INSTANCES) {
-            try {
-                val url = "$baseUrl/search"
-                val response: JsonObject = client.get(url) {
-                    parameter("q", query)
-                    parameter("filter", "all")
-                    header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                }.body()
-
-                val results = parsePipedResults(response)
-                if (results.isNotEmpty()) {
-                    return results // Success!
-                }
-            } catch (e: Exception) {
-                continue
-            }
-        }
+    suspend fun getSuggestions(query: String): List<String> {
+        if (query.isBlank()) return emptyList()
         return try {
-            val htmlUrl = "https://www.youtube.com/results"
-            val html = client.get(htmlUrl) {
-                parameter("search_query", query)
-                header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                header("Accept-Language", "en-US,en;q=0.9")
+            val url = "https://suggestqueries.google.com/complete/search"
+            val response = client.get(url) {
+                parameter("q", query)
+                parameter("client", "youtube")
+                parameter("ds", "yt")
+                parameter("hl", "es")
             }.body<String>()
-
-            val jsonString = html.substringAfter("var ytInitialData = ").substringBefore(";</script>")
-            val response = Json.parseToJsonElement(jsonString).jsonObject
-
-            parseHTMLResults(response)
+            
+            // Basic extraction from JSONP-like format: ["query", ["s1", "s2", ...]]
+            val jsonArray = Json.parseToJsonElement(response.substringAfter("(").substringBeforeLast(")")).jsonArray
+            val suggestionsArray = jsonArray.getOrNull(1)?.jsonArray ?: return emptyList()
+            suggestionsArray.map { it.jsonArray[0].jsonPrimitive.content }
         } catch (e: Exception) {
-            e.printStackTrace()
             emptyList()
         }
     }
 
-    private fun normalizeSearchKey(value: String): String =
-        Normalizer.normalize(value, Normalizer.Form.NFD)
-            .replace(Regex("\\p{Mn}+"), "")
-            .lowercase()
-            .replace(Regex("\\s+"), " ")
-            .trim()
+    private suspend fun searchUncached(query: String): List<YouTubeResult> {
+        // High-Speed Direct API attempt (InnerTube Music)
+        try {
+            Log.d("YouTubeSearch", "Fast API search attempt: $query")
+            val response = client.post("https://music.youtube.com/youtubei/v1/search") {
+                setBody(buildSearchPayload(query))
+                header("Content-Type", "application/json")
+                header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+                header("X-YouTube-Client-Name", "67")
+                header("X-YouTube-Client-Version", "1.20240617.01.00")
+            }.body<JsonObject>()
+            
+            val results = parseInnerTubeMusicResults(response)
+            if (results.isNotEmpty()) {
+                Log.d("YouTubeSearch", "Fast API success")
+                return results
+            }
+        } catch (e: Exception) {
+            Log.w("YouTubeSearch", "Fast API failed, falling back to scraping")
+        }
+
+        // Reliable Fallback (Scraping)
+        return try {
+            Log.d("YouTubeSearch", "Scraping search attempt: $query")
+            val html = client.get("https://www.youtube.com/results") {
+                parameter("search_query", query)
+                header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            }.body<String>()
+
+            val jsonString = html.substringAfter("var ytInitialData = ").substringBefore(";</script>")
+            val results = parseHTMLResults(Json.parseToJsonElement(jsonString).jsonObject)
+            Log.d("YouTubeSearch", "Scraping found ${results.size} results")
+            results
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun buildSearchPayload(query: String) = buildJsonObject {
+        putJsonObject("context") {
+            putJsonObject("client") {
+                put("clientName", "WEB_REMIX")
+                put("clientVersion", "1.20240617.01.00")
+                put("hl", "es")
+            }
+        }
+        put("query", query)
+    }
+
+    private fun parseInnerTubeMusicResults(response: JsonObject): List<YouTubeResult> {
+        val results = mutableListOf<YouTubeResult>()
+        try {
+            val sections = response["contents"]?.jsonObject
+                ?.get("tabbedSearchResultsRenderer")?.jsonObject
+                ?.get("tabs")?.jsonArray?.get(0)?.jsonObject
+                ?.get("content")?.jsonObject
+                ?.get("sectionListRenderer")?.jsonObject
+                ?.get("contents")?.jsonArray ?: return emptyList()
+
+            for (section in sections) {
+                val musicShelf = section.jsonObject["musicShelfRenderer"]?.jsonObject ?: continue
+                val items = musicShelf["contents"]?.jsonArray ?: continue
+                for (item in items) {
+                    val renderer = item.jsonObject["musicResponsiveListItemRenderer"]?.jsonObject ?: continue
+                    val videoId = renderer["playlistItemData"]?.jsonObject?.get("videoId")?.jsonPrimitive?.content ?: continue
+                    val flex = renderer["flexColumns"]?.jsonArray
+                    val title = flex?.getOrNull(0)?.jsonObject?.get("musicResponsiveListItemFlexColumnRenderer")?.jsonObject
+                        ?.get("text")?.jsonObject?.get("runs")?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: ""
+                    val artist = flex?.getOrNull(1)?.jsonObject?.get("musicResponsiveListItemFlexColumnRenderer")?.jsonObject
+                        ?.get("text")?.jsonObject?.get("runs")?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: ""
+                    val thumb = renderer["thumbnail"]?.jsonObject?.get("musicThumbnailRenderer")?.jsonObject
+                        ?.get("thumbnail")?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
+                    results.add(YouTubeResult(videoId, title, artist, thumb))
+                }
+            }
+        } catch (e: Exception) { }
+        return results
+    }
 
     private fun parseHTMLResults(response: JsonObject): List<YouTubeResult> {
         val results = mutableListOf<YouTubeResult>()
@@ -136,97 +186,30 @@ object YouTube {
                 val itemSection = section.jsonObject["itemSectionRenderer"]?.jsonObject
                 if (itemSection != null) {
                     val itemContents = itemSection["contents"]?.jsonArray ?: continue
-
                     for (item in itemContents) {
                         val videoRenderer = item.jsonObject["videoRenderer"]?.jsonObject
-                        val channelRenderer = item.jsonObject["channelRenderer"]?.jsonObject
-                        val playlistRenderer = item.jsonObject["playlistRenderer"]?.jsonObject
-
                         if (videoRenderer != null) {
                             val videoId = videoRenderer["videoId"]?.jsonPrimitive?.content ?: continue
                             val title = videoRenderer["title"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
                             val artist = videoRenderer["ownerText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
                             val thumbnail = videoRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
-                            val durationMs = videoRenderer["lengthText"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content
-                                ?.let(::durationTextToMillis)
-                                ?: 0L
-
+                            val durationMs = videoRenderer["lengthText"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content?.let(::durationTextToMillis) ?: 0L
+                            
                             results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG, durationMs))
-
-                        } else if (channelRenderer != null) {
-                            val channelId = channelRenderer["channelId"]?.jsonPrimitive?.content ?: continue
-                            val title = channelRenderer["title"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content ?: "Unknown"
-                            val thumbnail = channelRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
-
-                            results.add(YouTubeResult(channelId, title, "Artista", thumbnail, ResultType.ARTIST))
-
-                        } else if (playlistRenderer != null) {
-                            val playlistId = playlistRenderer["playlistId"]?.jsonPrimitive?.content ?: continue
-                            val title = playlistRenderer["title"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content ?: "Unknown"
-                            val uploader = playlistRenderer["longBylineText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "YouTube"
-
-                            val thumbnailsArray = playlistRenderer["thumbnails"]?.jsonArray?.getOrNull(0)?.jsonObject?.get("thumbnails")?.jsonArray
-                                ?: playlistRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray
-
-                            val thumbnail = thumbnailsArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
-
-                            results.add(YouTubeResult(playlistId, title, uploader, thumbnail, ResultType.PLAYLIST))
                         }
                     }
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (e: Exception) { 
+            Log.e("YouTubeSearch", "Error parsing HTML results: ${e.message}")
         }
         return results
     }
 
-    private fun parsePipedResults(response: JsonObject): List<YouTubeResult> {
-        val results = mutableListOf<YouTubeResult>()
-        try {
-            val items = response["items"]?.jsonArray ?: return emptyList()
-
-            for (item in items) {
-                val obj = item.jsonObject
-                val url = obj["url"]?.jsonPrimitive?.content ?: ""
-                val type = obj["type"]?.jsonPrimitive?.content ?: ""
-
-                when (type) {
-                    "stream" -> {
-                        if (url.contains("/watch?v=")) {
-                            val videoId = url.replace("/watch?v=", "").substringBefore("&")
-                            val title = obj["title"]?.jsonPrimitive?.content ?: "Unknown Title"
-                            val artist = obj["uploaderName"]?.jsonPrimitive?.content ?: "Unknown Artist"
-                            val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
-                            val durationMs = obj["duration"]?.jsonPrimitive?.longOrNull?.times(1000L) ?: 0L
-
-                            results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG, durationMs))
-                        }
-                    }
-                    "channel" -> {
-                        val channelId = url.replace("/channel/", "").substringBefore("?")
-                        val title = obj["name"]?.jsonPrimitive?.content ?: "Unknown Artist"
-                        val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
-
-                        results.add(YouTubeResult(channelId, title, "Artista", thumbnail, ResultType.ARTIST))
-                    }
-                    "playlist" -> {
-                        val playlistId = url.replace("/playlist?list=", "").substringBefore("&")
-                        val title = obj["title"]?.jsonPrimitive?.content ?: "Unknown Playlist"
-                        val uploader = obj["uploaderName"]?.jsonPrimitive?.content ?: "YouTube"
-                        val thumbnail = obj["thumbnail"]?.jsonPrimitive?.content ?: ""
-
-                        results.add(YouTubeResult(playlistId, title, uploader, thumbnail, ResultType.PLAYLIST))
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return results
-    }
-
-    private fun emptyJsonArray() = JsonArray(emptyList())
+    private fun normalizeSearchKey(value: String): String =
+        Normalizer.normalize(value, Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .lowercase().replace(Regex("\\s+"), " ").trim()
 
     private fun durationTextToMillis(duration: String): Long {
         val parts = duration.split(":").mapNotNull { it.trim().toLongOrNull() }
@@ -234,9 +217,7 @@ object YouTube {
         return parts.fold(0L) { total, part -> total * 60L + part } * 1000L
     }
 
-    suspend fun getTranscript(videoId: String): String? {
-        return null
-    }
+    suspend fun getTranscript(videoId: String): String? = null
 }
 
 enum class ResultType { SONG, ARTIST, PLAYLIST, ALBUM }

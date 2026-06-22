@@ -25,10 +25,13 @@ class SearchViewModel @Inject constructor(
 
     private val searchCache = ConcurrentHashMap<String, List<YouTubeResult>>()
     private val searchCacheAtMs = ConcurrentHashMap<String, Long>()
-    private val CACHE_EXPIRY_MS = 1000 * 60 * 10
+    private val CACHE_EXPIRY_MS = 1000 * 60 * 30 // Increased to 30 minutes
 
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
     val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
+
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    val suggestions = _suggestions.asStateFlow()
 
     private val _searchHistory = MutableStateFlow<List<String>>(
         settingsManager.searchHistory.split("||").filter { it.isNotBlank() }
@@ -36,6 +39,22 @@ class SearchViewModel @Inject constructor(
     val searchHistory = _searchHistory.asStateFlow()
 
     private var searchJob: Job? = null
+    private var suggestionsJob: Job? = null
+
+    fun getSuggestions(query: String) {
+        suggestionsJob?.cancel()
+        if (query.length < 2) {
+            _suggestions.value = emptyList()
+            return
+        }
+        suggestionsJob = viewModelScope.launch {
+            delay(150) // Ultra-fast debounce
+            val results = withContext(Dispatchers.IO) {
+                YouTube.getSuggestions(query)
+            }
+            _suggestions.value = results
+        }
+    }
 
     fun searchYouTube(query: String) {
         val trimmed = query.trim()

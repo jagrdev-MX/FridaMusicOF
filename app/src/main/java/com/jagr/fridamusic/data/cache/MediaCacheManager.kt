@@ -13,7 +13,7 @@ import java.io.File
 object MediaCacheManager {
     private var simpleCache: SimpleCache? = null
 
-    private const val CACHE_SIZE = 500L * 1024L * 1024L
+    private const val CACHE_SIZE = 1024L * 1024L * 1024L // 1GB (Increased from 500MB)
 
     fun getCache(context: Context): SimpleCache {
         if (simpleCache == null) {

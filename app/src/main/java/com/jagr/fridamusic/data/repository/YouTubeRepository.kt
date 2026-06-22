@@ -121,7 +121,15 @@ class YouTubeRepository(private val context: Context) {
     
     suspend fun prefetchStream(result: YouTubeResult) = withContext(Dispatchers.IO) {
         if (getCachedStream(result.videoId) != null) return@withContext
+        Log.d("YouTubeRepo", "Prefetching stream for ${result.title}")
         extractAudioStream(result, trustVideoId = true)
+    }
+
+    suspend fun getStreamOrExtract(result: YouTubeResult, trustVideoId: Boolean): RemotePlaybackStream? {
+        getCachedStream(result.videoId)?.let { url ->
+            return RemotePlaybackStream(url, "cache", "", 0)
+        }
+        return extractAudioStream(result, trustVideoId)
     }
 
     fun clearCache() {

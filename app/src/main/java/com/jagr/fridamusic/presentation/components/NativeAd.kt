@@ -7,6 +7,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,12 +41,14 @@ fun SpotifyNativeAd(
 ) {
     val context = LocalContext.current
     val adManager = remember { AdManager.getInstance(context) }
-    var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
+    var nativeAdState by remember { mutableStateOf<NativeAd?>(null) }
     var isLoaded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(nativeAd) {
-        if (nativeAd != null) {
-            android.util.Log.d("SpotifyNativeAd", "Ad loaded, starting 15s timer")
+    // Use a key that changes only when a new ad is actually received
+    LaunchedEffect(nativeAdState) {
+        val ad = nativeAdState
+        if (ad != null) {
+            android.util.Log.d("SpotifyNativeAd", "Ad visible: ${ad.headline}. Starting 15s timer.")
             delay(15000)
             android.util.Log.d("SpotifyNativeAd", "Timer finished, closing ad")
             onClose()
@@ -54,41 +57,47 @@ fun SpotifyNativeAd(
 
     DisposableEffect(Unit) {
         var disposed = false
-        android.util.Log.d("SpotifyNativeAd", "Loading or consuming native test ad...")
-        adManager.loadOrConsumeNativeAd(
+        android.util.Log.d("SpotifyNativeAd", "Requesting native ad...")
+        adManager.loadNativeAd(
             onLoaded = { loadedAd ->
                 if (disposed) {
                     loadedAd.destroy()
-                    return@loadOrConsumeNativeAd
+                    return@loadNativeAd
                 }
-                nativeAd?.destroy()
-                nativeAd = loadedAd
+                android.util.Log.d("SpotifyNativeAd", "Ad loaded successfully: ${loadedAd.headline}")
+                nativeAdState = loadedAd
                 isLoaded = true
                 onAdLoaded()
                 adManager.markAdShown()
             },
             onFailed = {
-                android.util.Log.e("SpotifyNativeAd", "Ad failed to load")
+                android.util.Log.e("SpotifyNativeAd", "Ad failed to load (check internet or AdUnit ID)")
                 onAdFailed()
             }
         )
         onDispose {
             disposed = true
-            nativeAd?.destroy()
-            nativeAd = null
+            nativeAdState?.destroy()
+            nativeAdState = null
         }
     }
 
-    if (isLoaded && nativeAd != null) {
+    if (isLoaded && nativeAdState != null) {
         Box(
             modifier = modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(32.dp))
-                .background(Color(0xFF121212))
+                .background(Color(0xFF1A1A1A)) // Slightly lighter than pure black to debug visibility
+                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(32.dp))
         ) {
             AndroidView(
                 factory = { ctx ->
-                    val nativeAdView = NativeAdView(ctx)
+                    val nativeAdView = NativeAdView(ctx).apply {
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
                     
                     val root = LinearLayout(ctx).apply {
                         orientation = LinearLayout.VERTICAL
@@ -113,19 +122,19 @@ fun SpotifyNativeAd(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT
                         )
-                        setPadding(40, 32, 40, 32)
+                        setPadding(40, 24, 40, 24)
                         gravity = Gravity.CENTER_VERTICAL
+                        background = GradientDrawable().apply {
+                            setColor(android.graphics.Color.parseColor("#CC000000"))
+                        }
                     }
 
                     val headline = TextView(ctx).apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            0,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            1f
-                        )
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                         setTextColor(android.graphics.Color.WHITE)
-                        textSize = 20f
+                        textSize = 16f
                         setTypeface(null, android.graphics.Typeface.BOLD)
+                        maxLines = 1
                     }
                     bottomSection.addView(headline)
 
@@ -133,21 +142,18 @@ fun SpotifyNativeAd(
                         layoutParams = LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.WRAP_CONTENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT
-                        ).apply {
-                            setMargins(20, 0, 0, 0)
-                        }
+                        ).apply { setMargins(16, 0, 0, 0) }
                         
-                        val shape = GradientDrawable().apply {
+                        background = GradientDrawable().apply {
                             shape = GradientDrawable.RECTANGLE
-                            cornerRadius = 100f 
+                            cornerRadius = 50f 
                             setColor(android.graphics.Color.WHITE)
                         }
-                        background = shape
                         
                         setTextColor(android.graphics.Color.BLACK)
-                        setPadding(48, 20, 48, 20)
+                        setPadding(32, 12, 32, 12)
                         gravity = Gravity.CENTER
-                        textSize = 14f
+                        textSize = 12f
                         setTypeface(null, android.graphics.Typeface.BOLD)
                     }
                     bottomSection.addView(cta)
@@ -162,7 +168,8 @@ fun SpotifyNativeAd(
                     nativeAdView
                 },
                 update = { adView ->
-                    nativeAd?.let { ad ->
+                    nativeAdState?.let { ad ->
+                        android.util.Log.d("SpotifyNativeAd", "Updating NativeAdView with assets")
                         (adView.headlineView as? TextView)?.text = ad.headline
                         (adView.callToActionView as? TextView)?.text = ad.callToAction
                         adView.mediaView?.setMediaContent(ad.mediaContent)

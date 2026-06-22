@@ -1,9 +1,7 @@
 package com.jagr.fridamusic.presentation.screens
 
-import android.content.Context
 import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -12,6 +10,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -26,33 +28,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
-import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
 import com.jagr.fridamusic.domain.model.*
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
-import com.jagr.fridamusic.presentation.components.rememberFridaArtworkRequest
+import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.*
 import kotlinx.coroutines.launch
@@ -77,33 +71,27 @@ fun NowPlayingScreen(
     onCollapse: () -> Unit,
     viewModel: LibraryViewModel,
     playbackViewModel: PlaybackViewModel,
-    settingsViewModel: SettingsViewModel
+    settingsViewModel: SettingsViewModel,
 ) {
-    val context = LocalContext.current
-    val adManager = remember { AdManager.getInstance(context) }
-
-    var showAd by remember { mutableStateOf(false) }
-    var adExplicitlyClosed by remember { mutableStateOf(false) }
-    var lastAdSongId by remember { mutableStateOf<String?>(null) }
-
     var showQueueSheet by remember { mutableStateOf(false) }
     var showLyricsSheet by remember { mutableStateOf(false) }
     var showInfoSheet by remember { mutableStateOf(false) }
     var showCurrentSongActions by remember { mutableStateOf(false) }
     var playlistPickerSong by remember { mutableStateOf<Song?>(null) }
+    var isAdVisible by remember { mutableStateOf(false) }
+    val adManager = remember { AdManager.getInstance(viewModel.getApplication()) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    LaunchedEffect(currentSong) {
+        if (adManager.canShowAdNow()) {
+            isAdVisible = true
+        }
+    }
+
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
-    val hasAnyLyrics = lyricsLines.isNotEmpty() || !currentSong?.lyrics.isNullOrBlank()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
     val totalDuration by playbackViewModel.duration.collectAsState()
     val enableBlur by settingsViewModel.enableBlurEffect.collectAsState()
-    val queueState by playbackViewModel.queueState.collectAsState()
-    val isAutoplayEnabled by settingsViewModel.isAutoPlayEnabled.collectAsState()
-    val dismissAdForPlaybackOverlay: () -> Unit = {
-        showAd = false
-        adExplicitlyClosed = true
-    }
 
     val supportsNativeBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val shouldApplyBlur = enableBlur && supportsNativeBlur
@@ -123,23 +111,7 @@ fun NowPlayingScreen(
     }
 
     val onToggleLike: () -> Unit = {
-        if (currentSong != null) {
-            viewModel.toggleLike(currentSong)
-        }
-    }
-
-    LaunchedEffect(currentSong) {
-        if (currentSong == null) return@LaunchedEffect
-        if (currentSong.data != lastAdSongId) {
-            adExplicitlyClosed = false
-            if (adManager.canShowAdNow()) {
-                adManager.preloadNativeAd()
-                showAd = true
-                lastAdSongId = currentSong.data
-            } else {
-                showAd = false
-            }
-        }
+        currentSong?.let { viewModel.toggleLike(it) }
     }
 
     BackHandler(onBack = onCollapse)
@@ -182,6 +154,7 @@ fun NowPlayingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 28.dp)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
         ) {
             Spacer(modifier = Modifier.height(20.dp))
             
@@ -218,11 +191,19 @@ fun NowPlayingScreen(
                     .clip(RoundedCornerShape(24.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
             ) {
-                FridaArtworkImage(
-                    model = albumArtUrl,
-                    contentDescription = stringResource(R.string.album_art),
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (isAdVisible) {
+                    SpotifyNativeAd(
+                        modifier = Modifier.fillMaxSize(),
+                        onAdFailed = { isAdVisible = false },
+                        onClose = { isAdVisible = false }
+                    )
+                } else {
+                    FridaArtworkImage(
+                        model = albumArtUrl,
+                        contentDescription = stringResource(R.string.album_art),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.weight(0.15f))
@@ -404,7 +385,6 @@ fun NowPlayingScreen(
                 CurrentSongActionsSheet(
                     song = currentSong,
                     isLiked = isLiked,
-                    viewModel = viewModel,
                     onDismiss = { showCurrentSongActions = false },
                     onToggleLike = { onToggleLike() },
                     onPickPlaylist = {
@@ -461,6 +441,7 @@ private fun QueueBottomSheet(
         dragHandle = null
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             // Header
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -476,7 +457,6 @@ private fun QueueBottomSheet(
                     SmartAutoplayControl(
                         isEnabled = isAutoplayEnabled,
                         isLoading = queueState.isAutoplayLoading,
-                        suggestionCount = queueState.autoplay.size,
                         onToggle = { settingsViewModel.toggleAutoplay(it) }
                     )
                 }
@@ -493,7 +473,7 @@ private fun QueueBottomSheet(
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 28.dp)
+                contentPadding = PaddingValues(bottom = 28.dp + navBarPadding)
             ) {
                 if (queueState.previous.isNotEmpty()) {
                     item { QueueSectionTitle(stringResource(R.string.queue_previous)) }
@@ -505,7 +485,7 @@ private fun QueueBottomSheet(
                         val realIndex = previousOffset + index
                         QueueSongRow(
                             item = item,
-                            imageUrl = queueArtworkUrl(item.song, null),
+                            imageUrl = queueArtworkUrl(item.song),
                             isCurrent = false,
                             isMuted = true,
                             onClick = { playbackViewModel.replayPrevious(realIndex) },
@@ -520,7 +500,7 @@ private fun QueueBottomSheet(
                     if (nowPlaying != null) {
                         QueueSongRow(
                             item = nowPlaying,
-                            imageUrl = albumArtUrl ?: queueArtworkUrl(nowPlaying.song, null),
+                            imageUrl = albumArtUrl ?: queueArtworkUrl(nowPlaying.song),
                             isCurrent = true,
                             isMuted = false,
                             onClick = null,
@@ -546,7 +526,7 @@ private fun QueueBottomSheet(
                     ) { index, item ->
                         QueueSongRow(
                             item = item,
-                            imageUrl = queueArtworkUrl(item.song, null),
+                            imageUrl = queueArtworkUrl(item.song),
                             isCurrent = false,
                             isMuted = false,
                             onClick = { playbackViewModel.playUpNext(index) },
@@ -576,7 +556,7 @@ private fun QueueBottomSheet(
                         ) { index, item ->
                             QueueSongRow(
                                 item = item,
-                                imageUrl = queueArtworkUrl(item.song, null),
+                                imageUrl = queueArtworkUrl(item.song),
                                 isCurrent = false,
                                 isMuted = false,
                                 onClick = { playbackViewModel.playSong(item.song) },
@@ -596,7 +576,6 @@ private fun QueueBottomSheet(
         ) {
             QueueActionsSheet(
                 target = target,
-                viewModel = viewModel,
                 playbackViewModel = playbackViewModel,
                 onDismiss = { actionTarget = null },
                 onPickPlaylist = { song ->
@@ -654,7 +633,6 @@ private fun QueueSectionTitle(title: String) {
 private fun SmartAutoplayControl(
     isEnabled: Boolean,
     isLoading: Boolean,
-    suggestionCount: Int,
     onToggle: (Boolean) -> Unit
 ) {
     Row(
@@ -742,12 +720,10 @@ private fun QueueEmptyState(text: String, loading: Boolean, isError: Boolean = f
 @Composable
 private fun QueueActionsSheet(
     target: QueueActionTarget,
-    viewModel: LibraryViewModel,
     playbackViewModel: PlaybackViewModel,
     onDismiss: () -> Unit,
     onPickPlaylist: (Song) -> Unit
 ) {
-    val context = LocalContext.current
     val song = target.item.song
     val actions = buildList {
         add(QueueActionSpec(Icons.Default.PlayArrow, stringResource(R.string.play_now)) {
@@ -817,7 +793,6 @@ private fun QueueActionsSheet(
 private fun CurrentSongActionsSheet(
     song: Song,
     isLiked: Boolean,
-    viewModel: LibraryViewModel,
     onDismiss: () -> Unit,
     onToggleLike: (Song) -> Unit,
     onPickPlaylist: (Song) -> Unit,
@@ -918,13 +893,8 @@ private fun formatDuration(durationMs: Long): String {
     return String.format(java.util.Locale.getDefault(), "%d:%02d", minutes, seconds)
 }
 
-private fun queueArtworkUrl(song: Song, fallback: String?): String? =
-    fallback?.takeIf { it.isNotBlank() }
-        ?: song.artworkUri.toString().takeIf { it.isNotBlank() && it != "content://media/external/audio/albumart/0" }
-
-private fun shareQueueSong(context: Context, song: Song, remoteUrl: String?) {
-    // shareSongAudioOrLink(context, song, remoteUrl, song.title) // Placeholder
-}
+private fun queueArtworkUrl(song: Song): String? =
+    song.artworkUri.toString().takeIf { it.isNotBlank() && it != "content://media/external/audio/albumart/0" }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -991,7 +961,7 @@ private fun LyricsBottomSheet(
                     }
                 }
             } else if (!currentSong?.lyrics.isNullOrBlank()) {
-                currentSong?.lyrics?.let { lyricsText ->
+                currentSong.lyrics.let { lyricsText ->
                     val scrollState = rememberScrollState()
                     Column(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scrollState)
