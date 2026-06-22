@@ -46,7 +46,9 @@ class LyricsRepository(private val context: Context) {
         val key = song.lyricsCacheKey()
         memoryCache[key]?.let { return it }
         settingsManager.cachedLyrics(key)?.let { cached ->
-            return LyricsParser.toResult(cached, source = "Cache").also { memoryCache[key] = it }
+            val result = LyricsParser.toResult(cached, source = "Cache")
+            memoryCache[key] = result
+            return result
         }
         negativeCache[key]?.takeIf { System.currentTimeMillis() - it < NEGATIVE_CACHE_TTL_MS }?.let {
             return LyricsResult.NotAvailable

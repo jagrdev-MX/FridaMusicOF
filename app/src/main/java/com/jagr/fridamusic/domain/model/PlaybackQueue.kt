@@ -32,3 +32,8 @@ data class PlaybackQueueState(
     val hasPlayableNext: Boolean
         get() = upNext.isNotEmpty() || autoplay.isNotEmpty()
 }
+
+data class SleepTimerState(
+    val minutes: Int = 0,
+    val endOfSong: Boolean = false
+)

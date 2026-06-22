@@ -334,6 +334,7 @@ fun MainScreen() {
                                 paddingValues = paddingValues,
                                 listState = settingsListState,
                                 viewModel = settingsViewModel,
+                                playbackViewModel = playbackViewModel,
                                 onBack = { navController.popBackStack() }
                             )
                         }

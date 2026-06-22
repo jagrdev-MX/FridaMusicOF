@@ -110,17 +110,24 @@ class SettingsManager(context: Context) {
         get() = prefs.getStringSet("blacklisted_song_ids", emptySet())?.toSet().orEmpty()
         set(value) = prefs.edit().putStringSet("blacklisted_song_ids", value).apply()
 
-    fun localLyrics(songId: Long): String? =
-        prefs.getString("local_lyrics_$songId", null)
+    fun localLyrics(id: Any): String? =
+        prefs.getString("local_lyrics_$id", null)
 
-    fun setLocalLyrics(songId: Long, lyrics: String?) {
+    fun setLocalLyrics(id: Any, lyrics: String?) {
         val editor = prefs.edit()
         if (lyrics.isNullOrBlank()) {
-            editor.remove("local_lyrics_$songId")
+            editor.remove("local_lyrics_$id")
         } else {
-            editor.putString("local_lyrics_$songId", lyrics)
+            editor.putString("local_lyrics_$id", lyrics)
         }
         editor.apply()
+    }
+
+    fun cachedLyrics(key: String): String? =
+        prefs.getString("cached_lyrics_$key", null)
+
+    fun setCachedLyrics(key: String, lyrics: String) {
+        prefs.edit().putString("cached_lyrics_$key", lyrics).apply()
     }
 
     fun playlistCoverUri(playlistId: Long): String? =
@@ -164,4 +171,17 @@ class SettingsManager(context: Context) {
     var excludedFolderUris: Set<String>
         get() = prefs.getStringSet("excluded_folder_uris", emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet("excluded_folder_uris", value).apply()
+
+    fun clearLastPlayback() {
+        prefs.edit().apply {
+            remove("last_song_id")
+            remove("last_song_title")
+            remove("last_song_artist")
+            remove("last_song_uri")
+            remove("last_song_artwork")
+            remove("last_song_duration")
+            remove("last_position")
+            remove("playback_queue_json")
+        }.apply()
+    }
 }
