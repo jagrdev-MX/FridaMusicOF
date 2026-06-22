@@ -1,10 +1,13 @@
 package com.jagr.fridamusic.presentation.screens
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.model.Song
@@ -48,8 +51,19 @@ internal fun shareSongAudioOrLink(
             putExtra(Intent.EXTRA_TEXT, fallbackUrl ?: text)
         }
     }
-    Log.i("FridaShare", "open type=${if (streamUri != null) "audio" else "link"} song=${song.title}")
-    context.startActivity(Intent.createChooser(intent, chooserTitle))
+    val chooser = Intent.createChooser(intent, chooserTitle).apply {
+        if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try {
+        Log.i("FridaShare", "open type=${if (streamUri != null) "audio" else "link"} song=${song.title}")
+        context.startActivity(chooser)
+    } catch (error: ActivityNotFoundException) {
+        Log.w("FridaShare", "No share target available for ${song.title}", error)
+        Toast.makeText(context, R.string.share_not_available, Toast.LENGTH_SHORT).show()
+    } catch (error: SecurityException) {
+        Log.w("FridaShare", "Share permission failed for ${song.title}", error)
+        Toast.makeText(context, R.string.share_not_available, Toast.LENGTH_SHORT).show()
+    }
 }
 
 private fun Song.shareStreamUri(context: Context): Uri? =

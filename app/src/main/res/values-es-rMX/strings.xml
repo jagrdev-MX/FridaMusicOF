@@ -42,6 +42,8 @@
     <string name="cancel">Cancelar</string>
     <string name="local_audio_player">Reproductor de audio local</string>
     <string name="min_format">%1$d min</string>
+    <string name="start">Iniciar</string>
+    <string name="end_of_song">Final de la canción</string>
 
     <!-- Themes -->
     <string name="theme_system">Predeterminado del sistema</string>
@@ -181,6 +183,8 @@
     <string name="queue_empty_autoplay">Tu cola está vacía.\nActiva la reproducción automática para seguir escuchando música.</string>
     <string name="lyrics">Letra</string>
     <string name="looking_for_lyrics">Buscando letra&#8230;\nSi no aparece, quizá no está disponible en la base de datos.</string>
+    <string name="lyrics_not_available">Letra no disponible para esta canción</string>
+    <string name="lyrics_error">No se pudo cargar la letra en este momento.</string>
     <string name="song_info">Información de la canción</string>
     <string name="title_label">Título</string>
     <string name="artist_label">Artista</string>
@@ -214,11 +218,13 @@
     <string name="play_next">Reproducir después</string>
     <string name="add_to_queue">Agregar a la cola</string>
     <string name="remove_from_queue">Quitar de la cola</string>
+    <string name="remove_from_history">Quitar del historial</string>
     <string name="save_to_playlist">Guardar en lista</string>
     <string name="unlike">Quitar me gusta</string>
     <string name="share">Compartir</string>
     <string name="share_audio_file">Compartir archivo de audio</string>
     <string name="share_song_link">Compartir enlace de la canci&#243;n</string>
+    <string name="share_not_available">No hay una app disponible para compartir esta canci&#243;n.</string>
     <string name="explicit_badge">E</string>
     <string name="radio">Radio</string>
     <string name="unfollow">Dejar de seguir</string>

@@ -30,8 +30,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
+import com.jagr.fridamusic.presentation.viewmodels.PlaybackViewModel
 import com.jagr.fridamusic.presentation.viewmodels.SettingsViewModel
 import com.jagr.fridamusic.domain.model.AppTheme
+import kotlin.math.roundToInt
 
 val betaTestersList = listOf(
     "Vicente Contreras",
@@ -45,6 +47,7 @@ fun SettingsScreen(
     paddingValues: PaddingValues,
     listState: LazyListState,
     viewModel: SettingsViewModel,
+    playbackViewModel: PlaybackViewModel,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -54,18 +57,20 @@ fun SettingsScreen(
     val gaplessPlayback by viewModel.gaplessPlayback.collectAsState()
     val crossfadeDuration by viewModel.crossfadeDuration.collectAsState()
     val saveLastPlayback by viewModel.saveLastPlayback.collectAsState()
-    val sleepTimer by viewModel.sleepTimerMinutes.collectAsState()
+    val sleepTimer by playbackViewModel.sleepTimerState.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
 
     val enableBlurEffect by viewModel.enableBlurEffect.collectAsState()
-
     var showTimerDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
 
     if (showTimerDialog) {
         SleepTimerDialog(
+            activeMinutes = sleepTimer.minutes,
+            activeEndOfSong = sleepTimer.endOfSong,
             onDismiss = { showTimerDialog = false },
-            onSetTimer = { viewModel.setSleepTimer(it) }
+            onSetTimer = { minutes, endOfSong -> playbackViewModel.setSleepTimer(minutes, endOfSong) },
+            onCancelTimer = { playbackViewModel.cancelSleepTimer() }
         )
     }
 
@@ -200,7 +205,7 @@ fun SettingsScreen(
                     SettingsNavigationItem(
                         icon = Icons.Default.Timer,
                         title = stringResource(R.string.sleep_timer),
-                        value = if (sleepTimer > 0) stringResource(R.string.min_format, sleepTimer) else stringResource(R.string.off_label),
+                        value = if (sleepTimer.minutes > 0) stringResource(R.string.min_format, sleepTimer.minutes) else stringResource(R.string.off_label),
                         onClick = { showTimerDialog = true }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
@@ -210,7 +215,6 @@ fun SettingsScreen(
                         isChecked = keepScreenOn,
                         onCheckedChange = { viewModel.updateKeepScreenOn(it) }
                     )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                     SettingsToggleItem(
                         icon = Icons.Default.History,
                         title = stringResource(R.string.remember_last_played),
@@ -267,19 +271,62 @@ private fun BetaTesterItem(name: String) {
 }
 
 @Composable
-private fun SleepTimerDialog(onDismiss: () -> Unit, onSetTimer: (Int) -> Unit) {
+private fun SleepTimerDialog(
+    activeMinutes: Int,
+    activeEndOfSong: Boolean,
+    onDismiss: () -> Unit,
+    onSetTimer: (Int, Boolean) -> Unit,
+    onCancelTimer: () -> Unit
+) {
+    var minutes by remember { mutableFloatStateOf(activeMinutes.takeIf { it > 0 }?.toFloat() ?: 5f) }
+    var endOfSong by remember { mutableStateOf(activeEndOfSong) }
+    val roundedMinutes = ((minutes / 5f).roundToInt() * 5).coerceIn(5, 120)
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.sleep_timer), color = MaterialTheme.colorScheme.onSurface) },
-        text = { Text(stringResource(R.string.stop_audio_after), color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(stringResource(R.string.stop_audio_after), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    stringResource(R.string.min_format, roundedMinutes),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = LiquidTypography.displayLarge.copy(fontSize = 36.sp)
+                )
+                Slider(
+                    value = minutes,
+                    onValueChange = { minutes = ((it / 5f).roundToInt() * 5).coerceIn(5, 120).toFloat() },
+                    valueRange = 5f..120f,
+                    steps = 22,
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+                    )
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { endOfSong = !endOfSong }
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(checked = endOfSong, onCheckedChange = { endOfSong = it })
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.end_of_song), color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        },
         containerColor = MaterialTheme.colorScheme.surface,
         confirmButton = {
-            TextButton(onClick = { onSetTimer(15); onDismiss() }) {
-                Text(stringResource(R.string.min_format, 15), color = MaterialTheme.colorScheme.primary)
+            TextButton(onClick = { onSetTimer(roundedMinutes, endOfSong); onDismiss() }) {
+                Text(stringResource(R.string.start), color = MaterialTheme.colorScheme.primary)
             }
         },
         dismissButton = {
-            TextButton(onClick = { onSetTimer(0); onDismiss() }) {
+            TextButton(onClick = { onCancelTimer(); onDismiss() }) {
                 Text(stringResource(R.string.off_label), color = MaterialTheme.colorScheme.onSurface)
             }
         }
