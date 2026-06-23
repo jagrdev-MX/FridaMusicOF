@@ -126,12 +126,12 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 ### Repositorio oficial
 
-**Commits humanos visibles:** 286 · **Commits de automatización:** 169
+**Commits humanos visibles:** 287 · **Commits de automatización:** 170
 
 | Colaborador | Commits | % de contribución humana |
 | --- | ---: | ---: |
-| [@jagrdev-MX](https://github.com/jagrdev-MX) | 239 | 83.6% |
-| [@juliocps25](https://github.com/juliocps25) | 47 | 16.4% |
+| [@jagrdev-MX](https://github.com/jagrdev-MX) | 239 | 83.3% |
+| [@juliocps25](https://github.com/juliocps25) | 48 | 16.7% |
 
 ### Forks con trabajo independiente
 
@@ -143,7 +143,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 > Los porcentajes del repositorio oficial se calculan con commits humanos visibles. Los bots se separan para no distorsionar la métrica. Los forks muestran trabajo independiente que aún no necesariamente fue integrado al proyecto principal.
 
-Última actualización automática (UTC): `2026-06-22`
+Última actualización automática (UTC): `2026-06-23`
 <!-- CONTRIBUTOR-STATS:END -->
 
 ---
