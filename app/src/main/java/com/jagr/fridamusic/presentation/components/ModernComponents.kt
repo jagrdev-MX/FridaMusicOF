@@ -200,7 +200,6 @@ fun ModernAlbumCard(
                 contentScale = ContentScale.Crop
             )
             
-            // Play button overlay (simulating hover)
             Box(
                 modifier = Modifier
                     .fillMaxSize()

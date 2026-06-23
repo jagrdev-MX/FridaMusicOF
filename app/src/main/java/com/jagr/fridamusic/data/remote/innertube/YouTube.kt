@@ -15,8 +15,11 @@ import java.util.concurrent.ConcurrentHashMap
 import io.ktor.client.engine.cio.*
 
 object YouTube {
-    private const val SEARCH_CACHE_TTL_MS = 15 * 60 * 1000L
-    private const val SEARCH_CACHE_LIMIT = 50
+    private const val SEARCH_CACHE_TTL_MS = 30 * 60 * 1000L
+    private const val SEARCH_CACHE_LIMIT = 100
+
+    private const val SUGGESTION_CACHE_LIMIT = 100
+    private val suggestionCache = ConcurrentHashMap<String, List<String>>()
 
     private data class CachedSearch(
         val results: List<YouTubeResult>,
@@ -72,10 +75,15 @@ object YouTube {
     fun clearCache() {
         searchCache.clear()
         searchesInFlight.clear()
+        suggestionCache.clear()
     }
 
     suspend fun getSuggestions(query: String): List<String> {
-        if (query.isBlank()) return emptyList()
+        val trimmed = query.trim().lowercase()
+        if (trimmed.isBlank()) return emptyList()
+        
+        suggestionCache[trimmed]?.let { return it }
+
         return try {
             val url = "https://suggestqueries.google.com/complete/search"
             val response = client.get(url) {
@@ -88,16 +96,24 @@ object YouTube {
             // Basic extraction from JSONP-like format: ["query", ["s1", "s2", ...]]
             val jsonArray = Json.parseToJsonElement(response.substringAfter("(").substringBeforeLast(")")).jsonArray
             val suggestionsArray = jsonArray.getOrNull(1)?.jsonArray ?: return emptyList()
-            suggestionsArray.map { it.jsonArray[0].jsonPrimitive.content }
+            val results = suggestionsArray.map { it.jsonArray[0].jsonPrimitive.content }
+            
+            if (results.isNotEmpty()) {
+                if (suggestionCache.size >= SUGGESTION_CACHE_LIMIT) suggestionCache.clear()
+                suggestionCache[trimmed] = results
+            }
+            results
         } catch (e: Exception) {
             emptyList()
         }
     }
 
     private suspend fun searchUncached(query: String): List<YouTubeResult> {
+        val totalStart = System.currentTimeMillis()
         // High-Speed Direct API attempt (InnerTube Music)
         try {
             Log.d("YouTubeSearch", "Fast API search attempt: $query")
+            val networkStart = System.currentTimeMillis()
             val response = client.post("https://music.youtube.com/youtubei/v1/search") {
                 setBody(buildSearchPayload(query))
                 header("Content-Type", "application/json")
@@ -106,28 +122,44 @@ object YouTube {
                 header("X-YouTube-Client-Version", "1.20240617.01.00")
             }.body<JsonObject>()
             
+            val networkTime = System.currentTimeMillis() - networkStart
+            Log.d("SearchPerf", "[2] HTTP Call (InnerTube): ${networkTime}ms")
+
+            val parseStart = System.currentTimeMillis()
             val results = parseInnerTubeMusicResults(response)
+            val parseTime = System.currentTimeMillis() - parseStart
+            Log.d("SearchPerf", "[3] JSON Deserialization + Mapping: ${parseTime}ms")
+
             if (results.isNotEmpty()) {
                 Log.d("YouTubeSearch", "Fast API success")
                 return results
             }
         } catch (e: Exception) {
-            Log.w("YouTubeSearch", "Fast API failed, falling back to scraping")
+            Log.w("YouTubeSearch", "Fast API failed, falling back to scraping: ${e.message}")
         }
 
         // Reliable Fallback (Scraping)
         return try {
             Log.d("YouTubeSearch", "Scraping search attempt: $query")
+            val scrapingNetworkStart = System.currentTimeMillis()
             val html = client.get("https://www.youtube.com/results") {
                 parameter("search_query", query)
                 header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             }.body<String>()
+            
+            val scrapingNetworkTime = System.currentTimeMillis() - scrapingNetworkStart
+            Log.d("SearchPerf", "[2-FB] HTTP Call (Scraping): ${scrapingNetworkTime}ms")
 
+            val scrapingParseStart = System.currentTimeMillis()
             val jsonString = html.substringAfter("var ytInitialData = ").substringBefore(";</script>")
             val results = parseHTMLResults(Json.parseToJsonElement(jsonString).jsonObject)
+            val scrapingParseTime = System.currentTimeMillis() - scrapingParseStart
+            Log.d("SearchPerf", "[3-FB] Scraping Parsing: ${scrapingParseTime}ms")
+
             Log.d("YouTubeSearch", "Scraping found ${results.size} results")
             results
         } catch (e: Exception) {
+            Log.e("YouTubeSearch", "All search methods failed", e)
             emptyList()
         }
     }

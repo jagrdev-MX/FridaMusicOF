@@ -48,7 +48,7 @@ class AutoplayRepository(private val context: Context) {
 
     private val AUTOPLAY_TARGET_SIZE = 12
     private val AUTOPLAY_FAST_READY_SIZE = 8
-    private val AUTOPLAY_REMOTE_QUERY_LIMIT = 4
+    private val AUTOPLAY_REMOTE_QUERY_LIMIT = 2
     private val AUTOPLAY_LOG_TAG = "FridaAutoplay"
     private val YOUTUBE_VIDEO_ID_PATTERN = Regex("[A-Za-z0-9_-]{11}")
 
@@ -210,9 +210,7 @@ class AutoplayRepository(private val context: Context) {
         val primaryArtist = primaryArtistName(song.artist) ?: song.artist
         return listOf(
             "$primaryArtist radio",
-            "${song.title} ${song.artist} audio",
-            "$primaryArtist top tracks",
-            "similar to ${song.title} ${song.artist}"
+            "${song.title} ${song.artist} audio"
         )
     }
 

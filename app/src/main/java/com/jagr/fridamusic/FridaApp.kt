@@ -12,7 +12,6 @@ import dagger.hilt.android.HiltAndroidApp
 class FridaApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
-        // Inicializa el motor de extracción de YouTube
         NewPipeUtils.init(this)
     }
 

@@ -70,11 +70,6 @@ class PlaybackViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    private val _sleepTimerState = MutableStateFlow(SleepTimerState())
-    val sleepTimerState = _sleepTimerState.asStateFlow()
-
-    private var sleepTimerJob: Job? = null
-
     private val _repeatMode = MutableStateFlow(
         runCatching { RepeatMode.valueOf(settingsManager.repeatModeName) }.getOrDefault(RepeatMode.OFF)
     )
@@ -150,11 +145,6 @@ class PlaybackViewModel @Inject constructor(
             seekTo(0)
             mediaController?.play()
         } else {
-            if (_sleepTimerState.value.endOfSong && _sleepTimerState.value.minutes == 0 && sleepTimerJob != null) {
-                mediaController?.pause()
-                cancelSleepTimer()
-                return
-            }
             skipToNext()
         }
     }
@@ -425,37 +415,6 @@ class PlaybackViewModel @Inject constructor(
 
     fun seekTo(position: Long) {
         mediaController?.seekTo(position)
-    }
-
-    fun setSleepTimer(minutes: Int, endOfSong: Boolean) {
-        _sleepTimerState.value = SleepTimerState(minutes, endOfSong)
-        sleepTimerJob?.cancel()
-
-        if (minutes > 0) {
-            sleepTimerJob = viewModelScope.launch {
-                var remainingMillis = minutes * 60 * 1000L
-                while (remainingMillis > 0) {
-                    delay(1000)
-                    remainingMillis -= 1000
-                    val currentMins = (remainingMillis / 60000L).toInt() + 1
-                    if (currentMins != _sleepTimerState.value.minutes) {
-                        _sleepTimerState.value = _sleepTimerState.value.copy(minutes = currentMins)
-                    }
-                }
-
-                if (!_sleepTimerState.value.endOfSong) {
-                    mediaController?.pause()
-                    _sleepTimerState.value = SleepTimerState()
-                } else {
-                    _sleepTimerState.value = _sleepTimerState.value.copy(minutes = 0)
-                }
-            }
-        }
-    }
-
-    fun cancelSleepTimer() {
-        sleepTimerJob?.cancel()
-        _sleepTimerState.value = SleepTimerState()
     }
 
     fun toggleRepeatMode() {
