@@ -2,6 +2,8 @@ package com.jagr.fridamusic.data.repository
 
 import com.jagr.fridamusic.data.local.PlaybackHistoryDao
 import com.jagr.fridamusic.data.local.PlaybackHistoryEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -71,6 +73,10 @@ class PlaybackHistoryRepositoryTest {
             items.removeAll { it.songId == songId }
         }
 
+        override suspend fun deleteById(id: Long) {
+            items.removeAll { it.id == id }
+        }
+
         override suspend fun deleteDuplicateEntries(songId: String, title: String, artist: String) {
             items.removeAll { it.songId == songId || (it.title == title && it.artist == artist) }
         }
@@ -78,14 +84,28 @@ class PlaybackHistoryRepositoryTest {
         override suspend fun getAllHistory(): List<PlaybackHistoryEntity> =
             items.sortedByDescending { it.playedAt }
 
+        override fun observeAllHistory(): Flow<List<PlaybackHistoryEntity>> =
+            flowOf(items.sortedByDescending { it.playedAt })
+
         override suspend fun getRecentHistory(limit: Int): List<PlaybackHistoryEntity> =
             getAllHistory().take(limit)
+
+        override fun observeRecentHistory(limit: Int): Flow<List<PlaybackHistoryEntity>> =
+            flowOf(items.sortedByDescending { it.playedAt }.take(limit))
 
         override suspend fun getMostPlayed(limit: Int): List<PlaybackHistoryEntity> =
             items.sortedWith(
                 compareByDescending<PlaybackHistoryEntity> { it.playCount }
                     .thenByDescending { it.playedAt }
             ).take(limit)
+
+        override fun observeMostPlayed(limit: Int): Flow<List<PlaybackHistoryEntity>> =
+            flowOf(
+                items.sortedWith(
+                    compareByDescending<PlaybackHistoryEntity> { it.playCount }
+                        .thenByDescending { it.playedAt }
+                ).take(limit)
+            )
 
         override suspend fun trimHistory(maxItems: Int) {
             val kept = items.sortedByDescending { it.playedAt }.take(maxItems).map { it.id }.toSet()

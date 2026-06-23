@@ -6,6 +6,7 @@ const API_BASE = process.env.GITHUB_API_URL || "https://api.github.com";
 const MAX_FORKS = Number(process.env.MAX_FORKS || 50);
 const START_MARKER = "<!-- CONTRIBUTOR-STATS:START -->";
 const END_MARKER = "<!-- CONTRIBUTOR-STATS:END -->";
+const IGNORED_AUTOMATION_LOGINS = new Set(["github-actions[bot]"]);
 
 function resolveRepositorySlug() {
   if (process.env.GITHUB_REPOSITORY) {
@@ -92,6 +93,11 @@ function isBotContributor(contributor) {
   );
 }
 
+function isIgnoredAutomationContributor(contributor) {
+  const login = contributor.login || contributor.name || "";
+  return IGNORED_AUTOMATION_LOGINS.has(login);
+}
+
 function contributorName(contributor) {
   if (contributor.login) {
     return `[@${contributor.login}](https://github.com/${contributor.login})`;
@@ -114,7 +120,10 @@ function formatDate(value) {
 
 function buildOfficialContributionSection(contributors) {
   const humans = contributors.filter((contributor) => !isBotContributor(contributor));
-  const bots = contributors.filter((contributor) => isBotContributor(contributor));
+  const bots = contributors.filter(
+    (contributor) =>
+      isBotContributor(contributor) && !isIgnoredAutomationContributor(contributor),
+  );
   const humanCommits = humans.reduce(
     (total, contributor) => total + contributor.contributions,
     0,
@@ -136,7 +145,7 @@ function buildOfficialContributionSection(contributors) {
   return [
     "### Repositorio oficial",
     "",
-    `**Commits humanos visibles:** ${humanCommits} · **Commits de automatización:** ${botCommits}`,
+    `**Commits humanos visibles:** ${humanCommits} · **Commits de automatización externos:** ${botCommits}`,
     "",
     "| Colaborador | Commits | % de contribución humana |",
     "| --- | ---: | ---: |",
