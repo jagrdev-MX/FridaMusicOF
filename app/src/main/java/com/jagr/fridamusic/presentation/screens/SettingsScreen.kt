@@ -24,15 +24,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
+import com.jagr.fridamusic.domain.model.AppTheme
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.PlaybackViewModel
 import com.jagr.fridamusic.presentation.viewmodels.SettingsViewModel
-import com.jagr.fridamusic.domain.model.AppTheme
 import kotlin.math.roundToInt
 
 val betaTestersList = listOf(
@@ -42,6 +42,7 @@ val betaTestersList = listOf(
     "Usuario Gamma"
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     paddingValues: PaddingValues,
@@ -59,8 +60,8 @@ fun SettingsScreen(
     val saveLastPlayback by viewModel.saveLastPlayback.collectAsState()
     val sleepTimerState by playbackViewModel.sleepTimerState.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
-
     val enableBlurEffect by viewModel.enableBlurEffect.collectAsState()
+
     var showTimerDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
 
@@ -82,27 +83,44 @@ fun SettingsScreen(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(R.string.settings),
+                        style = LiquidTypography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "Volver",
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 80.dp,
+                top = innerPadding.calculateTopPadding() + 16.dp,
                 bottom = paddingValues.calculateBottomPadding() + 40.dp,
                 start = 20.dp,
                 end = 20.dp
             ),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            item {
-                Text(
-                    text = stringResource(R.string.settings),
-                    style = LiquidTypography.displayLarge.copy(fontSize = 28.sp),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-            }
-
             item {
                 SettingsSection(title = stringResource(R.string.about)) {
                     AppInfoItem()
@@ -223,26 +241,6 @@ fun SettingsScreen(
                     )
                 }
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(start = 16.dp, top = 16.dp)
-                .size(52.dp)
-                .shadow(elevation = 8.dp, shape = CircleShape)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable(onClick = onBack),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = "Volver",
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(32.dp)
-            )
         }
     }
 }

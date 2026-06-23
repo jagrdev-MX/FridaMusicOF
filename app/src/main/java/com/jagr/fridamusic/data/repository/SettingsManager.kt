@@ -130,6 +130,31 @@ class SettingsManager(context: Context) {
         prefs.edit().putString("cached_lyrics_$key", lyrics).apply()
     }
 
+    fun playlistCoverUri(playlistId: Long): String? =
+        prefs.getString("playlist_cover_$playlistId", null)
+
+    fun setPlaylistCoverUri(playlistId: Long, uri: String?) {
+        val editor = prefs.edit()
+        if (uri.isNullOrBlank()) {
+            editor.remove("playlist_cover_$playlistId")
+        } else {
+            editor.putString("playlist_cover_$playlistId", uri)
+        }
+        editor.apply()
+    }
+
+    fun playlistSongMetadata(songId: Long): String? =
+        prefs.getString("playlist_song_$songId", null)
+
+    fun setPlaylistSongMetadata(songId: Long, metadata: String?) {
+        val editor = prefs.edit()
+        if (metadata.isNullOrBlank()) {
+            editor.remove("playlist_song_$songId")
+        } else {
+            editor.putString("playlist_song_$songId", metadata)
+        }
+        editor.apply()
+    }
 
     var followedArtists: Set<String>
         get() = prefs.getStringSet("followed_artists", emptySet())?.toSet().orEmpty()

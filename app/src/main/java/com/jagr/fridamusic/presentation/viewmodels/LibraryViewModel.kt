@@ -23,8 +23,7 @@ class LibraryViewModel @Inject constructor(
     private val audioRepository: AudioRepository,
     val settingsManager: SettingsManager,
     private val playbackHistoryRepository: PlaybackHistoryRepository,
-    private val artworkRepository: ArtworkRepository,
-    private val lyricsRepository: LyricsRepository
+    private val artworkRepository: ArtworkRepository
 ) : AndroidViewModel(application) {
     private val playlistDao = MusicDatabase.getDatabase(application).playlistDao()
 
@@ -262,13 +261,10 @@ class LibraryViewModel @Inject constructor(
 
     fun resolveShareUrl(song: Song): String = "https://www.youtube.com/watch?v=${song.data}"
 
-    fun resolveShareUrl(title: String, artist: String): String? = null
+    fun resolveShareUrl(title: String, artist: String): String =
+        "https://music.youtube.com/search?q=${java.net.URLEncoder.encode("$title $artist", "UTF-8")}"
 
     suspend fun getSongImageUrl(song: Song): String? = artworkRepository.getSongImageUrl(song)
-
-    fun getHistoryImageUrl(history: PlaybackHistoryEntity): String? {
-        return history.artworkUrl
-    }
 
     suspend fun getArtistImageUrl(artistName: String): String? = artworkRepository.getArtistImageUrl(artistName)
 
