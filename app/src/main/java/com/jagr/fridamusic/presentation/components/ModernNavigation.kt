@@ -38,7 +38,6 @@ fun ModernBottomNav(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Main Navigation Pill
             Row(
                 modifier = Modifier
                     .height(64.dp)
@@ -71,7 +70,6 @@ fun ModernBottomNav(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Settings Circle
             Box(
                 modifier = Modifier
                     .size(64.dp)

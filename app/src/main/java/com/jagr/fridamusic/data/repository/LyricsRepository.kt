@@ -1,7 +1,7 @@
 package com.jagr.fridamusic.data.repository
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.net.toUri
 import com.jagr.fridamusic.data.remote.innertube.YouTube
 import com.jagr.fridamusic.domain.lyrics.LyricsParser
 import com.jagr.fridamusic.domain.lyrics.LyricsResult
@@ -24,7 +24,7 @@ interface LyricsProvider {
     suspend fun getLyrics(song: Song): LyricsResult?
 }
 
-class LyricsRepository(private val context: Context) {
+class LyricsRepository(context: Context) {
     private val settingsManager = SettingsManager(context)
     private val memoryCache = ConcurrentHashMap<String, LyricsResult>()
     private val negativeCache = ConcurrentHashMap<String, Long>()
@@ -72,13 +72,6 @@ class LyricsRepository(private val context: Context) {
         return LyricsResult.NotAvailable
     }
 
-    suspend fun getLyrics(song: Song): String? {
-        return when (val result = getLyricsResult(song)) {
-            is LyricsResult.Available -> result.plainText ?: result.lines.joinToString("\n") { it.content }
-            else -> null
-        }
-    }
-
     private inner class LocalLyricsProvider : LyricsProvider {
         override val name = "Local lyrics"
 
@@ -105,8 +98,8 @@ class LyricsRepository(private val context: Context) {
             val durationSeconds = song.duration.takeIf { it > 0L }?.let { (it / 1000L).toInt() } ?: 0
             val exact = if (durationSeconds > 0) {
                 fetchObject(
-                    endpoint = "/api/get-cached",
-                    params = mapOf(
+                    "/api/get-cached",
+                    mapOf(
                         "track_name" to song.title.cleanedLyricsQuery(),
                         "artist_name" to song.artist.cleanedLyricsQuery(),
                         "album_name" to song.album.cleanedLyricsQuery().ifBlank { "Unknown Album" },
@@ -120,8 +113,8 @@ class LyricsRepository(private val context: Context) {
             exact?.toLyricsResultIfUsable(song, name)?.let { return@withContext it }
 
             val search = fetchArray(
-                endpoint = "/api/search",
-                params = buildMap {
+                "/api/search",
+                buildMap {
                     put("track_name", song.title.cleanedLyricsQuery())
                     put("artist_name", song.artist.cleanedLyricsQuery())
                     song.album.cleanedLyricsQuery().takeIf { it.isNotBlank() }?.let { put("album_name", it) }
@@ -242,7 +235,7 @@ class LyricsRepository(private val context: Context) {
     private fun Song.youtubeVideoIdOrNull(): String? {
         val uriText = uri.toString()
         val fromUri = runCatching {
-            val parsed = Uri.parse(uriText)
+            val parsed = uriText.toUri()
             parsed.getQueryParameter("v")
         }.getOrNull()
         return fromUri

@@ -7,10 +7,8 @@ import com.jagr.fridamusic.data.remote.innertube.YouTube
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
 import com.jagr.fridamusic.data.repository.*
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
@@ -24,10 +22,6 @@ class SearchViewModel @Inject constructor(
 
     private val _isSearching = MutableStateFlow(false)
     val isSearching = _isSearching.asStateFlow()
-
-    private val searchCache = ConcurrentHashMap<String, List<YouTubeResult>>()
-    private val searchCacheAtMs = ConcurrentHashMap<String, Long>()
-    private val CACHE_EXPIRY_MS = 1000 * 60 * 30 // Increased to 30 minutes
 
     private val _youtubeSearchResults = MutableStateFlow<List<YouTubeResult>>(emptyList())
     val youtubeSearchResults = _youtubeSearchResults.asStateFlow()
@@ -66,61 +60,24 @@ class SearchViewModel @Inject constructor(
             return
         }
 
-        val cached = getCachedResults(trimmed)
-        if (cached != null) {
-            _youtubeSearchResults.value = cached
-            _isSearching.value = false
-            searchJob?.cancel()
-            return
-        }
-
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             _isSearching.value = true
             delay(120)
+            
             try {
                 val results = withContext(Dispatchers.IO) {
                     YouTube.search(trimmed)
                 }
-                
-                if (results.isNotEmpty()) {
-                    putInCache(trimmed, results)
-                }
-                
                 _youtubeSearchResults.value = results
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: IOException) {
-                _youtubeSearchResults.value = emptyList()
-            } catch (error: HttpRequestTimeoutException) {
-                _youtubeSearchResults.value = emptyList()
             } catch (error: Exception) {
                 _youtubeSearchResults.value = emptyList()
             } finally {
                 _isSearching.value = false
             }
         }
-    }
-
-    private fun getCachedResults(query: String): List<YouTubeResult>? {
-        val key = query.lowercase().trim()
-        val expiry = searchCacheAtMs[key] ?: 0L
-        if (System.currentTimeMillis() > expiry) {
-            searchCache.remove(key)
-            searchCacheAtMs.remove(key)
-            return null
-        }
-        return searchCache[key]
-    }
-
-    private fun putInCache(query: String, results: List<YouTubeResult>) {
-        val key = query.lowercase().trim()
-        if (searchCache.size > 50) {
-            searchCache.clear()
-            searchCacheAtMs.clear()
-        }
-        searchCache[key] = results
-        searchCacheAtMs[key] = System.currentTimeMillis() + CACHE_EXPIRY_MS
     }
 
     fun addToSearchHistory(query: String) {

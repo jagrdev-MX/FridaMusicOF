@@ -57,7 +57,7 @@ fun SettingsScreen(
     val gaplessPlayback by viewModel.gaplessPlayback.collectAsState()
     val crossfadeDuration by viewModel.crossfadeDuration.collectAsState()
     val saveLastPlayback by viewModel.saveLastPlayback.collectAsState()
-    val sleepTimer by playbackViewModel.sleepTimerState.collectAsState()
+    val sleepTimerState by playbackViewModel.sleepTimerState.collectAsState()
     val currentTheme by viewModel.currentTheme.collectAsState()
 
     val enableBlurEffect by viewModel.enableBlurEffect.collectAsState()
@@ -66,10 +66,10 @@ fun SettingsScreen(
 
     if (showTimerDialog) {
         SleepTimerDialog(
-            activeMinutes = sleepTimer.minutes,
-            activeEndOfSong = sleepTimer.endOfSong,
+            activeMinutes = sleepTimerState.minutes,
+            activeEndOfSong = sleepTimerState.endOfSong,
             onDismiss = { showTimerDialog = false },
-            onSetTimer = { minutes, endOfSong -> playbackViewModel.setSleepTimer(minutes, endOfSong) },
+            onSetTimer = { mins, eos -> playbackViewModel.setSleepTimer(mins, eos) },
             onCancelTimer = { playbackViewModel.cancelSleepTimer() }
         )
     }
@@ -205,7 +205,7 @@ fun SettingsScreen(
                     SettingsNavigationItem(
                         icon = Icons.Default.Timer,
                         title = stringResource(R.string.sleep_timer),
-                        value = if (sleepTimer.minutes > 0) stringResource(R.string.min_format, sleepTimer.minutes) else stringResource(R.string.off_label),
+                        value = if (sleepTimerState.minutes > 0) stringResource(R.string.min_format, sleepTimerState.minutes) else stringResource(R.string.off_label),
                         onClick = { showTimerDialog = true }
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), thickness = 1.dp)
@@ -278,9 +278,9 @@ private fun SleepTimerDialog(
     onSetTimer: (Int, Boolean) -> Unit,
     onCancelTimer: () -> Unit
 ) {
-    var minutes by remember { mutableFloatStateOf(activeMinutes.takeIf { it > 0 }?.toFloat() ?: 5f) }
-    var endOfSong by remember { mutableStateOf(activeEndOfSong) }
-    val roundedMinutes = ((minutes / 5f).roundToInt() * 5).coerceIn(5, 120)
+    var timerMinutes by remember { mutableFloatStateOf(activeMinutes.takeIf { it > 0 }?.toFloat() ?: 15f) }
+    var stopAtEndOfSong by remember { mutableStateOf(activeEndOfSong) }
+    val roundedMinutes = ((timerMinutes / 5f).roundToInt() * 5).coerceIn(5, 120)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -294,8 +294,8 @@ private fun SleepTimerDialog(
                     style = LiquidTypography.displayLarge.copy(fontSize = 36.sp)
                 )
                 Slider(
-                    value = minutes,
-                    onValueChange = { minutes = ((it / 5f).roundToInt() * 5).coerceIn(5, 120).toFloat() },
+                    value = timerMinutes,
+                    onValueChange = { timerMinutes = it },
                     valueRange = 5f..120f,
                     steps = 22,
                     colors = SliderDefaults.colors(
@@ -308,12 +308,12 @@ private fun SleepTimerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { endOfSong = !endOfSong }
+                        .clickable { stopAtEndOfSong = !stopAtEndOfSong }
                         .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(checked = endOfSong, onCheckedChange = { endOfSong = it })
+                    Checkbox(checked = stopAtEndOfSong, onCheckedChange = { stopAtEndOfSong = it })
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.end_of_song), color = MaterialTheme.colorScheme.onSurface)
                 }
@@ -321,7 +321,7 @@ private fun SleepTimerDialog(
         },
         containerColor = MaterialTheme.colorScheme.surface,
         confirmButton = {
-            TextButton(onClick = { onSetTimer(roundedMinutes, endOfSong); onDismiss() }) {
+            TextButton(onClick = { onSetTimer(roundedMinutes, stopAtEndOfSong); onDismiss() }) {
                 Text(stringResource(R.string.start), color = MaterialTheme.colorScheme.primary)
             }
         },
