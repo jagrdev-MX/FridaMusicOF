@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -199,7 +200,7 @@ fun ModernAlbumCard(
                 shape = RoundedCornerShape(24.dp),
                 contentScale = ContentScale.Crop
             )
-            
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -344,8 +345,8 @@ fun ModernGlassPlaybar(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isPlaying) Icons.Default.PlayCircle else Icons.Default.PlayCircle,
-                    contentDescription = "Play/Pause",
+                    imageVector = if (isPlaying) Icons.Default.PauseCircle else Icons.Default.PlayCircle,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(32.dp)
                 )
