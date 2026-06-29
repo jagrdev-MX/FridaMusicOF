@@ -1,6 +1,8 @@
 package com.jagr.fridamusic.data.remote.innertube
 
 import android.content.Context
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -13,10 +15,27 @@ import java.util.concurrent.TimeUnit
 
 object NewPipeUtils {
     fun init(context: Context) {
+        val dispatcher = Dispatcher().apply {
+            // A single stream extraction fires several sub-requests (page/player/iOS
+            // fallback) to a small set of Google hosts. The OkHttp default of 5 max
+            // requests per host can serialize those unnecessarily when a prefetch and
+            // a user-initiated playback overlap, so we raise the per-host ceiling.
+            maxRequestsPerHost = 10
+            maxRequests = 24
+        }
+
         val downloader = NewPipeDownloaderImpl(
             OkHttpClient.Builder()
+                .dispatcher(dispatcher)
+                .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(15, TimeUnit.SECONDS)
+                .writeTimeout(15, TimeUnit.SECONDS)
+                // Caps the whole call (all redirects/retries included), so a single
+                // extraction can't hang past a sane bound even if individual socket
+                // reads keep resetting their own timeout.
+                .callTimeout(25, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
                 .build()
         )
         NewPipe.init(downloader, Localization.DEFAULT)

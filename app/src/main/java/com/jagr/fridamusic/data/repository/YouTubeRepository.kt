@@ -4,9 +4,7 @@ package com.jagr.fridamusic.data.repository
 import android.content.Context
 import android.util.Log
 import androidx.media3.common.util.UnstableApi
-import com.jagr.fridamusic.data.remote.innertube.YouTube
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
-import com.jagr.fridamusic.data.remote.innertube.ResultType
 import org.schabi.newpipe.extractor.MediaFormat
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
@@ -26,35 +24,39 @@ class YouTubeRepository(private val context: Context) {
     private val audioStreamCache = ConcurrentHashMap<String, String>()
     private val audioStreamCacheExpiresAtMs = ConcurrentHashMap<String, Long>()
     private val audioDurationCache = ConcurrentHashMap<String, Long>()
-    private val deezerToYoutubeMap = ConcurrentHashMap<String, String>()
-    
-    private val YOUTUBE_VIDEO_ID_PATTERN = Regex("[A-Za-z0-9_-]{11}")
 
-    suspend fun extractAudioStream(result: YouTubeResult, trustVideoId: Boolean): RemotePlaybackStream? = withContext(Dispatchers.IO) {
+    suspend fun extractAudioStream(result: YouTubeResult): RemotePlaybackStream? = withContext(Dispatchers.IO) {
+        val totalStart = System.currentTimeMillis()
         try {
-            var realYtId = result.videoId.takeIf { trustVideoId && YOUTUBE_VIDEO_ID_PATTERN.matches(it) }
-                ?: deezerToYoutubeMap[result.videoId]
+            val videoId = result.videoId
 
-            if (realYtId == null) {
-                val ytMatch = YouTube.search("${result.title} ${result.artist} audio").firstOrNull { it.type == ResultType.SONG }
-                realYtId = ytMatch?.videoId ?: return@withContext null
-                deezerToYoutubeMap[result.videoId] = realYtId
-            }
-
-            getCachedStream(realYtId)?.let { url ->
+            getCachedStream(videoId)?.let { url ->
+                Log.d("SearchPerf", "[CACHE] extractAudioStream hit for ${result.title}: ${System.currentTimeMillis() - totalStart}ms")
                 return@withContext RemotePlaybackStream(url, "cache", "", 0)
             }
 
-            val videoUrl = "https://www.youtube.com/watch?v=$realYtId"
+            val extractionStart = System.currentTimeMillis()
+            val videoUrl = "https://www.youtube.com/watch?v=$videoId"
             val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
+            val extractionTime = System.currentTimeMillis() - extractionStart
+            Log.d("SearchPerf", "[1] NewPipe StreamInfo.getInfo (page+player fetch): ${extractionTime}ms")
+
+            val selectionStart = System.currentTimeMillis()
             val playbackStream = selectPlayableRemoteStream(streamInfo)
+            val selectionTime = System.currentTimeMillis() - selectionStart
+            Log.d("SearchPerf", "[2] Stream selection (CPU, no network): ${selectionTime}ms")
 
             if (playbackStream != null) {
-                cacheStream(realYtId, playbackStream.url, streamInfo.duration * 1000L)
+                cacheStream(videoId, playbackStream.url, streamInfo.duration * 1000L)
             }
+
+            val totalTime = System.currentTimeMillis() - totalStart
+            Log.d("SearchPerf", "[TOTAL] extractAudioStream for ${result.title}: ${totalTime}ms (network=${extractionTime}ms, cpu=${selectionTime}ms)")
+
             playbackStream
         } catch (e: Exception) {
-            Log.e("YouTubeRepo", "Extraction failed for ${result.title}", e)
+            val totalTime = System.currentTimeMillis() - totalStart
+            Log.e("YouTubeRepo", "Extraction failed for ${result.title} after ${totalTime}ms", e)
             null
         }
     }
@@ -84,7 +86,7 @@ class YouTubeRepository(private val context: Context) {
             .maxByOrNull { it.bitrate }
             ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
 
-        audioStream?.let { 
+        audioStream?.let {
             val url = it.url ?: return@let null
             if (url.isNotBlank()) {
                 return RemotePlaybackStream(
@@ -118,18 +120,11 @@ class YouTubeRepository(private val context: Context) {
             )
         }
     }
-    
+
     suspend fun prefetchStream(result: YouTubeResult) = withContext(Dispatchers.IO) {
         if (getCachedStream(result.videoId) != null) return@withContext
         Log.d("YouTubeRepo", "Prefetching stream for ${result.title}")
-        extractAudioStream(result, trustVideoId = true)
-    }
-
-    suspend fun getStreamOrExtract(result: YouTubeResult, trustVideoId: Boolean): RemotePlaybackStream? {
-        getCachedStream(result.videoId)?.let { url ->
-            return RemotePlaybackStream(url, "cache", "", 0)
-        }
-        return extractAudioStream(result, trustVideoId)
+        extractAudioStream(result)
     }
 
     fun clearCache() {

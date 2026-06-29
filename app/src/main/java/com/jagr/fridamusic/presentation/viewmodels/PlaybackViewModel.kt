@@ -41,13 +41,13 @@ class PlaybackViewModel @Inject constructor(
     private val autoplayRepository: AutoplayRepository,
     private val audioRepository: AudioRepository
 ) : AndroidViewModel(application) {
-    
+
     private val _queueState = MutableStateFlow(PlaybackQueueState())
     val queueState = _queueState.asStateFlow()
 
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong = _currentSong.asStateFlow()
-    
+
     private var recommendationJob: Job? = null
     private var autoplayAnchorSong: Song? = null
     private val AUTOPLAY_FAST_READY_SIZE = 8
@@ -63,7 +63,7 @@ class PlaybackViewModel @Inject constructor(
 
     private val _duration = MutableStateFlow(0L)
     val duration = _duration.asStateFlow()
-    
+
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage.asStateFlow()
 
@@ -100,7 +100,7 @@ class PlaybackViewModel @Inject constructor(
             },
             ContextCompat.getMainExecutor(application)
         )
-        
+
         val savedJson = settingsManager.playbackQueueJson
         if (savedJson.isNotBlank()) {
             restoreQueueState(savedJson)?.let { restored ->
@@ -194,13 +194,14 @@ class PlaybackViewModel @Inject constructor(
         val oldState = _queueState.value
         _currentSong.value = song
         _errorMessage.value = null
-        
+
         playbackInitiationJob?.cancel()
         playbackInitiationJob = viewModelScope.launch {
             val uriString = song.uri.toString()
             val isYouTubeUrl = uriString.contains("youtube.com/watch") || uriString.contains("youtu.be/")
-            
+
             val finalUri = if (isYouTubeUrl) {
+                val playSongStart = System.currentTimeMillis()
                 _isLoading.value = true
                 _errorMessage.value = "Extracting audio..."
                 val result = YouTubeResult(
@@ -210,7 +211,8 @@ class PlaybackViewModel @Inject constructor(
                     thumbnailUrl = song.artworkUri.toString(),
                     type = ResultType.SONG
                 )
-                val stream = youtubeRepository.extractAudioStream(result, trustVideoId = true)
+                val stream = youtubeRepository.extractAudioStream(result)
+                Log.d("SearchPerf", "[USER-PERCEIVED] playSong tap-to-ready for ${song.title}: ${System.currentTimeMillis() - playSongStart}ms")
                 _isLoading.value = false
                 _errorMessage.value = null // Clear "Extracting audio..." message
                 if (stream != null) {
@@ -241,7 +243,7 @@ class PlaybackViewModel @Inject constructor(
                 play()
             }
         }
-        
+
         val startIndex = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
         val currentItem = QueueItem(song, source, reason = sourceName)
         val previousItems = if (queue.isNotEmpty()) {
@@ -254,7 +256,7 @@ class PlaybackViewModel @Inject constructor(
         } else {
             oldState.upNext
         }
-        
+
         val isNavigational = source == QueueSource.AUTOPLAY || source == QueueSource.USER || source == QueueSource.RESTORED
         val autoplayItems = if (isNavigational) {
             oldState.autoplay
@@ -650,17 +652,17 @@ class PlaybackViewModel @Inject constructor(
         if (!settingsManager.autoplayEnabled) return
         val seed = _currentSong.value ?: return
         val state = _queueState.value
-        
+
         val threshold = AUTOPLAY_FAST_READY_SIZE / 2
-        
+
         val isNavigational = state.source == QueueSource.AUTOPLAY || state.source == QueueSource.USER || state.source == QueueSource.RESTORED
         if (!force && state.autoplay.size >= threshold && isNavigational) return
-        
+
         if (!isNavigational || autoplayAnchorSong == null) {
             autoplayAnchorSong = seed
         }
         val anchorSeed = autoplayAnchorSong ?: seed
-        
+
         recommendationJob?.cancel()
         recommendationJob = viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -669,10 +671,10 @@ class PlaybackViewModel @Inject constructor(
                         _queueState.value = _queueState.value.copy(isAutoplayLoading = true, autoplayError = null)
                     }
                 }
-                
+
                 val allSongs = audioRepository.getAudioFiles(settingsManager.filterVoiceNotes)
                 val fullHistory = playbackHistoryRepository.getFullHistory()
-                
+
                 val recommendations = autoplayRepository.generateRecommendations(
                     seed = seed,
                     anchorSeed = anchorSeed,
@@ -681,11 +683,11 @@ class PlaybackViewModel @Inject constructor(
                     fullHistory = fullHistory,
                     allowRemote = true
                 )
-                
+
                 withContext(Dispatchers.Main) {
                     val currentState = _queueState.value
                     val updatedAutoplay = currentState.autoplay + recommendations
-                    
+
                     _queueState.value = currentState.copy(
                         autoplay = updatedAutoplay.take(20),
                         isAutoplayLoading = false,
@@ -716,7 +718,7 @@ class PlaybackViewModel @Inject constructor(
                         // Extract video ID from URL if possible
                         uriString.substringAfter("v=").substringBefore("&")
                     }
-                    
+
                     if (youtubeRepository.getCachedStream(videoId) == null) {
                         Log.d("PlaybackVM", "Prefetching stream for: ${song.title}")
                         val result = YouTubeResult(
@@ -737,7 +739,7 @@ class PlaybackViewModel @Inject constructor(
         val state = _queueState.value
         if (state.upNext.size >= 4) return
         val ready = state.autoplay.firstOrNull { youtubeRepository.getCachedStream(it.song.data) != null } ?: return
-        
+
         _queueState.value = state.copy(
             upNext = state.upNext + ready,
             autoplay = state.autoplay.filter { it != ready }

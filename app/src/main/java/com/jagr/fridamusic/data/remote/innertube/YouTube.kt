@@ -81,7 +81,7 @@ object YouTube {
     suspend fun getSuggestions(query: String): List<String> {
         val trimmed = query.trim().lowercase()
         if (trimmed.isBlank()) return emptyList()
-        
+
         suggestionCache[trimmed]?.let { return it }
 
         return try {
@@ -92,12 +92,11 @@ object YouTube {
                 parameter("ds", "yt")
                 parameter("hl", "es")
             }.body<String>()
-            
-            // Basic extraction from JSONP-like format: ["query", ["s1", "s2", ...]]
+
             val jsonArray = Json.parseToJsonElement(response.substringAfter("(").substringBeforeLast(")")).jsonArray
             val suggestionsArray = jsonArray.getOrNull(1)?.jsonArray ?: return emptyList()
             val results = suggestionsArray.map { it.jsonArray[0].jsonPrimitive.content }
-            
+
             if (results.isNotEmpty()) {
                 if (suggestionCache.size >= SUGGESTION_CACHE_LIMIT) suggestionCache.clear()
                 suggestionCache[trimmed] = results
@@ -110,7 +109,6 @@ object YouTube {
 
     private suspend fun searchUncached(query: String): List<YouTubeResult> {
         val totalStart = System.currentTimeMillis()
-        // High-Speed Direct API attempt (InnerTube Music)
         try {
             Log.d("YouTubeSearch", "Fast API search attempt: $query")
             val networkStart = System.currentTimeMillis()
@@ -121,7 +119,7 @@ object YouTube {
                 header("X-YouTube-Client-Name", "67")
                 header("X-YouTube-Client-Version", "1.20240617.01.00")
             }.body<JsonObject>()
-            
+
             val networkTime = System.currentTimeMillis() - networkStart
             Log.d("SearchPerf", "[2] HTTP Call (InnerTube): ${networkTime}ms")
 
@@ -138,7 +136,6 @@ object YouTube {
             Log.w("YouTubeSearch", "Fast API failed, falling back to scraping: ${e.message}")
         }
 
-        // Reliable Fallback (Scraping)
         return try {
             Log.d("YouTubeSearch", "Scraping search attempt: $query")
             val scrapingNetworkStart = System.currentTimeMillis()
@@ -146,7 +143,7 @@ object YouTube {
                 parameter("search_query", query)
                 header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             }.body<String>()
-            
+
             val scrapingNetworkTime = System.currentTimeMillis() - scrapingNetworkStart
             Log.d("SearchPerf", "[2-FB] HTTP Call (Scraping): ${scrapingNetworkTime}ms")
 
@@ -178,18 +175,65 @@ object YouTube {
     private fun parseInnerTubeMusicResults(response: JsonObject): List<YouTubeResult> {
         val results = mutableListOf<YouTubeResult>()
         try {
-            val sections = response["contents"]?.jsonObject
-                ?.get("tabbedSearchResultsRenderer")?.jsonObject
-                ?.get("tabs")?.jsonArray?.get(0)?.jsonObject
-                ?.get("content")?.jsonObject
-                ?.get("sectionListRenderer")?.jsonObject
-                ?.get("contents")?.jsonArray ?: return emptyList()
+            val contentsRoot = response["contents"]?.jsonObject
+            if (contentsRoot == null) {
+                Log.w("YouTubeSearch", "InnerTube diag: response has no top-level 'contents'. Keys: ${response.keys}")
+                return emptyList()
+            }
 
+            val tabbedResults = contentsRoot["tabbedSearchResultsRenderer"]?.jsonObject
+            if (tabbedResults == null) {
+                Log.w("YouTubeSearch", "InnerTube diag: no 'tabbedSearchResultsRenderer'. contents keys: ${contentsRoot.keys}")
+                return emptyList()
+            }
+
+            val tabs = tabbedResults["tabs"]?.jsonArray
+            if (tabs == null || tabs.isEmpty()) {
+                Log.w("YouTubeSearch", "InnerTube diag: 'tabs' is null or empty. tabbedResults keys: ${tabbedResults.keys}")
+                return emptyList()
+            }
+
+            val firstTab = tabs[0].jsonObject
+            val tabContent = firstTab["tabRenderer"]?.jsonObject?.get("content")?.jsonObject
+                ?: firstTab["content"]?.jsonObject
+            if (tabContent == null) {
+                Log.w("YouTubeSearch", "InnerTube diag: tab[0] has no 'content' (checked tabRenderer.content and content). tab[0] keys: ${firstTab.keys}")
+                return emptyList()
+            }
+
+            val sectionListRenderer = tabContent["sectionListRenderer"]?.jsonObject
+            if (sectionListRenderer == null) {
+                Log.w("YouTubeSearch", "InnerTube diag: no 'sectionListRenderer' under tab content. content keys: ${tabContent.keys}")
+                return emptyList()
+            }
+
+            val sections = sectionListRenderer["contents"]?.jsonArray
+            if (sections == null) {
+                Log.w("YouTubeSearch", "InnerTube diag: sectionListRenderer has no 'contents'. keys: ${sectionListRenderer.keys}")
+                return emptyList()
+            }
+
+            var shelvesSeen = 0
+            var itemsWithUnknownRenderer = 0
             for (section in sections) {
-                val musicShelf = section.jsonObject["musicShelfRenderer"]?.jsonObject ?: continue
-                val items = musicShelf["contents"]?.jsonArray ?: continue
-                for (item in items) {
-                    val renderer = item.jsonObject["musicResponsiveListItemRenderer"]?.jsonObject ?: continue
+                val shelfContents = section.jsonObject["musicShelfRenderer"]?.jsonObject?.get("contents")?.jsonArray
+                    ?: section.jsonObject["itemSectionRenderer"]?.jsonObject?.get("contents")?.jsonArray
+
+                if (shelfContents == null) {
+                    Log.d("YouTubeSearch", "InnerTube diag: skipping section without musicShelfRenderer/itemSectionRenderer, keys: ${section.jsonObject.keys}")
+                    continue
+                }
+                shelvesSeen++
+
+                for (item in shelfContents) {
+                    val renderer = item.jsonObject["musicResponsiveListItemRenderer"]?.jsonObject
+                    if (renderer == null) {
+                        itemsWithUnknownRenderer++
+                        if (itemsWithUnknownRenderer <= 3) {
+                            Log.w("YouTubeSearch", "InnerTube diag: item without 'musicResponsiveListItemRenderer', keys: ${item.jsonObject.keys}")
+                        }
+                        continue
+                    }
                     val videoId = renderer["playlistItemData"]?.jsonObject?.get("videoId")?.jsonPrimitive?.content ?: continue
                     val flex = renderer["flexColumns"]?.jsonArray
                     val title = flex?.getOrNull(0)?.jsonObject?.get("musicResponsiveListItemFlexColumnRenderer")?.jsonObject
@@ -201,7 +245,12 @@ object YouTube {
                     results.add(YouTubeResult(videoId, title, artist, thumb))
                 }
             }
-        } catch (e: Exception) { }
+            if (results.isEmpty()) {
+                Log.w("YouTubeSearch", "InnerTube diag: parsed $shelvesSeen shelf/section(s), $itemsWithUnknownRenderer item(s) with unrecognized renderer, 0 results extracted")
+            }
+        } catch (e: Exception) {
+            Log.w("YouTubeSearch", "InnerTube diag: parser threw ${e.javaClass.simpleName}: ${e.message}")
+        }
         return results
     }
 
@@ -226,13 +275,13 @@ object YouTube {
                             val artist = videoRenderer["ownerText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
                             val thumbnail = videoRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
                             val durationMs = videoRenderer["lengthText"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content?.let(::durationTextToMillis) ?: 0L
-                            
+
                             results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG, durationMs))
                         }
                     }
                 }
             }
-        } catch (e: Exception) { 
+        } catch (e: Exception) {
             Log.e("YouTubeSearch", "Error parsing HTML results: ${e.message}")
         }
         return results

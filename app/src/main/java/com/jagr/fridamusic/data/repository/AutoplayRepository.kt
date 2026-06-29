@@ -51,6 +51,8 @@ class AutoplayRepository(private val context: Context) {
     private val AUTOPLAY_REMOTE_QUERY_LIMIT = 2
     private val AUTOPLAY_LOG_TAG = "FridaAutoplay"
     private val YOUTUBE_VIDEO_ID_PATTERN = Regex("[A-Za-z0-9_-]{11}")
+    private val MAX_PER_TITLE_FAMILY = 2
+    private val MAX_PER_ARTIST = 3
 
     fun getSongProfile(song: Song): SongRecommendationProfile {
         val key = songIdentityKey(song)
@@ -84,15 +86,15 @@ class AutoplayRepository(private val context: Context) {
         val immediateUpNext = state.upNext.take(AUTOPLAY_FAST_READY_SIZE)
         val excludedContext = state.previous.takeLast(20) + listOfNotNull(state.current) + immediateUpNext + state.autoplay
         val activeBaseContext = state.previous.takeLast(8) + immediateUpNext + state.autoplay
-        
+
         val excluded = excludedContext
             .map { songIdentityKey(it.song) }
             .toMutableSet()
-            
+
         val context = getRecommendationContext(state, anchorSeed)
-        val reservedAutoplaySongs = emptyList<Song>() 
+        val reservedAutoplaySongs = emptyList<Song>()
         val autoplayHistory = fullHistory.take(300)
-        
+
         val historyCounts = autoplayHistory.groupingBy { metadataIdentity(it.title, it.artist) }.eachCount()
         val recentMetadataKeys = autoplayHistory.take(12).map { metadataIdentity(it.title, it.artist) }.toSet()
         val recentBaseCounts = autoplayHistory
@@ -101,13 +103,13 @@ class AutoplayRepository(private val context: Context) {
             .filter { it.isNotBlank() }
             .groupingBy { it }
             .eachCount()
-            
+
         val activeBaseCounts = activeBaseContext
             .map { getSongProfile(it.song).titleBase }
             .filter { it.isNotBlank() }
             .groupingBy { it }
             .eachCount()
-            
+
         val candidates = LinkedHashMap<String, RecommendationCandidate>()
 
         fun isSeedProfile(profile: SongRecommendationProfile): Boolean =
@@ -132,9 +134,9 @@ class AutoplayRepository(private val context: Context) {
             val key = profile.identityKey
             if (key in excluded || isSeedProfile(profile)) return
             if (!AutoplayDiversity.isAutoplayTrackCandidate(song)) return
-            
+
             if (requireContextMatch && !isContextMatch(profile)) return
-            
+
             val score = recommendationScore(
                 seed = seedProfile,
                 candidate = profile,
@@ -144,11 +146,11 @@ class AutoplayRepository(private val context: Context) {
                 activeBaseCounts = activeBaseCounts,
                 context = context
             ) + baseScore
-            
+
             Log.d(AUTOPLAY_LOG_TAG, "Candidate: ${song.title} - ${song.artist}, Score: $score")
-            
-            if (score < 15) return // Lowered from 22
-            
+
+            if (score < 15) return
+
             val existing = candidates[key]
             if (existing == null || score > existing.score) {
                 candidates[key] = RecommendationCandidate(
@@ -163,11 +165,16 @@ class AutoplayRepository(private val context: Context) {
         allSongs.forEach { addCandidate(it, 10, reason = "From your library") }
 
         if (allowRemote) {
-            val queries = getRecommendationQueries(anchorSeed, context)
-            queries.take(AUTOPLAY_REMOTE_QUERY_LIMIT).forEach { query ->
-                Log.d(AUTOPLAY_LOG_TAG, "Searching remote: $query")
-                val results = getCachedRemoteSearch(query)
-                Log.d(AUTOPLAY_LOG_TAG, "Remote results count: ${results.size}")
+            val queries = getRecommendationQueries(anchorSeed, seed, context).take(AUTOPLAY_REMOTE_QUERY_LIMIT)
+            val remoteResultsByQuery = queries.map { query ->
+                query to async {
+                    Log.d(AUTOPLAY_LOG_TAG, "Searching remote: $query")
+                    getCachedRemoteSearch(query)
+                }
+            }.map { (query, deferred) -> query to deferred.await() }
+
+            remoteResultsByQuery.forEach { (query, results) ->
+                Log.d(AUTOPLAY_LOG_TAG, "Remote results count for \"$query\": ${results.size}")
                 results.filter { it.type == ResultType.SONG }.forEachIndexed { index, result ->
                     addCandidate(resultToSong(result), (40 - index).coerceAtLeast(15)) // Increased base score
                 }
@@ -192,13 +199,16 @@ class AutoplayRepository(private val context: Context) {
         if (candidate.primaryArtist == seed.primaryArtist) score += 20 // Reduced from 25
         if (candidate.styles.intersect(seed.styles).isNotEmpty()) score += 15
         if (candidate.tokens.intersect(seed.tokens).isNotEmpty()) score += 10
-        
-        score += (historyCounts[candidate.metadataKey] ?: 0) * 3 // Increased weight
-        if (recentMetadataKeys.contains(candidate.metadataKey)) score -= 10 // Reduced penalty
-        
+
+        score += (historyCounts[candidate.metadataKey] ?: 0).coerceAtMost(5) * 2
+        if (recentMetadataKeys.contains(candidate.metadataKey)) score -= 30
+
         val baseCount = activeBaseCounts[candidate.titleBase] ?: 0
         score -= baseCount * 25
-        
+
+        val recentBaseCount = recentBaseCounts[candidate.titleBase] ?: 0
+        score -= recentBaseCount * 8
+
         return score
     }
 
@@ -206,12 +216,19 @@ class AutoplayRepository(private val context: Context) {
         return if (seed.artist == candidate.artist) "Más de ${seed.artist}" else "Similar a ${seed.title}"
     }
 
-    private fun getRecommendationQueries(song: Song, context: RecommendationContext): List<String> {
-        val primaryArtist = primaryArtistName(song.artist) ?: song.artist
-        return listOf(
-            "$primaryArtist radio",
-            "${song.title} ${song.artist} audio"
-        )
+    private fun getRecommendationQueries(anchorSeed: Song, currentSeed: Song, context: RecommendationContext): List<String> {
+        val anchorArtist = primaryArtistName(anchorSeed.artist) ?: anchorSeed.artist
+        val anchorQuery = "$anchorArtist radio"
+
+        val isSameSong = songIdentityKey(anchorSeed) == songIdentityKey(currentSeed)
+        val secondQuery = if (isSameSong) {
+            "${anchorSeed.title} ${anchorSeed.artist} audio"
+        } else {
+            val currentArtist = primaryArtistName(currentSeed.artist) ?: currentSeed.artist
+            if (currentArtist != anchorArtist) "$currentArtist radio" else "${currentSeed.title} ${currentSeed.artist} audio"
+        }
+
+        return listOf(anchorQuery, secondQuery).distinct()
     }
 
     private suspend fun getCachedRemoteSearch(query: String): List<YouTubeResult> {
@@ -243,7 +260,45 @@ class AutoplayRepository(private val context: Context) {
         anchor: Song,
         reserved: List<Song>
     ): List<RecommendationCandidate> {
-        return candidates.sortedByDescending { it.score }.take(10)
+        val anchorProfile = getSongProfile(anchor)
+        val ranked = candidates.sortedByDescending { it.score }
+
+        val styleFiltered = ranked.filter { candidate ->
+            AutoplayDiversity.isCompatibleWithAnchor(anchorProfile.styles, candidate.profile.styles)
+        }
+        val pool = if (styleFiltered.size >= AUTOPLAY_TARGET_SIZE) styleFiltered else ranked
+
+        val selected = mutableListOf<RecommendationCandidate>()
+        val titleBaseCounts = mutableMapOf<String, Int>()
+        val artistCounts = mutableMapOf<String, Int>()
+        val deferred = mutableListOf<RecommendationCandidate>()
+
+        for (candidate in pool) {
+            val titleBase = candidate.profile.titleBase
+            val artist = candidate.profile.primaryArtist
+
+            val titleBaseCount = titleBaseCounts[titleBase] ?: 0
+            val artistCount = artistCounts[artist] ?: 0
+
+            val titleBaseAllowed = titleBase.isBlank() || titleBaseCount < MAX_PER_TITLE_FAMILY
+            val artistAllowed = artist.isBlank() || artistCount < MAX_PER_ARTIST
+
+            if (titleBaseAllowed && artistAllowed) {
+                selected += candidate
+                if (titleBase.isNotBlank()) titleBaseCounts[titleBase] = titleBaseCount + 1
+                if (artist.isNotBlank()) artistCounts[artist] = artistCount + 1
+            } else {
+                deferred += candidate
+            }
+
+            if (selected.size >= AUTOPLAY_TARGET_SIZE) break
+        }
+
+        if (selected.size < AUTOPLAY_TARGET_SIZE) {
+            selected += deferred.take(AUTOPLAY_TARGET_SIZE - selected.size)
+        }
+
+        return selected.take(10)
     }
 
     private fun getRecommendationContext(state: PlaybackQueueState, anchor: Song): RecommendationContext {
