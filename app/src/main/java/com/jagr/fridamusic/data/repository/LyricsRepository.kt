@@ -224,8 +224,6 @@ class LyricsRepository(context: Context) {
     private fun JSONObject.matchScore(song: Song): Int {
         var score = 0
         val titleSim = titleSimilarity(optString("trackName"), song.title)
-        // Exact post-normalization match scores highest; graded similarity fills in
-        // the gap between exact and threshold, rewarding closer matches.
         score += when {
             titleSim >= 0.99 -> 60
             titleSim >= 0.85 -> 50
@@ -433,10 +431,6 @@ class LyricsRepository(context: Context) {
             .trim()
     }
 
-    /**
-     * Strips feat/con/with collaborator credits from a song title before comparing,
-     * since LRCLIB tracks often omit them (e.g. "Despacito" vs "Despacito ft. Bieber").
-     */
     private fun extractCoreTitle(raw: String): String {
         val stripped = FEAT_SUFFIX.replace(raw, "")
             .replace(Regex("\\s*[\\(\\[]\\s*[\\)\\]]"), "") // remove empty parens
@@ -444,13 +438,6 @@ class LyricsRepository(context: Context) {
         return stripped.ifBlank { raw }
     }
 
-    /**
-     * Returns a score between 0.0 and 1.0 measuring how similar two song titles are,
-     * using asymmetric token coverage + Levenshtein, with feat/noise stripped first.
-     * Calibrated to reach ≥ TITLE_MATCH_THRESHOLD for true variant matches (remaster,
-     * live, slowed, feat) while rejecting short-token false positives ("Roja" ⊂ "La Rosa
-     * de los Vientos Roja y Azul").
-     */
     private fun titleSimilarity(rawA: String, rawB: String): Double {
         val a = extractCoreTitle(rawA).normalizedLyricsKey()
         val b = extractCoreTitle(rawB).normalizedLyricsKey()
@@ -460,18 +447,15 @@ class LyricsRepository(context: Context) {
         val aTok = a.split(" ").filter { it.length > 1 }
         val bTok = b.split(" ").filter { it.length > 1 }
 
-        // Asymmetric coverage: how much of `a` is covered by `b` and vice-versa
         val bSet = bTok.toHashSet()
         val aSet = aTok.toHashSet()
         val covAinB = if (aTok.isEmpty()) 0.0 else aTok.count { it in bSet } / aTok.size.toDouble()
         val covBinA = if (bTok.isEmpty()) 0.0 else bTok.count { it in aSet } / bTok.size.toDouble()
 
-        // Penalize large length differences (avoids short token matching long unrelated titles)
         val lenRatio = minOf(a.length, b.length).toDouble() / maxOf(a.length, b.length)
 
         val tokenSim = covAinB * 0.65 + covBinA * 0.35
 
-        // Levenshtein ratio as a secondary signal, more relevant for short titles
         val lev = levenshteinRatio(a, b)
 
         val nTokens = (aSet + bSet).size
@@ -504,9 +488,6 @@ class LyricsRepository(context: Context) {
     companion object {
         private const val NEGATIVE_CACHE_TTL_MS = 15 * 60 * 1000L
         private const val DURATION_TOLERANCE_SECONDS = 8L
-        // Minimum titleSimilarity() score to accept a LRCLIB candidate as a match.
-        // Calibrated against 21 test cases (11 true positives / 10 false positives),
-        // achieving 100% accuracy at this threshold.
         private const val TITLE_MATCH_THRESHOLD = 0.60
         private val YOUTUBE_VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
         private val COMMENT_KEYS = listOf("SYNCEDLYRICS", "UNSYNCEDLYRICS", "LYRICS")
