@@ -70,6 +70,9 @@ class PlaybackViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
+    private val _audioQualityLabel = MutableStateFlow<String?>(null)
+    val audioQualityLabel = _audioQualityLabel.asStateFlow()
+
     private val _sleepTimerState = MutableStateFlow(SleepTimerState())
     val sleepTimerState = _sleepTimerState.asStateFlow()
 
@@ -140,7 +143,6 @@ class PlaybackViewModel @Inject constructor(
     private fun handlePlaybackError() {
         val song = _currentSong.value ?: return
         if (song.uri.toString().startsWith("http")) {
-            // Probably a remote stream error (expired URL or network)
             skipToNext()
         }
     }
@@ -194,6 +196,7 @@ class PlaybackViewModel @Inject constructor(
         val oldState = _queueState.value
         _currentSong.value = song
         _errorMessage.value = null
+        _audioQualityLabel.value = null
 
         playbackInitiationJob?.cancel()
         playbackInitiationJob = viewModelScope.launch {
@@ -216,12 +219,14 @@ class PlaybackViewModel @Inject constructor(
                 _isLoading.value = false
                 _errorMessage.value = null // Clear "Extracting audio..." message
                 if (stream != null) {
+                    _audioQualityLabel.value = formatRemoteQualityLabel(stream)
                     Uri.parse(stream.url)
                 } else {
                     _errorMessage.value = "Failed to extract audio"
                     return@launch
                 }
             } else {
+                _audioQualityLabel.value = formatLocalQualityLabel(song)
                 song.uri
             }
 
@@ -596,6 +601,28 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
+    private fun formatRemoteQualityLabel(stream: RemotePlaybackStream): String {
+        val codec = stream.formatName.ifBlank { null }?.uppercase() ?: "AUDIO"
+        val kbps = stream.bitrate / 1000
+        return if (kbps > 0) "$codec · ${kbps}kbps" else codec
+    }
+
+    private fun formatLocalQualityLabel(song: Song): String {
+        val extension = (song.data.ifBlank { song.uri.toString() })
+            .substringAfterLast('.', "")
+            .lowercase()
+        return when (extension) {
+            "flac" -> "FLAC · Lossless"
+            "wav" -> "WAV · Lossless"
+            "alac" -> "ALAC · Lossless"
+            "mp3" -> "MP3"
+            "m4a", "aac" -> "AAC"
+            "ogg", "opus" -> "OGG/Opus"
+            "wma" -> "WMA"
+            else -> "Local"
+        }
+    }
+
     private fun restoreQueueState(json: String): PlaybackQueueState? {
         if (json.isBlank()) return null
         return try {
@@ -715,7 +742,6 @@ class PlaybackViewModel @Inject constructor(
                 val uriString = song.uri.toString()
                 if (uriString.startsWith("http") || uriString.contains("youtube.com") || uriString.contains("youtu.be")) {
                     val videoId = if (uriString.startsWith("http")) song.data else {
-                        // Extract video ID from URL if possible
                         uriString.substringAfter("v=").substringBefore("&")
                     }
 

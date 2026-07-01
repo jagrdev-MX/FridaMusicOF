@@ -7,11 +7,14 @@ import androidx.media3.common.util.UnstableApi
 import com.jagr.fridamusic.data.remote.innertube.YouTubeResult
 import org.schabi.newpipe.extractor.MediaFormat
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+private const val BITRATE_TIE_MARGIN_BPS = 16_000
 
 data class RemotePlaybackStream(
     val url: String,
@@ -81,10 +84,7 @@ class YouTubeRepository(private val context: Context) {
     }
 
     private fun selectPlayableRemoteStream(streamInfo: StreamInfo): RemotePlaybackStream? {
-        val audioStream = streamInfo.audioStreams
-            .filter { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
-            .maxByOrNull { it.bitrate }
-            ?: streamInfo.audioStreams.maxByOrNull { it.bitrate }
+        val audioStream = pickBestAudioStream(streamInfo.audioStreams)
 
         audioStream?.let {
             val url = it.url ?: return@let null
@@ -120,6 +120,15 @@ class YouTubeRepository(private val context: Context) {
             )
         }
     }
+
+    private fun pickBestAudioStream(streams: List<AudioStream>) =
+        streams.filter { it.url?.isNotBlank() == true }.let { playable ->
+            if (playable.isEmpty()) return@let null
+            val maxBitrate = playable.maxOf { it.bitrate }
+            val nearBest = playable.filter { maxBitrate - it.bitrate <= BITRATE_TIE_MARGIN_BPS }
+            nearBest.firstOrNull { it.format?.name?.contains("OPUS", ignoreCase = true) == true }
+                ?: nearBest.maxByOrNull { it.bitrate }
+        }
 
     suspend fun prefetchStream(result: YouTubeResult) = withContext(Dispatchers.IO) {
         if (getCachedStream(result.videoId) != null) return@withContext

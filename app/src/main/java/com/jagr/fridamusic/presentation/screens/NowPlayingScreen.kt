@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,7 +47,6 @@ import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
 import com.jagr.fridamusic.data.ads.AdManager
-import com.jagr.fridamusic.presentation.screens.library.formatDuration
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.*
 import kotlinx.coroutines.launch
@@ -89,6 +89,7 @@ fun NowPlayingScreen(
     }
 
     val isYouTube = currentSong?.uri?.toString()?.startsWith("http") == true
+    val audioQualityLabel by playbackViewModel.audioQualityLabel.collectAsState()
     val playlists by viewModel.playlists.collectAsState(initial = emptyList())
     val totalDuration by playbackViewModel.duration.collectAsState()
     val enableBlur by settingsViewModel.enableBlurEffect.collectAsState()
@@ -100,7 +101,7 @@ fun NowPlayingScreen(
     val immersiveDarkGradient = remember(artworkPalette) {
         Brush.verticalGradient(
             colors = listOf(
-                artworkPalette.glowStart.copy(alpha = 0.65f), 
+                artworkPalette.glowStart.copy(alpha = 0.65f),
                 Color(0xFF121212)
             )
         )
@@ -123,7 +124,7 @@ fun NowPlayingScreen(
         modifier = Modifier
             .fillMaxSize()
             .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
-            .background(Color.Black) 
+            .background(Color.Black)
             .background(
                 if (shouldApplyBlur) SolidColor(Color(0xFF121212)) else immersiveDarkGradient
             )
@@ -157,7 +158,7 @@ fun NowPlayingScreen(
                 .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
         ) {
             Spacer(modifier = Modifier.height(20.dp))
-            
+
             // Top Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -167,7 +168,7 @@ fun NowPlayingScreen(
                 IconButton(onClick = onCollapse) {
                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.minimize), tint = Color.White)
                 }
-                
+
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = if (isYouTube) stringResource(R.string.from_youtube_music) else stringResource(R.string.local_audio_player),
@@ -175,14 +176,14 @@ fun NowPlayingScreen(
                         color = Color.White.copy(alpha = 0.6f)
                     )
                 }
-                
+
                 IconButton(onClick = { showCurrentSongActions = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options), tint = Color.White)
                 }
             }
-            
+
             Spacer(modifier = Modifier.weight(0.15f))
-            
+
             // Artwork
             Box(
                 modifier = Modifier
@@ -205,9 +206,9 @@ fun NowPlayingScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.weight(0.15f))
-            
+
             // Title & Artist
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -228,8 +229,18 @@ fun NowPlayingScreen(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (currentSong != null && !audioQualityLabel.isNullOrBlank()) {
+                        Text(
+                            text = audioQualityLabel.orEmpty(),
+                            style = LiquidTypography.labelSmall,
+                            color = Color.White.copy(alpha = 0.5f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
-                
+
                 IconButton(onClick = onToggleLike) {
                     Icon(
                         imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -238,13 +249,13 @@ fun NowPlayingScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             // Progress Bar
             val position = currentPosition()
             val progress = if (totalDuration > 0) position.toFloat() / totalDuration else 0f
-            
+
             Slider(
                 value = progress,
                 onValueChange = { onSeek((it * totalDuration).toLong()) },
@@ -255,7 +266,7 @@ fun NowPlayingScreen(
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -271,9 +282,9 @@ fun NowPlayingScreen(
                     color = Color.White.copy(alpha = 0.6f)
                 )
             }
-            
+
             Spacer(modifier = Modifier.weight(0.2f))
-            
+
             // Controls
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -282,16 +293,16 @@ fun NowPlayingScreen(
             ) {
                 IconButton(onClick = onToggleShuffle) {
                     Icon(
-                        Icons.Default.Shuffle, 
+                        Icons.Default.Shuffle,
                         contentDescription = stringResource(R.string.shuffle),
                         tint = if (isShuffleMode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f)
                     )
                 }
-                
+
                 IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.SkipPrevious, contentDescription = stringResource(R.string.previous), tint = Color.White, modifier = Modifier.size(32.dp))
                 }
-                
+
                 Box(
                     modifier = Modifier
                         .size(72.dp)
@@ -307,11 +318,11 @@ fun NowPlayingScreen(
                         modifier = Modifier.size(40.dp)
                     )
                 }
-                
+
                 IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.SkipNext, contentDescription = stringResource(R.string.next), tint = Color.White, modifier = Modifier.size(32.dp))
                 }
-                
+
                 IconButton(onClick = onToggleRepeat) {
                     Icon(
                         imageVector = when (repeatMode) {
@@ -324,9 +335,9 @@ fun NowPlayingScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.weight(0.2f))
-            
+
             // Bottom Bar
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
@@ -338,13 +349,13 @@ fun NowPlayingScreen(
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.lyrics), color = Color.White.copy(alpha = 0.6f))
                 }
-                
+
                 IconButton(onClick = { showQueueSheet = true }) {
                     Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = stringResource(R.string.queue), tint = Color.White.copy(alpha = 0.6f))
                 }
             }
         }
-        
+
         if (showQueueSheet) {
             QueueBottomSheet(
                 currentSong = currentSong,
