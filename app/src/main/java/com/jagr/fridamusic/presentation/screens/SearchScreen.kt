@@ -115,12 +115,13 @@ import com.jagr.fridamusic.domain.model.Playlist
 import com.jagr.fridamusic.domain.model.Song
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.liquidGlassEffect
+import com.jagr.fridamusic.presentation.screens.library.sharePlaylist
+import com.jagr.fridamusic.presentation.screens.library.shareText
 import com.jagr.fridamusic.presentation.theme.LiquidTypography
 import com.jagr.fridamusic.presentation.viewmodels.*
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.Normalizer
@@ -1677,7 +1678,11 @@ private fun SearchActionsSheet(
                     })
                     add(SearchActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
                         onDismiss()
-                        sharePlaylist(context, playlist, libraryViewModel.songsForPlaylist(playlist))
+                        sharePlaylist(
+                            context,
+                            playlist,
+                            libraryViewModel.songsForPlaylist(playlist)
+                        )
                     })
                 }
                 if (hit.remoteResult != null) {

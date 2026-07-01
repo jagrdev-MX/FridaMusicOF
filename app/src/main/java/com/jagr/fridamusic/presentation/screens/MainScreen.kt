@@ -45,6 +45,7 @@ import com.jagr.fridamusic.presentation.components.ModernSideNav
 import com.jagr.fridamusic.presentation.components.ModernGlassPlaybar
 import com.jagr.fridamusic.presentation.onboarding.OnboardingScreen
 import com.jagr.fridamusic.presentation.onboarding.SetupViewModel
+import com.jagr.fridamusic.presentation.screens.library.LibraryScreen
 import com.jagr.fridamusic.presentation.viewmodels.*
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze

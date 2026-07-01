@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -47,6 +46,7 @@ import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
 import com.jagr.fridamusic.presentation.components.rememberMiniPlayerArtworkPalette
 import com.jagr.fridamusic.data.ads.AdManager
+import com.jagr.fridamusic.presentation.screens.library.formatDuration
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.*
 import kotlinx.coroutines.launch
