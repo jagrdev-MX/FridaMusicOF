@@ -47,6 +47,7 @@ class LyricsRepository(context: Context) {
     private val providers: List<LyricsProvider> = listOf(
         LrclibExactLyricsProvider(),
         LrclibSearchLyricsProvider(),
+        YouTubeMusicLyricsProvider(),
         LocalLyricsProvider(),
         LyricsOvhProvider(),
         YouTubeCaptionLyricsProvider()
@@ -152,15 +153,14 @@ class LyricsRepository(context: Context) {
 
         override suspend fun getLyrics(song: Song): LyricsResult? = withContext(Dispatchers.IO) {
             val durationSeconds = song.duration.takeIf { it > 0L }?.let { (it / 1000L).toInt() } ?: 0
-            fetchObject(
-                "/api/get",
-                buildMap {
-                    put("track_name", song.title.cleanedLyricsQuery())
-                    put("artist_name", song.artist.cleanedLyricsQuery())
-                    song.album.cleanedLyricsQuery().takeIf { it.isNotBlank() }?.let { put("album_name", it) }
-                    if (durationSeconds > 0) put("duration", durationSeconds.toString())
-                }
-            )?.toLyricsResultIfUsable(song, name)
+            val params = buildMap {
+                put("track_name", song.title.apiSearchQuery())
+                put("artist_name", song.artist.apiSearchQuery())
+                song.album.apiSearchQuery().takeIf { it.isNotBlank() }?.let { put("album_name", it) }
+                if (durationSeconds > 0) put("duration", durationSeconds.toString())
+            }
+            Log.d(LYRICS_LOG_TAG, "LRCLIB exact query=$params")
+            fetchObject("/api/get", params)?.toLyricsResultIfUsable(song, name)
         }
     }
 
@@ -169,29 +169,58 @@ class LyricsRepository(context: Context) {
         override val timeoutMs = LRCLIB_PROVIDER_TIMEOUT_MS
 
         override suspend fun getLyrics(song: Song): LyricsResult? = withContext(Dispatchers.IO) {
-            val metadataSearch = fetchArray(
-                "/api/search",
-                buildMap {
-                    put("track_name", song.title.cleanedLyricsQuery())
-                    put("artist_name", song.artist.cleanedLyricsQuery())
-                    song.album.cleanedLyricsQuery().takeIf { it.isNotBlank() }?.let { put("album_name", it) }
-                }
-            )?.jsonObjects().orEmpty()
+            val metadataParams = buildMap {
+                put("track_name", song.title.apiSearchQuery())
+                put("artist_name", song.artist.apiSearchQuery())
+                song.album.apiSearchQuery().takeIf { it.isNotBlank() }?.let { put("album_name", it) }
+            }
+            Log.d(LYRICS_LOG_TAG, "LRCLIB search metadata query=$metadataParams")
+            val metadataSearch = fetchArray("/api/search", metadataParams)?.jsonObjects().orEmpty()
             val querySearch = if (metadataSearch.isEmpty()) {
-                fetchArray(
-                    "/api/search",
-                    mapOf("q" to "${song.title.cleanedLyricsQuery()} ${song.artist.cleanedLyricsQuery()}".trim())
-                )?.jsonObjects().orEmpty()
+                val q = "${song.title.apiSearchQuery()} ${song.artist.apiSearchQuery()}".trim()
+                Log.d(LYRICS_LOG_TAG, "LRCLIB search free-text query=\"$q\"")
+                fetchArray("/api/search", mapOf("q" to q))?.jsonObjects().orEmpty()
             } else {
                 emptyList()
             }
-            val best = (metadataSearch + querySearch)
-                .filter { it.matchesSong(song) }
+            val candidates = metadataSearch + querySearch
+            Log.d(LYRICS_LOG_TAG, "LRCLIB search returned ${candidates.size} raw candidate(s)")
+
+            val best = candidates
+                .filter { candidate ->
+                    val matches = candidate.matchesSong(song)
+                    if (!matches) {
+                        Log.d(
+                            LYRICS_LOG_TAG,
+                            "LRCLIB candidate rejected: title=\"${candidate.optString("trackName")}\" " +
+                                    "artist=\"${candidate.optString("artistName")}\" " +
+                                    "titleSim=${"%.2f".format(titleSimilarity(candidate.optString("trackName"), song.title))} " +
+                                    "durationDelta=${candidate.durationDeltaSeconds(song)}"
+                        )
+                    }
+                    matches
+                }
                 .maxByOrNull { it.matchScore(song) }
 
+            if (best != null) {
+                Log.d(LYRICS_LOG_TAG, "LRCLIB best candidate: title=\"${best.optString("trackName")}\" artist=\"${best.optString("artistName")}\" score=${best.matchScore(song)}")
+            }
             best?.toLyricsResultIfUsable(song, name)
         }
     }
+
+    private inner class YouTubeMusicLyricsProvider : LyricsProvider {
+        override val name = "YouTube Music"
+        override val timeoutMs = LRCLIB_PROVIDER_TIMEOUT_MS
+
+        override suspend fun getLyrics(song: Song): LyricsResult? = withContext(Dispatchers.IO) {
+            val videoId = song.youtubeVideoIdOrNull() ?: return@withContext null
+            val result = YouTube.fetchLyrics(videoId) ?: return@withContext null
+            val sourceLabel = result.sourceAttribution?.let { "$name ($it)" } ?: name
+            result.text.toUsableLyricsResult(sourceLabel)
+        }
+    }
+
 
     private inner class LyricsOvhProvider : LyricsProvider {
         override val name = "lyrics.ovh"
@@ -572,6 +601,11 @@ class LyricsRepository(context: Context) {
     private fun String.cleanedLyricsQuery(): String =
         normalizedLyricsKey().replace(Regex("\\s+"), " ").trim()
 
+    private fun String.apiSearchQuery(): String =
+        replace(YOUTUBE_METADATA_NOISE, " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
     private fun String.encodePathSegment(): String =
         URLEncoder.encode(this, "UTF-8").replace("+", "%20")
 
@@ -668,10 +702,14 @@ class LyricsRepository(context: Context) {
         private const val LYRICS_LOG_TAG = "FridaLyrics"
         private val YOUTUBE_VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
         private val COMMENT_KEYS = listOf("SYNCEDLYRICS", "UNSYNCEDLYRICS", "LYRICS")
-        // Strips feat/con/with artist credits from the END of a title before comparing.
         private val FEAT_SUFFIX = Regex(
             """\s*[\(\[（]?\s*(?:ft\.?|feat\.?|featuring|con|with|x)\s+.+?[\)\]）]?\s*$""",
             RegexOption.IGNORE_CASE
+        )
+        private val YOUTUBE_METADATA_NOISE = Regex(
+            "(?i)\\b(official video|official audio|official music video|lyric video|" +
+                    "video oficial|video lyrics|visualizer|topic|vevo|official channel|" +
+                    "hd|hq|4k|traducida|subtitulada)\\b"
         )
     }
 }

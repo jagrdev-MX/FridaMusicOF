@@ -343,6 +343,118 @@ object YouTube {
         return normalized
     }
 
+    suspend fun fetchLyrics(videoId: String): YouTubeMusicLyrics? {
+        return try {
+            val browseId = findLyricsBrowseId(videoId) ?: run {
+                Log.d("YouTubeLyrics", "No lyrics browseId for videoId=$videoId (track likely has no YT Music lyrics)")
+                return null
+            }
+            fetchLyricsByBrowseId(browseId)
+        } catch (e: Exception) {
+            Log.w("YouTubeLyrics", "fetchLyrics failed for $videoId: ${e.message}")
+            null
+        }
+    }
+
+    private suspend fun findLyricsBrowseId(videoId: String): String? {
+        val response = client.post("https://music.youtube.com/youtubei/v1/next") {
+            setBody(buildJsonObject {
+                putJsonObject("context") {
+                    putJsonObject("client") {
+                        put("clientName", "WEB_REMIX")
+                        put("clientVersion", "1.20240617.01.00")
+                        put("hl", "es")
+                    }
+                }
+                put("videoId", videoId)
+            })
+            header("Content-Type", "application/json")
+            header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+            header("X-YouTube-Client-Name", "67")
+            header("X-YouTube-Client-Version", "1.20240617.01.00")
+        }.body<JsonObject>()
+
+        val tabs = response["contents"]?.jsonObject
+            ?.get("singleColumnMusicWatchNextResultsRenderer")?.jsonObject
+            ?.get("tabbedRenderer")?.jsonObject
+            ?.get("watchNextTabbedResultsRenderer")?.jsonObject
+            ?.get("tabs")?.jsonArray
+
+        if (tabs == null) {
+            Log.d("YouTubeLyrics", "next() response has no watch tabs, keys: ${response.keys}")
+            return null
+        }
+
+        for (tab in tabs) {
+            val tabRenderer = tab.jsonObject["tabRenderer"]?.jsonObject ?: continue
+            val title = tabRenderer["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val iconType = tabRenderer["icon"]?.jsonObject?.get("iconType")?.jsonPrimitive?.contentOrNull.orEmpty()
+            val looksLikeLyricsTab = title.contains("lyric", ignoreCase = true) ||
+                    title.contains("letra", ignoreCase = true) ||
+                    iconType.contains("LYRIC", ignoreCase = true) ||
+                    iconType.contains("SUBTITLE", ignoreCase = true)
+            if (!looksLikeLyricsTab) continue
+
+            val browseId = tabRenderer["endpoint"]?.jsonObject
+                ?.get("browseEndpoint")?.jsonObject
+                ?.get("browseId")?.jsonPrimitive?.contentOrNull
+            if (browseId.isNullOrBlank()) {
+                Log.d("YouTubeLyrics", "Found lyrics tab (title=$title) but it's unselectable / has no browseId")
+                return null
+            }
+            return browseId
+        }
+        Log.d("YouTubeLyrics", "No tab matched lyrics heuristics among ${tabs.size} tabs")
+        return null
+    }
+
+    private suspend fun fetchLyricsByBrowseId(browseId: String): YouTubeMusicLyrics? {
+        val response = client.post("https://music.youtube.com/youtubei/v1/browse") {
+            setBody(buildJsonObject {
+                putJsonObject("context") {
+                    putJsonObject("client") {
+                        put("clientName", "WEB_REMIX")
+                        put("clientVersion", "1.20240617.01.00")
+                        put("hl", "es")
+                    }
+                }
+                put("browseId", browseId)
+            })
+            header("Content-Type", "application/json")
+            header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+            header("X-YouTube-Client-Name", "67")
+            header("X-YouTube-Client-Version", "1.20240617.01.00")
+        }.body<JsonObject>()
+
+        val sectionContents = response["contents"]?.jsonObject
+            ?.get("sectionListRenderer")?.jsonObject
+            ?.get("contents")?.jsonArray
+
+        if (sectionContents == null) {
+            Log.d("YouTubeLyrics", "browse() response has no sectionListRenderer.contents, keys: ${response.keys}")
+            return null
+        }
+
+        val shelf = sectionContents.firstNotNullOfOrNull { it.jsonObject["musicDescriptionShelfRenderer"]?.jsonObject }
+        if (shelf == null) {
+            Log.d("YouTubeLyrics", "No musicDescriptionShelfRenderer found in browse response")
+            return null
+        }
+
+        val text = shelf["description"]?.jsonObject
+            ?.get("runs")?.jsonArray
+            ?.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty() }
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        val source = shelf["footer"]?.jsonObject
+            ?.get("runs")?.jsonArray
+            ?.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty() }
+            ?.takeIf { it.isNotBlank() }
+
+        return YouTubeMusicLyrics(text = text, sourceAttribution = source)
+    }
+
     suspend fun getTranscript(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             val videoUrl = "https://www.youtube.com/watch?v=$videoId"
@@ -392,6 +504,11 @@ object YouTube {
         }
     }
 }
+
+data class YouTubeMusicLyrics(
+    val text: String,
+    val sourceAttribution: String?
+)
 
 enum class ResultType { SONG, ARTIST, PLAYLIST, ALBUM }
 
