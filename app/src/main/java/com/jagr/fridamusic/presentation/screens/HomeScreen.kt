@@ -83,7 +83,7 @@ fun HomeScreen(
 
     val forYouSongs by produceState(initialValue = emptyList<Song>(), songs) {
         value = withContext(Dispatchers.Default) {
-            songs.shuffled().take(10)
+            songs.stableHomeShuffle().take(10)
         }
     }
 
@@ -378,5 +378,13 @@ private fun HomeMediaCard(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+private fun List<Song>.stableHomeShuffle(): List<Song> {
+    val daySeed = Calendar.getInstance().get(Calendar.DAY_OF_YEAR).toLong()
+    return sortedBy { song ->
+        val key = song.id xor song.title.hashCode().toLong() xor daySeed
+        key * 1103515245L + 12345L
     }
 }

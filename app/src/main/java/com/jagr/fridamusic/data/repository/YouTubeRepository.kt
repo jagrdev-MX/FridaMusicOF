@@ -11,7 +11,12 @@ import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
 
 private const val BITRATE_TIE_MARGIN_BPS = 16_000
@@ -27,6 +32,8 @@ class YouTubeRepository(private val context: Context) {
     private val audioStreamCache = ConcurrentHashMap<String, String>()
     private val audioStreamCacheExpiresAtMs = ConcurrentHashMap<String, Long>()
     private val audioDurationCache = ConcurrentHashMap<String, Long>()
+    private val streamRequests = ConcurrentHashMap<String, Deferred<RemotePlaybackStream?>>()
+    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     suspend fun extractAudioStream(result: YouTubeResult): RemotePlaybackStream? = withContext(Dispatchers.IO) {
         val totalStart = System.currentTimeMillis()
@@ -38,6 +45,29 @@ class YouTubeRepository(private val context: Context) {
                 return@withContext RemotePlaybackStream(url, "cache", "", 0)
             }
 
+            val request = repositoryScope.async { extractAudioStreamUncached(result) }
+            val activeRequest = streamRequests.putIfAbsent(videoId, request)
+            if (activeRequest != null) {
+                request.cancel()
+                return@withContext activeRequest.await()
+            }
+
+            return@withContext try {
+                request.await()
+            } finally {
+                streamRequests.remove(videoId, request)
+            }
+        } catch (e: Exception) {
+            val totalTime = System.currentTimeMillis() - totalStart
+            Log.e("YouTubeRepo", "Extraction failed for ${result.title} after ${totalTime}ms", e)
+            null
+        }
+    }
+
+    private fun extractAudioStreamUncached(result: YouTubeResult): RemotePlaybackStream? {
+        val totalStart = System.currentTimeMillis()
+        return try {
+            val videoId = result.videoId
             val extractionStart = System.currentTimeMillis()
             val videoUrl = "https://www.youtube.com/watch?v=$videoId"
             val streamInfo = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
@@ -140,5 +170,7 @@ class YouTubeRepository(private val context: Context) {
         audioStreamCache.clear()
         audioStreamCacheExpiresAtMs.clear()
         audioDurationCache.clear()
+        streamRequests.values.forEach { it.cancel() }
+        streamRequests.clear()
     }
 }

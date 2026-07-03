@@ -253,15 +253,20 @@ fun ModernGlassPlaybar(
     onFavoriteClick: () -> Unit,
     onExpand: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition()
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(10000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+    val rotation = if (isPlaying) {
+        val infiniteTransition = rememberInfiniteTransition()
+        val animatedRotation by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(10000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            )
         )
-    )
+        animatedRotation
+    } else {
+        0f
+    }
 
     var offsetX by remember { mutableStateOf(0f) }
 

@@ -40,6 +40,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
+import com.jagr.fridamusic.domain.lyrics.LyricsResult
 import com.jagr.fridamusic.presentation.components.ModernBottomNav
 import com.jagr.fridamusic.presentation.components.ModernSideNav
 import com.jagr.fridamusic.presentation.components.ModernGlassPlaybar
@@ -78,10 +79,14 @@ fun MainScreen() {
     val isShuffleMode by playbackViewModel.isShuffleMode.collectAsState()
     val currentSong by playbackViewModel.currentSong.collectAsState()
     val isPlaying by playbackViewModel.isPlaying.collectAsState()
+    val lyricsResult by playbackViewModel.lyricsResult.collectAsState()
     val keepScreenOn by settingsViewModel.keepScreenOn.collectAsState()
     val currentAlbumArt = remember(currentSong) { currentSong?.artworkUri?.toString() }
-    val lyricsLines = remember(currentSong) { 
-        currentSong?.lyrics?.let { com.jagr.fridamusic.domain.lyrics.LyricsParser.parseLrc(it) } ?: emptyList() 
+    val lyricsLines = remember(lyricsResult) {
+        (lyricsResult as? LyricsResult.Available)?.lines ?: emptyList()
+    }
+    val lyricsText = remember(lyricsResult) {
+        (lyricsResult as? LyricsResult.Available)?.plainText
     }
     val currentPositionState = playbackViewModel.currentPosition.collectAsState()
 
@@ -93,6 +98,13 @@ fun MainScreen() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
     var selectedTopLevelRoute by remember { mutableStateOf("home") }
+    fun navigateTopLevel(route: String) {
+        navController.navigate(route) {
+            popUpTo("home") { saveState = route != "home" }
+            launchSingleTop = true
+            restoreState = route != "home"
+        }
+    }
 
     val homeListState = rememberLazyListState()
     val searchListState = rememberLazyListState()
@@ -149,11 +161,7 @@ fun MainScreen() {
                     userProfileUrl = null,
                     onNavigate = { route ->
                         if (route != selectedTopLevelRoute) {
-                            navController.navigate(route) {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            navigateTopLevel(route)
                         }
                     }
                 )
@@ -172,11 +180,7 @@ fun MainScreen() {
                                         else if (route == "library") libraryReselectSignal++
                                     } else {
                                         searchFocusSignal = 0
-                                        navController.navigate(route) {
-                                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
+                                        navigateTopLevel(route)
                                     }
                                 }
                             )
@@ -390,6 +394,8 @@ fun MainScreen() {
                 repeatMode = repeatMode,
                 isShuffleMode = isShuffleMode,
                 lyricsLines = lyricsLines,
+                lyricsText = lyricsText,
+                lyricsState = lyricsResult.syncState,
                 onPlayPause = { playbackViewModel.togglePlayback() },
                 onNext = { playbackViewModel.skipToNext() },
                 onPrevious = { playbackViewModel.skipToPrevious() },

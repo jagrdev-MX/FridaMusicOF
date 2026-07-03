@@ -45,6 +45,12 @@ object YouTube {
     private val searchCache = ConcurrentHashMap<String, CachedSearch>()
     private val searchesInFlight = ConcurrentHashMap<String, CompletableDeferred<List<YouTubeResult>>>()
 
+    private data class ThumbnailCandidate(
+        val url: String,
+        val width: Int,
+        val height: Int
+    )
+
     suspend fun search(query: String): List<YouTubeResult> {
         val trimmedQuery = query.trim()
         if (trimmedQuery.isBlank()) return emptyList()
@@ -242,8 +248,10 @@ object YouTube {
                         ?.get("text")?.jsonObject?.get("runs")?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: ""
                     val artist = flex?.getOrNull(1)?.jsonObject?.get("musicResponsiveListItemFlexColumnRenderer")?.jsonObject
                         ?.get("text")?.jsonObject?.get("runs")?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: ""
-                    val thumb = renderer["thumbnail"]?.jsonObject?.get("musicThumbnailRenderer")?.jsonObject
-                        ?.get("thumbnail")?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
+                    val thumb = bestThumbnailUrl(
+                        renderer["thumbnail"]?.jsonObject?.get("musicThumbnailRenderer")?.jsonObject
+                            ?.get("thumbnail")?.jsonObject?.get("thumbnails")?.jsonArray
+                    )
                     results.add(YouTubeResult(videoId, title, artist, thumb))
                 }
             }
@@ -275,7 +283,7 @@ object YouTube {
                             val videoId = videoRenderer["videoId"]?.jsonPrimitive?.content ?: continue
                             val title = videoRenderer["title"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
                             val artist = videoRenderer["ownerText"]?.jsonObject?.get("runs")?.jsonArray?.getOrNull(0)?.jsonObject?.get("text")?.jsonPrimitive?.content ?: "Unknown"
-                            val thumbnail = videoRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray?.lastOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
+                            val thumbnail = bestThumbnailUrl(videoRenderer["thumbnail"]?.jsonObject?.get("thumbnails")?.jsonArray)
                             val durationMs = videoRenderer["lengthText"]?.jsonObject?.get("simpleText")?.jsonPrimitive?.content?.let(::durationTextToMillis) ?: 0L
 
                             results.add(YouTubeResult(videoId, title, artist, thumbnail, ResultType.SONG, durationMs))
@@ -298,6 +306,41 @@ object YouTube {
         val parts = duration.split(":").mapNotNull { it.trim().toLongOrNull() }
         if (parts.isEmpty()) return 0L
         return parts.fold(0L) { total, part -> total * 60L + part } * 1000L
+    }
+
+    private fun bestThumbnailUrl(thumbnails: JsonArray?): String {
+        val best = thumbnails
+            ?.mapNotNull { item ->
+                val obj = item.jsonObject
+                val url = obj["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                ThumbnailCandidate(
+                    url = url,
+                    width = obj["width"]?.jsonPrimitive?.intOrNull ?: 0,
+                    height = obj["height"]?.jsonPrimitive?.intOrNull ?: 0
+                )
+            }
+            ?.maxWithOrNull(
+                compareBy<ThumbnailCandidate> { it.width * it.height }
+                    .thenBy { it.width }
+                    .thenBy { it.height }
+            )
+
+        return best?.url?.let(::normalizeThumbnailUrl).orEmpty()
+    }
+
+    private fun normalizeThumbnailUrl(url: String): String {
+        var normalized = url
+        if (normalized.contains("googleusercontent.com", ignoreCase = true)) {
+            normalized = normalized
+                .replace(Regex("=w\\d+-h\\d+"), "=w544-h544")
+                .replace(Regex("=s\\d+"), "=s544")
+        }
+        if (normalized.contains("ytimg.com", ignoreCase = true)) {
+            normalized = normalized
+                .replace("default.jpg", "hqdefault.jpg")
+                .replace("mqdefault.jpg", "hqdefault.jpg")
+        }
+        return normalized
     }
 
     suspend fun getTranscript(videoId: String): String? = withContext(Dispatchers.IO) {

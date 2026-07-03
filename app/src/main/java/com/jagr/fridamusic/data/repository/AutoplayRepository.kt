@@ -51,7 +51,7 @@ class AutoplayRepository(private val context: Context) {
     private val AUTOPLAY_REMOTE_QUERY_LIMIT = 2
     private val AUTOPLAY_LOG_TAG = "FridaAutoplay"
     private val YOUTUBE_VIDEO_ID_PATTERN = Regex("[A-Za-z0-9_-]{11}")
-    private val MAX_PER_TITLE_FAMILY = 2
+    private val MAX_PER_TITLE_FAMILY = 1
     private val MAX_PER_ARTIST = 3
 
     fun getSongProfile(song: Song): SongRecommendationProfile {
@@ -119,17 +119,17 @@ class AutoplayRepository(private val context: Context) {
                     profile.metadataKey == currentProfile.metadataKey
 
         fun isContextMatch(profile: SongRecommendationProfile): Boolean {
+            if (profile.album.isUsefulAlbum() && profile.album == seedProfile.album) return true
             if (profile.styles.intersect(seedProfile.styles).isNotEmpty()) return true
             if (profile.styles.intersect(context.styles).isNotEmpty()) return true
             if (profile.primaryArtist.isNotBlank() && profile.primaryArtist == seedProfile.primaryArtist) return true
             if (profile.primaryArtist.isNotBlank() && profile.primaryArtist in context.artists) return true
             if (profile.tokens.intersect(seedProfile.tokens).isNotEmpty()) return true
             if (profile.tokens.intersect(context.tokens).size >= 2) return true
-            if (profile.metadataKey in historyCounts) return true
             return false
         }
 
-        fun addCandidate(song: Song, baseScore: Int, reason: String? = null, requireContextMatch: Boolean = false) {
+        fun addCandidate(song: Song, baseScore: Int, reason: String? = null, requireContextMatch: Boolean = true) {
             val profile = getSongProfile(song)
             val key = profile.identityKey
             if (key in excluded || isSeedProfile(profile)) return
@@ -162,7 +162,7 @@ class AutoplayRepository(private val context: Context) {
             }
         }
 
-        allSongs.forEach { addCandidate(it, 10, reason = "From your library") }
+        allSongs.forEach { addCandidate(it, 10, reason = recommendationReason(anchorSeed, it)) }
 
         if (allowRemote) {
             val queries = getRecommendationQueries(anchorSeed, seed, context).take(AUTOPLAY_REMOTE_QUERY_LIMIT)
@@ -176,9 +176,20 @@ class AutoplayRepository(private val context: Context) {
             remoteResultsByQuery.forEach { (query, results) ->
                 Log.d(AUTOPLAY_LOG_TAG, "Remote results count for \"$query\": ${results.size}")
                 results.filter { it.type == ResultType.SONG }.forEachIndexed { index, result ->
-                    addCandidate(resultToSong(result), (40 - index).coerceAtLeast(15)) // Increased base score
+                    addCandidate(resultToSong(result), (40 - index).coerceAtLeast(15))
                 }
             }
+        }
+
+        if (candidates.isEmpty()) {
+            allSongs
+                .sortedByDescending { historyCounts[getSongProfile(it).metadataKey] ?: 0 }
+                .take(30)
+                .forEach { song ->
+                    if ((historyCounts[getSongProfile(song).metadataKey] ?: 0) > 0) {
+                        addCandidate(song, 15, reason = "Popular en tu historial", requireContextMatch = false)
+                    }
+                }
         }
 
         val selected = selectDiverseRecommendations(candidates.values.toList(), anchorSeed, reservedAutoplaySongs)
@@ -196,11 +207,14 @@ class AutoplayRepository(private val context: Context) {
         context: RecommendationContext
     ): Int {
         var score = 0
-        if (candidate.primaryArtist == seed.primaryArtist) score += 20 // Reduced from 25
-        if (candidate.styles.intersect(seed.styles).isNotEmpty()) score += 15
-        if (candidate.tokens.intersect(seed.tokens).isNotEmpty()) score += 10
+        if (candidate.primaryArtist.isNotBlank() && candidate.primaryArtist == seed.primaryArtist) score += 45
+        if (candidate.album.isUsefulAlbum() && candidate.album == seed.album) score += 40
+        if (candidate.styles.intersect(seed.styles).isNotEmpty()) score += 30
+        if (candidate.styles.intersect(context.styles).isNotEmpty()) score += 20
+        if (candidate.tokens.intersect(seed.tokens).size >= 2) score += 18
+        if (candidate.tokens.intersect(context.tokens).size >= 2) score += 12
 
-        score += (historyCounts[candidate.metadataKey] ?: 0).coerceAtMost(5) * 2
+        score += (historyCounts[candidate.metadataKey] ?: 0).coerceAtMost(3)
         if (recentMetadataKeys.contains(candidate.metadataKey)) score -= 30
 
         val baseCount = activeBaseCounts[candidate.titleBase] ?: 0
@@ -213,7 +227,17 @@ class AutoplayRepository(private val context: Context) {
     }
 
     private fun recommendationReason(seed: Song, candidate: Song): String {
-        return if (seed.artist == candidate.artist) "Más de ${seed.artist}" else "Similar a ${seed.title}"
+        val seedProfile = getSongProfile(seed)
+        val candidateProfile = getSongProfile(candidate)
+        return when {
+            candidateProfile.primaryArtist.isNotBlank() && candidateProfile.primaryArtist == seedProfile.primaryArtist ->
+                "Mismo artista"
+            candidateProfile.album.isUsefulAlbum() && candidateProfile.album == seedProfile.album ->
+                "Mismo album"
+            candidateProfile.styles.intersect(seedProfile.styles).isNotEmpty() ->
+                "Mismo genero"
+            else -> "Relacionado"
+        }
     }
 
     private fun getRecommendationQueries(anchorSeed: Song, currentSeed: Song, context: RecommendationContext): List<String> {
@@ -303,10 +327,14 @@ class AutoplayRepository(private val context: Context) {
 
     private fun getRecommendationContext(state: PlaybackQueueState, anchor: Song): RecommendationContext {
         val profile = getSongProfile(anchor)
+        val contextProfiles = (state.previous.takeLast(4) + listOfNotNull(state.current) + state.upNext.take(4))
+            .map { getSongProfile(it.song) }
         return RecommendationContext(
-            tokens = profile.tokens,
-            styles = profile.styles,
-            artists = setOf(profile.primaryArtist)
+            tokens = profile.tokens + contextProfiles.flatMap { it.tokens },
+            styles = profile.styles + contextProfiles.flatMap { it.styles },
+            artists = (setOf(profile.primaryArtist) + contextProfiles.map { it.primaryArtist })
+                .filter { it.isNotBlank() }
+                .toSet()
         )
     }
 
@@ -328,6 +356,9 @@ class AutoplayRepository(private val context: Context) {
 
     private fun metadataIdentity(title: String, artist: String): String =
         "${title.lowercase()}|${artist.lowercase()}"
+
+    private fun String.isUsefulAlbum(): Boolean =
+        isNotBlank() && !equals("YouTube", ignoreCase = true) && !contains("unknown", ignoreCase = true)
 
     fun clearCache() {
         recommendationProfileCache.clear()

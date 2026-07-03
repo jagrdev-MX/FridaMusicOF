@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.jagr.fridamusic.R
 import com.jagr.fridamusic.domain.lyrics.LyricsLine
+import com.jagr.fridamusic.domain.lyrics.LyricsSyncState
 import com.jagr.fridamusic.domain.model.*
 import com.jagr.fridamusic.presentation.components.FridaArtworkImage
 import com.jagr.fridamusic.presentation.components.SpotifyNativeAd
@@ -50,6 +52,7 @@ import com.jagr.fridamusic.data.ads.AdManager
 import com.jagr.fridamusic.presentation.theme.*
 import com.jagr.fridamusic.presentation.viewmodels.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,6 +65,8 @@ fun NowPlayingScreen(
     repeatMode: com.jagr.fridamusic.domain.model.RepeatMode,
     isShuffleMode: Boolean,
     lyricsLines: List<LyricsLine>,
+    lyricsText: String?,
+    lyricsState: LyricsSyncState,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -79,11 +84,15 @@ fun NowPlayingScreen(
     var showCurrentSongActions by remember { mutableStateOf(false) }
     var playlistPickerSong by remember { mutableStateOf<Song?>(null) }
     var isAdVisible by remember { mutableStateOf(false) }
+    var sliderProgressOverride by remember(currentSong) { mutableStateOf<Float?>(null) }
     val adManager = remember { AdManager.getInstance(viewModel.getApplication()) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
 
     LaunchedEffect(currentSong) {
+        isAdVisible = false
         if (adManager.canShowAdNow()) {
+            delay(900)
             isAdVisible = true
         }
     }
@@ -202,7 +211,9 @@ fun NowPlayingScreen(
                     FridaArtworkImage(
                         model = albumArtUrl,
                         contentDescription = stringResource(R.string.album_art),
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        requestSizePx = 1024,
+                        crossfadeMillis = 0
                     )
                 }
             }
@@ -255,10 +266,16 @@ fun NowPlayingScreen(
             // Progress Bar
             val position = currentPosition()
             val progress = if (totalDuration > 0) position.toFloat() / totalDuration else 0f
+            val displayedProgress = sliderProgressOverride ?: progress
+            val displayedPosition = sliderProgressOverride?.let { (it * totalDuration).toLong() } ?: position
 
             Slider(
-                value = progress,
-                onValueChange = { onSeek((it * totalDuration).toLong()) },
+                value = displayedProgress.coerceIn(0f, 1f),
+                onValueChange = { sliderProgressOverride = it.coerceIn(0f, 1f) },
+                onValueChangeFinished = {
+                    sliderProgressOverride?.let { onSeek((it * totalDuration).toLong()) }
+                    sliderProgressOverride = null
+                },
                 colors = SliderDefaults.colors(
                     thumbColor = Color.White,
                     activeTrackColor = Color.White,
@@ -272,7 +289,7 @@ fun NowPlayingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = formatDuration(position),
+                    text = formatDuration(displayedPosition),
                     style = LiquidTypography.labelSmall,
                     color = Color.White.copy(alpha = 0.6f)
                 )
@@ -372,6 +389,8 @@ fun NowPlayingScreen(
             LyricsBottomSheet(
                 currentSong = currentSong,
                 lyricsLines = lyricsLines,
+                lyricsText = lyricsText,
+                lyricsState = lyricsState,
                 currentPosition = currentPosition,
                 sheetState = sheetState,
                 onSeek = onSeek,
@@ -405,6 +424,14 @@ fun NowPlayingScreen(
                     onOpenInfo = {
                         showCurrentSongActions = false
                         showInfoSheet = true
+                    },
+                    onShare = { song ->
+                        showCurrentSongActions = false
+                        shareSongAudioOrLink(
+                            context = context,
+                            song = song,
+                            fallbackUrl = if (song.hasLocalAudioToShare()) null else viewModel.resolveShareUrl(song)
+                        )
                     }
                 )
             }
@@ -807,7 +834,8 @@ private fun CurrentSongActionsSheet(
     onDismiss: () -> Unit,
     onToggleLike: (Song) -> Unit,
     onPickPlaylist: (Song) -> Unit,
-    onOpenInfo: () -> Unit
+    onOpenInfo: () -> Unit,
+    onShare: (Song) -> Unit
 ) {
     val actions = buildList {
         add(QueueActionSpec(if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isLiked) stringResource(R.string.unlike) else stringResource(R.string.like)) {
@@ -816,6 +844,9 @@ private fun CurrentSongActionsSheet(
         })
         add(QueueActionSpec(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.save_to_playlist)) {
             onPickPlaylist(song)
+        })
+        add(QueueActionSpec(Icons.Default.Share, stringResource(R.string.share)) {
+            onShare(song)
         })
         add(QueueActionSpec(Icons.Default.Info, stringResource(R.string.details)) {
             onOpenInfo()
@@ -912,6 +943,8 @@ private fun queueArtworkUrl(song: Song): String? =
 private fun LyricsBottomSheet(
     currentSong: Song?,
     lyricsLines: List<LyricsLine>,
+    lyricsText: String?,
+    lyricsState: LyricsSyncState,
     currentPosition: () -> Long,
     sheetState: SheetState,
     onSeek: (Long) -> Unit,
@@ -920,6 +953,7 @@ private fun LyricsBottomSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.surface) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
             Text(stringResource(R.string.lyrics), style = LiquidTypography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = 16.dp))
+            val plainLyrics = lyricsText?.takeIf { it.isNotBlank() }
 
             if (lyricsLines.isNotEmpty()) {
                 val listState = rememberLazyListState()
@@ -971,9 +1005,12 @@ private fun LyricsBottomSheet(
                         )
                     }
                 }
-            } else if (!currentSong?.lyrics.isNullOrBlank()) {
-                currentSong.lyrics.let { lyricsText ->
+            } else if (!plainLyrics.isNullOrBlank()) {
+                plainLyrics.let { lyricsText ->
                     val scrollState = rememberScrollState()
+                    LaunchedEffect(lyricsText) {
+                        scrollState.scrollTo(0)
+                    }
                     Column(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scrollState)
                     ) {
@@ -988,8 +1025,13 @@ private fun LyricsBottomSheet(
                     }
                 }
             } else {
+                val messageRes = when (lyricsState) {
+                    LyricsSyncState.ERROR -> R.string.lyrics_error
+                    LyricsSyncState.NOT_AVAILABLE -> R.string.lyrics_not_available
+                    else -> R.string.looking_for_lyrics
+                }
                 Text(
-                    text = stringResource(R.string.looking_for_lyrics),
+                    text = stringResource(messageRes),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp)

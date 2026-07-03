@@ -215,7 +215,7 @@ fun LibraryScreen(
         }
     }
 
-    BackHandler(enabled = detail != null) {
+    BackHandler(enabled = detail != null && initialSection == null) {
         detail = null
     }
 

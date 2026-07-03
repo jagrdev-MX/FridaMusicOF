@@ -895,7 +895,7 @@ private fun PlaylistGridCard(
                 playlist = playlist,
                 onDismiss = { showActions = false },
                 onPlay = { playbackViewModel.playPlaylist(playlist, viewModel.songsForPlaylist(playlist)) },
-                onShuffle = { playbackViewModel.playPlaylist(playlist, viewModel.songsForPlaylist(playlist)) },
+                onShuffle = { playbackViewModel.playPlaylist(playlist, viewModel.songsForPlaylist(playlist), shuffle = true) },
                 onAddToQueue = { playbackViewModel.addPlaylistToQueue(playlist, viewModel.songsForPlaylist(playlist)) },
                 onShare = { showActions = false; sharePlaylist(context, playlist, songs) },
                 onChangeCover = null,
