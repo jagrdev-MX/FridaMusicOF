@@ -1,0 +1,79 @@
+name: FridaMusic TM Release Notify
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Telegram notification
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          AUTHOR="${{ github.event.release.author.login }}"
+          URL="${{ github.event.release.html_url }}"
+          BODY="${{ github.event.release.body }}"
+          IS_PRERELEASE="${{ github.event.release.prerelease }}"
+
+          CONTEXT="$(echo "$TAG $BODY" | tr '[:upper:]' '[:lower:]')"
+
+          RELEASE_KIND="$(echo "$BODY" | awk -F': ' '/^TYPE:/{print $2; exit}')"
+          RELEASE_LEVEL="$(echo "$BODY" | awk -F': ' '/^LEVEL:/{print $2; exit}')"
+
+          # TYPE
+          if [[ "$IS_PRERELEASE" == "true" || "$CONTEXT" =~ beta|alpha|test ]]; then
+            TYPE="Beta Build"
+          else
+            TYPE="Official Release"
+          fi
+
+          # TARGET
+          if [[ "$RELEASE_KIND" == "WEB" || "$CONTEXT" =~ web|website|vercel ]]; then
+            TARGET="Website"
+          elif [[ "$RELEASE_KIND" == "TELEGRAM BOT" || "$CONTEXT" =~ telegram ]]; then
+            TARGET="Telegram Bot"
+          else
+            TARGET="Android APK"
+          fi
+
+          # LEVEL
+          if [[ "$RELEASE_LEVEL" == "MAJOR" || "$CONTEXT" =~ major ]]; then
+            LEVEL="Major Update"
+          elif [[ "$RELEASE_LEVEL" == "MINOR" || "$CONTEXT" =~ minor ]]; then
+            LEVEL="Medium Update"
+          elif [[ "$RELEASE_LEVEL" == "PATCH" || "$CONTEXT" =~ fix|patch ]]; then
+            LEVEL="Minor Fix"
+          else
+            LEVEL="Medium Update"
+          fi
+
+          # SUMMARY
+          SUMMARY_EN="$(echo "$BODY" | awk '/SUMMARY_EN:/{getline; print; exit}')"
+          SUMMARY_ES="$(echo "$BODY" | awk '/SUMMARY_ES:/{getline; print; exit}')"
+
+          [ -z "$SUMMARY_EN" ] && SUMMARY_EN="New FridaMusic TM release available."
+          [ -z "$SUMMARY_ES" ] && SUMMARY_ES="Nueva release de FridaMusic TM disponible."
+
+          # CHANGES
+          CHANGES="$(echo "$BODY" | awk '
+          /CHANGES:/ {flag=1; next}
+          flag && NF {
+            print "• " $0
+            count++
+            if(count==4) exit
+          }')"
+
+          [ -z "$CHANGES" ] && CHANGES="• No changes listed"
+
+          # MESSAGE
+          MESSAGE=$(printf "🎵 FridaMusic TM Release\n\n%s\n%s\n%s\n🏷 %s\n\n🇺🇸 %s\n🇲🇽 %s\n\n📋 Changes:\n%s\n\n📥 Download / Descargar:\n%s\n\n👨‍💻 %s\n🏢 Frida Labs TM" "$TYPE" "$TARGET" "$LEVEL" "$TAG" "$SUMMARY_EN" "$SUMMARY_ES" "$CHANGES" "$URL" "$AUTHOR")
+
+          # TELEGRAM SEND
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "message_thread_id=24" \
+            -d "disable_web_page_preview=true" \
+            --data-urlencode "text=${MESSAGE}"

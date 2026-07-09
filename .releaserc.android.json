@@ -1,0 +1,15 @@
+{
+  "branches": ["master"],
+  "tagFormat": "v${version}-release-apk",
+  "plugins": [
+    ["./.github/scripts/semantic-release-track.cjs", { "track": "android" }],
+    "@semantic-release/github",
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.android.md"],
+        "message": "chore(release): android ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ]
+}

@@ -1,0 +1,23 @@
+package com.jagr.fridamusic.domain.model
+
+import android.net.Uri
+import androidx.compose.runtime.Immutable
+
+
+@Immutable
+data class Song(
+    val id: Long,
+    val title: String,
+    val artist: String,
+    val data: String,
+    val duration: Long,
+    val albumId: Long,
+    val uri: Uri,
+    val artworkUri: Uri,
+    val album: String = "",
+    val dateAdded: Long = 0L,
+    val lyrics: String? = null,
+    val isFavorite: Boolean = false,
+    val isExplicit: Boolean = false
+
+)

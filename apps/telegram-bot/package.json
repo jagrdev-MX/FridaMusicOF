@@ -1,0 +1,9 @@
+{
+  "name": "@fridamusic/telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FridaMusic Telegram bot workspace.",
+  "scripts": {
+    "check": "node -e \"console.log('telegram-bot workspace ready')\""
+  }
+}
