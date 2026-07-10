@@ -4,6 +4,7 @@ const ALLOWED_FORMATS = new Set(['mp3', 'flac', 'm4a']);
 const DEFAULT_TIMEOUT_MS = 180000;
 const DEFAULT_BACKEND_URL = 'http://34.28.240.33:8000';
 const CONVERT_PATH = '/api/convert';
+const CONVERTER_API_URL_ENV = 'FRIDAMUSIC_CONVERTER_API_URL';
 
 function sendJson(response, statusCode, payload) {
   response.statusCode = statusCode;
@@ -91,11 +92,7 @@ module.exports = async function handler(request, response) {
     return sendJson(response, 405, { detail: 'Metodo no permitido.' });
   }
 
-  const apiBaseUrl = (
-    process.env.FRIDAMUSIC_API_URL
-    || process.env.NEXT_PUBLIC_FRIDAMUSIC_API_URL
-    || DEFAULT_BACKEND_URL
-  ).replace(/\/+$/, '');
+  const apiBaseUrl = (process.env[CONVERTER_API_URL_ENV] || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
 
   if (!apiBaseUrl) {
     return sendJson(response, 503, { detail: 'El servicio de conversion no esta configurado.' });
