@@ -2,7 +2,8 @@ const { Readable } = require('node:stream');
 
 const ALLOWED_FORMATS = new Set(['mp3', 'flac', 'm4a']);
 const DEFAULT_TIMEOUT_MS = 180000;
-const DEFAULT_BACKEND_URL = 'http://34.29.190.146:8000';
+const DEFAULT_BACKEND_URL = 'http://34.28.240.33:8000';
+const CONVERT_PATH = '/api/convert';
 
 function sendJson(response, statusCode, payload) {
   response.statusCode = statusCode;
@@ -33,6 +34,44 @@ async function readJsonBody(request) {
 
 function getFilename(upstreamResponse) {
   return upstreamResponse.headers.get('content-disposition') || 'attachment; filename="FridaMusic-conversion.mp3"';
+}
+
+function getErrorDetail(payload, fallback) {
+  if (!payload || typeof payload !== 'object') {
+    return fallback;
+  }
+
+  const detail = payload.detail;
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === 'string') {
+          return item;
+        }
+
+        if (item && typeof item === 'object' && typeof item.msg === 'string') {
+          return item.msg;
+        }
+
+        return '';
+      })
+      .filter(Boolean);
+
+    if (messages.length) {
+      return messages.join(' ');
+    }
+  }
+
+  if (typeof payload.message === 'string' && payload.message.trim()) {
+    return payload.message;
+  }
+
+  return fallback;
 }
 
 function getHeader(request, name) {
@@ -92,7 +131,7 @@ module.exports = async function handler(request, response) {
   const forwardedFor = getForwardedFor(request);
 
   try {
-    const upstreamResponse = await fetch(`${apiBaseUrl}/download`, {
+    const upstreamResponse = await fetch(`${apiBaseUrl}${CONVERT_PATH}`, {
       method: 'POST',
       headers: {
         Accept: 'application/octet-stream, application/json',
@@ -100,7 +139,7 @@ module.exports = async function handler(request, response) {
         'User-Agent': userAgent,
         ...(forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {}),
       },
-      body: JSON.stringify({ url, format }),
+      body: JSON.stringify({ url, formato: format }),
       signal: controller.signal,
     });
 
@@ -109,7 +148,7 @@ module.exports = async function handler(request, response) {
       let detail = 'No se pudo completar la conversion.';
 
       try {
-        detail = JSON.parse(text).detail || detail;
+        detail = getErrorDetail(JSON.parse(text), detail);
       } catch (error) {
         if (text) {
           detail = text.slice(0, 240);

@@ -1,7 +1,7 @@
 const RELEASE_ENDPOINT = 'https://api.github.com/repos/jagrdev-MX/FridaMusicOF/releases?per_page=30';
 const RELEASES_URL = 'https://github.com/jagrdev-MX/FridaMusicOF/releases';
 const CHANGELOG_URL = 'https://github.com/jagrdev-MX/FridaMusicOF/blob/master/CHANGELOG.md';
-const CONVERTER_ENDPOINT = 'http://34.28.240.33:8000/api/convert';
+const CONVERTER_ENDPOINT = '/api/download';
 const CONVERTER_FORMATS = new Set(['mp3', 'flac', 'm4a']);
 
 const translations = {
