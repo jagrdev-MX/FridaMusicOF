@@ -5,6 +5,8 @@ const PUBLISHABLE_FILES = new Set([
   ".env",
   ".github/scripts/vercel-ignore-build.cjs",
   "index.html",
+  "privacy.html",
+  "privacy.js",
   "script.js",
   "styles.css",
   "vercel.json",
