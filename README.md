@@ -18,6 +18,8 @@
 
 ## Tabla de contenido
 
+- [Estado del repositorio y código legado](#estado-del-repositorio-y-código-legado)
+- [Repository status and legacy source code](#repository-status-and-legacy-source-code)
 - [Vista general](#vista-general)
 - [Características principales](#características-principales)
 - [Capturas](#capturas)
@@ -27,6 +29,42 @@
 - [Compilar APK](#compilar-apk)
 - [Contribuciones automáticas](#contribuciones-automáticas)
 - [Contribuciones](#contribuciones)
+
+---
+
+## Estado del repositorio y código legado
+
+**La versión v1.8.0 marca la última versión pública del FridaMusic anterior.** El código fuente disponible en la versión v1.8.0 y en versiones anteriores corresponde al proyecto legado. Este código permanece disponible como referencia histórica y como base comunitaria para forks, modificaciones y proyectos derivados, siempre conforme a la licencia Apache License 2.0 vigente y al `NOTICE` del repositorio.
+
+El desarrollo del FridaMusic actual continuará de forma privada. Su código fuente, arquitectura, funciones nuevas, mejoras y demás avances no se publicarán en este repositorio.
+
+Este repositorio público continuará activo principalmente para:
+
+- Publicar novedades oficiales de FridaMusic.
+- Mantener la página web pública.
+- Publicar nuevas versiones mediante archivos APK.
+- Compartir enlaces de descarga y disponibilidad en Google Play.
+- Mantener documentación pública y avisos importantes.
+
+La publicación de nuevos APK, binarios o releases no implica que el código fuente actualizado correspondiente vaya a publicarse.
+
+---
+
+## Repository status and legacy source code
+
+**Version v1.8.0 marks the final public release of the previous FridaMusic edition.** The source code available in version v1.8.0 and earlier versions belongs to the legacy project. This code remains available as a historical reference and as a community foundation for forks, modifications, and derivative projects, always subject to the repository's current Apache License 2.0 and `NOTICE`.
+
+The current FridaMusic project will continue to be developed privately. Its source code, architecture, new features, improvements, and other advancements will not be published in this repository.
+
+This public repository will remain active primarily to:
+
+- Publish official FridaMusic news.
+- Maintain the public website.
+- Publish new versions through APK files.
+- Share download links and Google Play availability.
+- Maintain public documentation and important notices.
+
+The publication of new APKs, binaries, or releases does not imply that their corresponding updated source code will be published.
 
 ---
 
