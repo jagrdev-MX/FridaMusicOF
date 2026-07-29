@@ -845,8 +845,17 @@ function setupNavbar() {
   }
 
   let scrollFrame = 0;
+  let isCompact = null;
   const updateNavbarSize = () => {
-    siteHeader.classList.toggle('is-compact', window.scrollY > 50);
+    const shouldCompact = isCompact === null
+      ? window.scrollY > 50
+      : window.scrollY > (isCompact ? 24 : 64);
+
+    if (shouldCompact !== isCompact) {
+      isCompact = shouldCompact;
+      siteHeader.classList.toggle('is-compact', isCompact);
+    }
+
     scrollFrame = 0;
   };
 

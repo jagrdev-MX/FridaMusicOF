@@ -66,7 +66,6 @@ button {
   top: 0;
   z-index: 6;
   padding: 18px 24px 0;
-  transition: padding 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-shell {
@@ -81,19 +80,19 @@ button {
   padding: 14px 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
-  background: rgba(8, 6, 20, 0.68);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: rgba(8, 6, 20, 0.42);
+  backdrop-filter: blur(40px) saturate(140%);
+  -webkit-backdrop-filter: blur(40px) saturate(140%);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  will-change: max-width, padding;
+  transform: translate3d(0, 0, 0) scale(1);
+  transform-origin: top center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
   transition:
-    max-width 0.46s cubic-bezier(0.22, 1, 0.36, 1),
-    gap 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    border-radius 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.32s ease,
-    background 0.32s ease,
-    box-shadow 0.32s ease;
+    background-color 0.32s ease;
 }
 
 .nav-brand {
@@ -102,7 +101,6 @@ button {
   gap: 10px;
   flex-shrink: 0;
   text-decoration: none;
-  transition: gap 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-brand-mark {
@@ -111,7 +109,6 @@ button {
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 0 24px rgba(124, 77, 255, 0.3);
-  transition: width 0.42s cubic-bezier(0.22, 1, 0.36, 1), height 0.42s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.32s ease;
 }
 
 .nav-brand-text {
@@ -119,7 +116,6 @@ button {
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  transition: font-size 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-toggle {
@@ -183,7 +179,6 @@ button {
   justify-content: center;
   gap: 6px;
   flex: 1;
-  transition: gap 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-link {
@@ -198,15 +193,7 @@ button {
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  transition:
-    min-height 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    font-size 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    color 0.25s ease,
-    background 0.25s ease,
-    border-color 0.25s ease,
-    transform 0.25s ease,
-    box-shadow 0.25s ease;
+  transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .nav-link:hover,
@@ -235,7 +222,6 @@ button {
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.045);
-  transition: padding 0.42s cubic-bezier(0.22, 1, 0.36, 1), gap 0.42s cubic-bezier(0.22, 1, 0.36, 1), background 0.32s ease;
 }
 
 .language-option {
@@ -248,15 +234,7 @@ button {
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  transition:
-    min-width 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    min-height 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    padding 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    font-size 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    color 0.25s ease,
-    background 0.25s ease,
-    transform 0.25s ease,
-    box-shadow 0.25s ease;
+  transition: color 0.25s ease, background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .language-option[aria-pressed='true'] {
@@ -271,55 +249,10 @@ button {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.site-header.is-compact {
-  padding-top: 8px;
-}
-
 .site-header.is-compact .nav-shell {
-  max-width: 980px;
-  gap: 10px;
-  padding: 9px 12px;
+  transform: translate3d(0, -7px, 0) scale(0.92);
   border-color: rgba(255, 255, 255, 0.14);
-  border-radius: 26px;
-  background: rgba(8, 6, 20, 0.84);
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.42), 0 0 30px rgba(124, 77, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-.site-header.is-compact .nav-brand {
-  gap: 8px;
-}
-
-.site-header.is-compact .nav-brand-mark {
-  width: 30px;
-  height: 30px;
-  box-shadow: 0 0 18px rgba(124, 77, 255, 0.26);
-}
-
-.site-header.is-compact .nav-brand-text {
-  font-size: 13px;
-}
-
-.site-header.is-compact .nav-links {
-  gap: 2px;
-}
-
-.site-header.is-compact .nav-link {
-  min-height: 34px;
-  padding: 0 9px;
-  font-size: 12px;
-}
-
-.site-header.is-compact .language-switcher {
-  gap: 2px;
-  padding: 3px;
-  background: rgba(255, 255, 255, 0.055);
-}
-
-.site-header.is-compact .language-option {
-  min-width: 32px;
-  min-height: 30px;
-  padding: 0 7px;
-  font-size: 11px;
+  background: rgba(8, 6, 20, 0.54);
 }
 
 .wrapper {
@@ -1028,6 +961,7 @@ button {
   line-height: 1.42;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 @keyframes interfaceCurtainForward {
@@ -1862,12 +1796,8 @@ footer {
 }
 
 @media (max-width: 980px) {
-  .site-header.is-compact {
-    padding-top: 8px;
-  }
-
   .site-header.is-compact .nav-shell {
-    max-width: 760px;
+    transform: translate3d(0, -5px, 0) scale(0.97);
   }
 
   .nav-toggle {
@@ -1954,10 +1884,6 @@ footer {
     padding: 14px 16px 0;
   }
 
-  .site-header.is-compact {
-    padding: 7px 16px 0;
-  }
-
   .nav-shell {
     border-radius: 24px;
     gap: 10px;
@@ -1966,17 +1892,6 @@ footer {
 
   .nav-brand-text {
     display: none;
-  }
-
-  .site-header.is-compact .nav-shell {
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 20px;
-  }
-
-  .site-header.is-compact .nav-toggle {
-    width: 36px;
-    height: 36px;
   }
 
   .language-option {
