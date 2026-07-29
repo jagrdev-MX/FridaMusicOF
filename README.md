@@ -49,19 +49,42 @@
 
 ## Capturas
 
-> Imágenes tomadas del propio repositorio (`capturas web/`).
+> Imágenes originales de FridaMusic, mostradas completas y sin recortes.
 
-### Inicio inteligente
-![Inicio inteligente](capturas%20web/inicio%20inteligente.jpg)
+### Toda tu música, sin límites
 
-### Biblioteca dinámica
-![Biblioteca dinámica](capturas%20web/bibliotecadinamica.jpg)
+<p align="center">
+  <img src="capturas%20web/interfaz/1.png" alt="Toda tu música sin límites" width="900" />
+</p>
 
-### Reproductor inmersivo
-![Reproductor inmersivo](capturas%20web/reproductor%20inmersivo.jpg)
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <strong>Home con estilo</strong><br />
+      <img src="capturas%20web/interfaz/2.png" alt="Home de FridaMusic con recomendaciones musicales" width="480" />
+    </td>
+    <td align="center" width="50%">
+      <strong>Navegación flotante moderna</strong><br />
+      <img src="capturas%20web/interfaz/3.png" alt="Navegación flotante y minirreproductor de FridaMusic" width="480" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <strong>Reproductor, letras y cola</strong><br />
+      <img src="capturas%20web/interfaz/4.png" alt="Reproductor, letras y cola de reproducción de FridaMusic" width="480" />
+    </td>
+    <td align="center" width="50%">
+      <strong>Control y letras sincronizadas</strong><br />
+      <img src="capturas%20web/interfaz/5.png" alt="Controles y letras sincronizadas de FridaMusic" width="480" />
+    </td>
+  </tr>
+</table>
 
-### Ajustes minimalistas
-![Ajustes minimalistas](capturas%20web/ajustes%20minimalistas.jpg)
+### Descarga FridaMusic
+
+<p align="center">
+  <img src="capturas%20web/interfaz/DESCARGA%20AHORA%202.png" alt="Descarga gratis FridaMusic desde Google Play o GitHub" width="380" />
+</p>
 
 ---
 
