@@ -43,11 +43,29 @@ const translations = {
     'features.android.desc': 'FridaMusic está centrada en Android y sigue creciendo: ya tiene base funcional sólida, con módulos y pantallas que continúan refinándose.',
     'interface.kicker': 'Interfaz',
     'interface.title': 'Un vistazo a FridaMusic',
-    'interface.subtitle': 'Pantallas reales del flujo visual con microdetalles pensados para una experiencia inmersiva.',
-    'interface.home': 'Home - bienvenida dinámica',
-    'interface.player': 'Now Playing - control inmersivo',
-    'interface.library': 'Library - mosaico musical',
-    'interface.settings': 'Settings - ajustes precisos',
+    'interface.subtitle': 'Recorre la experiencia visual de la app con sus proporciones originales y una transición de cortina.',
+    'interface.carousel': 'Galería de la interfaz de FridaMusic',
+    'interface.previous': 'Ver imagen anterior',
+    'interface.next': 'Ver imagen siguiente',
+    'interface.hint': 'Desliza, usa las flechas o elige una vista para recorrer la galería.',
+    'interface.slide1.title': 'Toda tu música, sin límites',
+    'interface.slide1.desc': 'La identidad de FridaMusic reúne descubrimiento y reproducción en una sola experiencia.',
+    'interface.slide1.alt': 'Presentación de FridaMusic con tres teléfonos y el mensaje Toda tu música sin límites',
+    'interface.slide2.title': 'Home con estilo',
+    'interface.slide2.desc': 'Recomendaciones por momento para encontrar el ritmo perfecto desde el inicio.',
+    'interface.slide2.alt': 'Pantalla Home de FridaMusic con recomendaciones musicales por actividad',
+    'interface.slide3.title': 'Navegación flotante moderna',
+    'interface.slide3.desc': 'Minirreproductor y accesos principales siempre visibles y al alcance.',
+    'interface.slide3.alt': 'Detalle del minirreproductor y la navegación flotante de FridaMusic',
+    'interface.slide4.title': 'Todo desde un solo lugar',
+    'interface.slide4.desc': 'Reproductor, letras y cola de reproducción integrados en una misma vista.',
+    'interface.slide4.alt': 'Tres vistas del reproductor de FridaMusic con portada, letras y cola',
+    'interface.slide5.title': 'Control y letras sincronizadas',
+    'interface.slide5.desc': 'Controla cada canción y sigue la letra sin perder el ritmo.',
+    'interface.slide5.alt': 'Reproductor de FridaMusic junto a una vista de letras sincronizadas',
+    'interface.slide6.title': 'Descarga FridaMusic',
+    'interface.slide6.desc': 'Instala la app gratis o visita el repositorio oficial del proyecto.',
+    'interface.slide6.alt': 'Cartel de descarga gratuita de FridaMusic con accesos a Google Play y GitHub',
     'downloads.kicker': 'Descargas',
     'downloads.title': 'Instala FridaMusic',
     'downloads.copy': 'La disponibilidad se obtiene desde las releases Android públicas del repositorio para evitar versiones inventadas o enlaces obsoletos.',
@@ -140,11 +158,29 @@ const translations = {
     'features.android.desc': 'FridaMusic is Android-first and still growing: it already has a solid functional base while modules and screens keep being refined.',
     'interface.kicker': 'Interface',
     'interface.title': 'A look at FridaMusic',
-    'interface.subtitle': 'Real screens from the visual flow with micro-details designed for an immersive experience.',
-    'interface.home': 'Home - dynamic welcome',
-    'interface.player': 'Now Playing - immersive control',
-    'interface.library': 'Library - music mosaic',
-    'interface.settings': 'Settings - precise controls',
+    'interface.subtitle': 'Explore the app experience in its original proportions with a curtain-style transition.',
+    'interface.carousel': 'FridaMusic interface gallery',
+    'interface.previous': 'View previous image',
+    'interface.next': 'View next image',
+    'interface.hint': 'Swipe, use the arrows, or choose a view to explore the gallery.',
+    'interface.slide1.title': 'All your music, without limits',
+    'interface.slide1.desc': 'FridaMusic brings discovery and playback together in one visual experience.',
+    'interface.slide1.alt': 'FridaMusic presentation with three phones and the message All your music without limits',
+    'interface.slide2.title': 'A stylish Home',
+    'interface.slide2.desc': 'Recommendations for every moment help you find the perfect rhythm from the start.',
+    'interface.slide2.alt': 'FridaMusic Home screen with music recommendations by activity',
+    'interface.slide3.title': 'Modern floating navigation',
+    'interface.slide3.desc': 'The mini player and main destinations remain visible and within reach.',
+    'interface.slide3.alt': 'Close-up of the FridaMusic mini player and floating navigation',
+    'interface.slide4.title': 'Everything in one place',
+    'interface.slide4.desc': 'Player, lyrics, and playback queue come together in a single view.',
+    'interface.slide4.alt': 'Three FridaMusic player views featuring artwork, lyrics, and queue',
+    'interface.slide5.title': 'Controls and synced lyrics',
+    'interface.slide5.desc': 'Control every song and follow the lyrics without missing the beat.',
+    'interface.slide5.alt': 'FridaMusic player beside a synchronized lyrics view',
+    'interface.slide6.title': 'Download FridaMusic',
+    'interface.slide6.desc': 'Install the app for free or visit the project official repository.',
+    'interface.slide6.alt': 'Free FridaMusic download poster with Google Play and GitHub access',
     'downloads.kicker': 'Downloads',
     'downloads.title': 'Install FridaMusic',
     'downloads.copy': 'Availability is pulled from the repository public Android releases so versions and links are not invented or stale.',
@@ -237,11 +273,29 @@ const translations = {
     'features.android.desc': 'FridaMusic é focado primeiro em Android e continua crescendo: já possui uma base funcional sólida enquanto módulos e telas seguem sendo refinados.',
     'interface.kicker': 'Interface',
     'interface.title': 'Um olhar para FridaMusic',
-    'interface.subtitle': 'Telas reais do fluxo visual com microdetalhes pensados para uma experiência imersiva.',
-    'interface.home': 'Home - boas-vindas dinâmicas',
-    'interface.player': 'Now Playing - controle imersivo',
-    'interface.library': 'Library - mosaico musical',
-    'interface.settings': 'Settings - ajustes precisos',
+    'interface.subtitle': 'Explore a experiência do app em suas proporções originais com uma transição de cortina.',
+    'interface.carousel': 'Galeria da interface do FridaMusic',
+    'interface.previous': 'Ver imagem anterior',
+    'interface.next': 'Ver próxima imagem',
+    'interface.hint': 'Deslize, use as setas ou escolha uma vista para explorar a galeria.',
+    'interface.slide1.title': 'Toda a sua música, sem limites',
+    'interface.slide1.desc': 'O FridaMusic reúne descoberta e reprodução em uma única experiência visual.',
+    'interface.slide1.alt': 'Apresentação do FridaMusic com três celulares e a mensagem Toda a sua música sem limites',
+    'interface.slide2.title': 'Home com estilo',
+    'interface.slide2.desc': 'Recomendações para cada momento ajudam a encontrar o ritmo perfeito desde o início.',
+    'interface.slide2.alt': 'Tela Home do FridaMusic com recomendações musicais por atividade',
+    'interface.slide3.title': 'Navegação flutuante moderna',
+    'interface.slide3.desc': 'O miniplayer e os principais destinos permanecem visíveis e ao alcance.',
+    'interface.slide3.alt': 'Detalhe do miniplayer e da navegação flutuante do FridaMusic',
+    'interface.slide4.title': 'Tudo em um só lugar',
+    'interface.slide4.desc': 'Player, letras e fila de reprodução integrados em uma única vista.',
+    'interface.slide4.alt': 'Três vistas do player do FridaMusic com capa, letras e fila',
+    'interface.slide5.title': 'Controles e letras sincronizadas',
+    'interface.slide5.desc': 'Controle cada música e acompanhe a letra sem perder o ritmo.',
+    'interface.slide5.alt': 'Player do FridaMusic ao lado de uma vista de letras sincronizadas',
+    'interface.slide6.title': 'Baixe o FridaMusic',
+    'interface.slide6.desc': 'Instale o app grátis ou visite o repositório oficial do projeto.',
+    'interface.slide6.alt': 'Cartaz de download gratuito do FridaMusic com acessos ao Google Play e GitHub',
     'downloads.kicker': 'Downloads',
     'downloads.title': 'Instale FridaMusic',
     'downloads.copy': 'A disponibilidade é obtida das releases Android públicas do repositório para evitar versões inventadas ou links desatualizados.',
@@ -319,6 +373,53 @@ let converterState = {
   filename: '',
 };
 let converterDownloadUrl = '';
+let interfaceSlideIndex = 0;
+let interfaceAnimationTimer = 0;
+
+const interfaceSlides = [
+  {
+    src: 'capturas%20web/interfaz/1.png',
+    orientation: 'landscape',
+    titleKey: 'interface.slide1.title',
+    descriptionKey: 'interface.slide1.desc',
+    altKey: 'interface.slide1.alt',
+  },
+  {
+    src: 'capturas%20web/interfaz/2.png',
+    orientation: 'landscape',
+    titleKey: 'interface.slide2.title',
+    descriptionKey: 'interface.slide2.desc',
+    altKey: 'interface.slide2.alt',
+  },
+  {
+    src: 'capturas%20web/interfaz/3.png',
+    orientation: 'landscape',
+    titleKey: 'interface.slide3.title',
+    descriptionKey: 'interface.slide3.desc',
+    altKey: 'interface.slide3.alt',
+  },
+  {
+    src: 'capturas%20web/interfaz/4.png',
+    orientation: 'landscape',
+    titleKey: 'interface.slide4.title',
+    descriptionKey: 'interface.slide4.desc',
+    altKey: 'interface.slide4.alt',
+  },
+  {
+    src: 'capturas%20web/interfaz/5.png',
+    orientation: 'landscape',
+    titleKey: 'interface.slide5.title',
+    descriptionKey: 'interface.slide5.desc',
+    altKey: 'interface.slide5.alt',
+  },
+  {
+    src: 'capturas%20web/interfaz/DESCARGA%20AHORA%202.png',
+    orientation: 'portrait',
+    titleKey: 'interface.slide6.title',
+    descriptionKey: 'interface.slide6.desc',
+    altKey: 'interface.slide6.alt',
+  },
+];
 
 function translate(key) {
   return translations[currentLanguage]?.[key] ?? translations.es[key] ?? key;
@@ -337,12 +438,135 @@ function applyTranslations(language) {
     element.setAttribute('aria-label', translate(element.dataset.i18nAriaLabel));
   });
 
+  document.querySelectorAll('[data-i18n-alt]').forEach((element) => {
+    element.setAttribute('alt', translate(element.dataset.i18nAlt));
+  });
+
   document.querySelectorAll('.language-option').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.lang === currentLanguage));
   });
 
+  renderInterfaceSlide(interfaceSlideIndex, { animate: false });
   renderReleaseState();
   renderConverterState();
+}
+
+function renderInterfaceSlide(index, options = {}) {
+  const carousel = document.querySelector('[data-interface-carousel]');
+  const viewport = carousel?.querySelector('[data-interface-viewport]');
+  const image = carousel?.querySelector('[data-interface-image]');
+  const activeTitle = carousel?.querySelector('[data-interface-title]');
+  const activeDescription = carousel?.querySelector('[data-interface-description]');
+  const currentValue = carousel?.querySelector('[data-interface-current]');
+
+  if (!carousel || !viewport || !image || !activeTitle || !activeDescription || !currentValue) {
+    return;
+  }
+
+  const normalizedIndex = (index + interfaceSlides.length) % interfaceSlides.length;
+  const direction = options.direction ?? (normalizedIndex >= interfaceSlideIndex ? 1 : -1);
+  const slide = interfaceSlides[normalizedIndex];
+  interfaceSlideIndex = normalizedIndex;
+  carousel.dataset.interfaceOrientation = slide.orientation;
+
+  window.clearTimeout(interfaceAnimationTimer);
+  viewport.classList.remove('is-revealing-forward', 'is-revealing-backward');
+
+  image.src = slide.src;
+  image.dataset.i18nAlt = slide.altKey;
+  image.alt = translate(slide.altKey);
+  activeTitle.dataset.i18n = slide.titleKey;
+  activeTitle.textContent = translate(slide.titleKey);
+  activeDescription.dataset.i18n = slide.descriptionKey;
+  activeDescription.textContent = translate(slide.descriptionKey);
+  currentValue.textContent = String(normalizedIndex + 1).padStart(2, '0');
+
+  carousel.querySelectorAll('[data-interface-index]').forEach((control) => {
+    const isActive = Number.parseInt(control.dataset.interfaceIndex, 10) === normalizedIndex;
+    control.classList.toggle('is-active', isActive);
+    control.setAttribute('aria-current', isActive ? 'true' : 'false');
+  });
+
+  [normalizedIndex - 1, normalizedIndex + 1].forEach((neighborIndex) => {
+    const neighbor = interfaceSlides[(neighborIndex + interfaceSlides.length) % interfaceSlides.length];
+    const preloadImage = new Image();
+    preloadImage.src = neighbor.src;
+  });
+
+  if (options.animate === false) {
+    return;
+  }
+
+  void viewport.offsetWidth;
+  viewport.classList.add(direction < 0 ? 'is-revealing-backward' : 'is-revealing-forward');
+  interfaceAnimationTimer = window.setTimeout(() => {
+    viewport.classList.remove('is-revealing-forward', 'is-revealing-backward');
+  }, 720);
+}
+
+function moveInterfaceSlide(step) {
+  renderInterfaceSlide(interfaceSlideIndex + step, { direction: step < 0 ? -1 : 1 });
+}
+
+function setupInterfaceCarousel() {
+  const carousel = document.querySelector('[data-interface-carousel]');
+  const viewport = carousel?.querySelector('[data-interface-viewport]');
+  const previousButton = carousel?.querySelector('[data-interface-previous]');
+  const nextButton = carousel?.querySelector('[data-interface-next]');
+
+  if (!carousel || !viewport || !previousButton || !nextButton) {
+    return;
+  }
+
+  previousButton.addEventListener('click', () => moveInterfaceSlide(-1));
+  nextButton.addEventListener('click', () => moveInterfaceSlide(1));
+
+  carousel.querySelectorAll('[data-interface-index]').forEach((control) => {
+    control.addEventListener('click', () => {
+      const requestedIndex = Number.parseInt(control.dataset.interfaceIndex, 10);
+      if (!Number.isNaN(requestedIndex) && requestedIndex !== interfaceSlideIndex) {
+        renderInterfaceSlide(requestedIndex, {
+          direction: requestedIndex < interfaceSlideIndex ? -1 : 1,
+        });
+      }
+    });
+  });
+
+  carousel.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      moveInterfaceSlide(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      moveInterfaceSlide(1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      renderInterfaceSlide(0, { direction: -1 });
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      renderInterfaceSlide(interfaceSlides.length - 1, { direction: 1 });
+    }
+  });
+
+  let touchStartX = null;
+  viewport.addEventListener('touchstart', (event) => {
+    touchStartX = event.changedTouches[0]?.clientX ?? null;
+  }, { passive: true });
+  viewport.addEventListener('touchend', (event) => {
+    if (touchStartX === null) {
+      return;
+    }
+
+    const touchEndX = event.changedTouches[0]?.clientX ?? touchStartX;
+    const distance = touchEndX - touchStartX;
+    touchStartX = null;
+
+    if (Math.abs(distance) >= 48) {
+      moveInterfaceSlide(distance > 0 ? -1 : 1);
+    }
+  }, { passive: true });
+
+  renderInterfaceSlide(0, { animate: false });
 }
 
 function renderReleaseState() {
@@ -612,12 +836,27 @@ function setupConverter() {
 }
 
 function setupNavbar() {
+  const siteHeader = document.querySelector('.site-header');
   const navToggle = document.querySelector('.nav-toggle');
   const navLinks = document.querySelector('.nav-links');
 
-  if (!navToggle || !navLinks) {
+  if (!siteHeader || !navToggle || !navLinks) {
     return;
   }
+
+  let scrollFrame = 0;
+  const updateNavbarSize = () => {
+    siteHeader.classList.toggle('is-compact', window.scrollY > 50);
+    scrollFrame = 0;
+  };
+
+  window.addEventListener('scroll', () => {
+    if (!scrollFrame) {
+      scrollFrame = window.requestAnimationFrame(updateNavbarSize);
+    }
+  }, { passive: true });
+
+  updateNavbarSize();
 
   navToggle.addEventListener('click', () => {
     const isOpen = navToggle.getAttribute('aria-expanded') === 'true';
@@ -787,6 +1026,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupActiveSection();
   setupLanguageSwitcher();
   setupConverter();
+  setupInterfaceCarousel();
   setupBackgroundCanvas();
   preserveExistingRestrictions();
   applyTranslations(currentLanguage);

@@ -931,25 +931,100 @@
     <section class="glass-card interface-card" id="interfaz">
       <div class="interface-kicker" data-i18n="interface.kicker">Interfaz</div>
       <h2 class="section-title" data-i18n="interface.title">Un vistazo a FridaMusic</h2>
-      <p class="interface-subtitle" data-i18n="interface.subtitle">Pantallas reales del flujo visual con microdetalles pensados para una experiencia inmersiva.</p>
+      <p class="interface-subtitle" data-i18n="interface.subtitle">Recorre la experiencia visual de la app con sus proporciones originales y una transición de cortina.</p>
 
-            <div class="interface-grid">
-        <figure class="interface-item i-home">
-          <img src="capturas%20web/inicio%20inteligente.jpg" alt="Screen oficial Home de FridaMusic">
-          <figcaption class="interface-caption" data-i18n="interface.home">Home - bienvenida dinámica</figcaption>
-        </figure>
-        <figure class="interface-item i-player">
-          <img src="capturas%20web/reproductor%20inmersivo.jpg" alt="Screen oficial Now Playing de FridaMusic">
-          <figcaption class="interface-caption" data-i18n="interface.player">Now Playing - control inmersivo</figcaption>
-        </figure>
-        <figure class="interface-item i-library">
-          <img src="capturas%20web/bibliotecadinamica.jpg" alt="Screen oficial Library de FridaMusic">
-          <figcaption class="interface-caption" data-i18n="interface.library">Library - mosaico musical</figcaption>
-        </figure>
-        <figure class="interface-item i-settings">
-          <img src="capturas%20web/ajustes%20minimalistas.jpg" alt="Screen oficial Settings de FridaMusic">
-          <figcaption class="interface-caption" data-i18n="interface.settings">Settings - ajustes precisos</figcaption>
-        </figure>
+      <div class="interface-carousel" data-interface-carousel tabindex="0" role="region"
+        aria-roledescription="carousel" data-i18n-aria-label="interface.carousel"
+        data-interface-orientation="landscape">
+        <div class="interface-stage">
+          <div class="interface-active-copy" aria-live="polite">
+            <div class="interface-active-heading">
+              <span class="interface-view-label" data-i18n="interface.kicker">Interfaz</span>
+              <span class="interface-view-number">
+                <span data-interface-current>01</span>
+                <span aria-hidden="true">/</span>
+                <span>06</span>
+              </span>
+            </div>
+            <h3 class="interface-active-title" data-interface-title data-i18n="interface.slide1.title">Toda tu música, sin límites</h3>
+            <p class="interface-active-description" data-interface-description data-i18n="interface.slide1.desc">La identidad de FridaMusic reúne descubrimiento y reproducción en una sola experiencia.</p>
+          </div>
+
+          <div class="interface-viewport" data-interface-viewport>
+            <figure class="interface-slide">
+              <img class="interface-image" data-interface-image src="capturas%20web/interfaz/1.png"
+                data-i18n-alt="interface.slide1.alt"
+                alt="Presentación de FridaMusic con tres teléfonos y el mensaje Toda tu música sin límites"
+                loading="lazy" decoding="async">
+            </figure>
+
+            <button class="interface-arrow interface-arrow-previous" type="button" data-interface-previous
+              data-i18n-aria-label="interface.previous" aria-label="Ver imagen anterior">
+              <span aria-hidden="true">‹</span>
+            </button>
+            <button class="interface-arrow interface-arrow-next" type="button" data-interface-next
+              data-i18n-aria-label="interface.next" aria-label="Ver imagen siguiente">
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+
+          <div class="interface-footer">
+            <div class="interface-pagination" role="group" data-i18n-aria-label="interface.carousel">
+              <button class="interface-page is-active" type="button" data-interface-index="0" aria-current="true">01</button>
+              <button class="interface-page" type="button" data-interface-index="1" aria-current="false">02</button>
+              <button class="interface-page" type="button" data-interface-index="2" aria-current="false">03</button>
+              <button class="interface-page" type="button" data-interface-index="3" aria-current="false">04</button>
+              <button class="interface-page" type="button" data-interface-index="4" aria-current="false">05</button>
+              <button class="interface-page" type="button" data-interface-index="5" aria-current="false">06</button>
+            </div>
+            <p class="interface-hint" data-i18n="interface.hint">Desliza, usa las flechas o elige una vista para recorrer la galería.</p>
+          </div>
+        </div>
+
+        <div class="interface-rail" data-i18n-aria-label="interface.carousel" aria-label="Galería de la interfaz de FridaMusic">
+          <button class="interface-preview is-active" type="button" data-interface-index="0" aria-current="true">
+            <img src="capturas%20web/interfaz/1.png" alt="" loading="lazy" decoding="async">
+            <span class="interface-preview-copy">
+              <strong data-i18n="interface.slide1.title">Toda tu música, sin límites</strong>
+              <span data-i18n="interface.slide1.desc">La identidad de FridaMusic reúne descubrimiento y reproducción en una sola experiencia.</span>
+            </span>
+          </button>
+          <button class="interface-preview" type="button" data-interface-index="1" aria-current="false">
+            <img src="capturas%20web/interfaz/2.png" alt="" loading="lazy" decoding="async">
+            <span class="interface-preview-copy">
+              <strong data-i18n="interface.slide2.title">Home con estilo</strong>
+              <span data-i18n="interface.slide2.desc">Recomendaciones por momento para encontrar el ritmo perfecto desde el inicio.</span>
+            </span>
+          </button>
+          <button class="interface-preview" type="button" data-interface-index="2" aria-current="false">
+            <img src="capturas%20web/interfaz/3.png" alt="" loading="lazy" decoding="async">
+            <span class="interface-preview-copy">
+              <strong data-i18n="interface.slide3.title">Navegación flotante moderna</strong>
+              <span data-i18n="interface.slide3.desc">Minirreproductor y accesos principales siempre visibles y al alcance.</span>
+            </span>
+          </button>
+          <button class="interface-preview" type="button" data-interface-index="3" aria-current="false">
+            <img src="capturas%20web/interfaz/4.png" alt="" loading="lazy" decoding="async">
+            <span class="interface-preview-copy">
+              <strong data-i18n="interface.slide4.title">Todo desde un solo lugar</strong>
+              <span data-i18n="interface.slide4.desc">Reproductor, letras y cola de reproducción integrados en una misma vista.</span>
+            </span>
+          </button>
+          <button class="interface-preview" type="button" data-interface-index="4" aria-current="false">
+            <img src="capturas%20web/interfaz/5.png" alt="" loading="lazy" decoding="async">
+            <span class="interface-preview-copy">
+              <strong data-i18n="interface.slide5.title">Control y letras sincronizadas</strong>
+              <span data-i18n="interface.slide5.desc">Controla cada canción y sigue la letra sin perder el ritmo.</span>
+            </span>
+          </button>
+          <button class="interface-preview" type="button" data-interface-index="5" aria-current="false">
+            <img src="capturas%20web/interfaz/DESCARGA%20AHORA%202.png" alt="" loading="lazy" decoding="async">
+            <span class="interface-preview-copy">
+              <strong data-i18n="interface.slide6.title">Descarga FridaMusic</strong>
+              <span data-i18n="interface.slide6.desc">Instala la app gratis o visita el repositorio oficial del proyecto.</span>
+            </span>
+          </button>
+        </div>
       </div>
     </section>
 
