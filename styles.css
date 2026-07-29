@@ -1335,6 +1335,22 @@ button {
   margin-bottom: 22px;
 }
 
+.beta-wrapper {
+  max-width: 1120px;
+}
+
+.beta-page .beta-access-card {
+  padding: 46px;
+}
+
+.beta-page .beta-copy {
+  max-width: 760px;
+}
+
+.beta-page .beta-back {
+  margin: 0 0 28px;
+}
+
 .beta-access-card,
 .beta-form-anchor {
   scroll-margin-top: 128px;
@@ -2110,7 +2126,8 @@ footer {
 
   .privacy-hero,
   .privacy-content,
-  .privacy-toc {
+  .privacy-toc,
+  .beta-page .beta-access-card {
     padding: 26px 18px;
   }
 
@@ -2199,6 +2216,10 @@ footer {
   .beta-form-shell {
     margin-inline: -18px;
     padding: 18px 0;
+  }
+
+  .beta-page .beta-form-shell {
+    margin-inline: -32px;
   }
 
   .beta-form-heading {

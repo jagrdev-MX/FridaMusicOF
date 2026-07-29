@@ -4,6 +4,8 @@ const METRICS_COMMIT_PREFIX = "docs: actualizar metricas automaticas de contribu
 const PUBLISHABLE_FILES = new Set([
   ".env",
   ".github/scripts/vercel-ignore-build.cjs",
+  "beta.html",
+  "beta.js",
   "index.html",
   "privacy.html",
   "privacy.js",
