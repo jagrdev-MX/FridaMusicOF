@@ -763,7 +763,7 @@ button {
   max-height: none;
   object-fit: contain;
   border: 0;
-  border-radius: 0;
+  border-radius: 14px;
   background: #070511;
   box-shadow: 0 24px 52px rgba(0, 0, 0, 0.48);
   transform-origin: center;
