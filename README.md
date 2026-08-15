@@ -195,7 +195,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 ### Forks con trabajo independiente
 
-**Forks inspeccionados:** 1 · **Forks activos:** 0
+**Forks inspeccionados:** 2 · **Forks activos:** 0
 
 | Fork | Rama | Commits por delante | % de actividad independiente | Último push |
 | --- | --- | ---: | ---: | --- |
@@ -203,7 +203,7 @@ _Esta sección se actualiza automáticamente con GitHub Actions._
 
 > Los porcentajes del repositorio oficial se calculan con commits humanos visibles. Los bots se separan para no distorsionar la métrica. Los forks muestran trabajo independiente que aún no necesariamente fue integrado al proyecto principal.
 
-Última actualización automática (UTC): `2026-08-14`
+Última actualización automática (UTC): `2026-08-15`
 <!-- CONTRIBUTOR-STATS:END -->
 
 ---
