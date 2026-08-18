@@ -14,6 +14,7 @@
 .cxx
 local.properties
 .env
+api
 
 # Node.js
 node_modules/
