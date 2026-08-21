@@ -143,8 +143,12 @@ jobs:
           description += f"\n\n🔗 **[Ver en GitHub]({release_url})**"
 
           payload = {
-              "username": "Frida Labs • Releases",
-              "embeds": [
+    "username": "Frida Labs • Releases",
+    "content": "@everyone",
+    "allowed_mentions": {
+        "parse": ["everyone"]
+    },
+    "embeds": [
                   {
                       "title": f"🚀 {name}",
                       "description": description,
