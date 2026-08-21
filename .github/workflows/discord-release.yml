@@ -15,6 +15,10 @@ on:
         required: true
         type: string
 
+  release:
+    types:
+      - published
+
 permissions:
   contents: read
 
@@ -23,13 +27,81 @@ jobs:
     name: Publicar Release Android en Discord
     runs-on: ubuntu-latest
 
+    # ============================================================
+    # SOLO ANDROID
+    #
+    # Acepta:
+    # OFICIAL-vA.B.C.D-release-apk
+    # BETA-ABIERTA-vA.B.C.D-release-apk
+    # ALPHA-vA.B.C.D-release-apk
+    #
+    # También permite workflow_call / workflow_dispatch.
+    #
+    # Las releases web vX.Y.Z-web NO entran aquí.
+    # ============================================================
+    if: |
+      github.event_name == 'workflow_call' ||
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'release' &&
+        endsWith(github.event.release.tag_name, '-release-apk') &&
+        (
+          startsWith(github.event.release.tag_name, 'OFICIAL-v') ||
+          startsWith(github.event.release.tag_name, 'BETA-ABIERTA-v') ||
+          startsWith(github.event.release.tag_name, 'ALPHA-v')
+        )
+      )
+
     steps:
+      - name: Resolver tag Android
+        id: tag
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.release_tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            RELEASE_TAG="$INPUT_TAG"
+          else
+            RELEASE_TAG="$EVENT_TAG"
+          fi
+
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "ERROR: No se pudo resolver el tag."
+            exit 1
+          fi
+
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Tag Android: $RELEASE_TAG"
+
+      - name: Validar tag Android
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+
+        run: |
+          if [[ "$RELEASE_TAG" =~ ^(OFICIAL|BETA-ABIERTA|ALPHA)-v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-release-apk$ ]]; then
+            echo "Tag FridaMusic Android válido: $RELEASE_TAG"
+            exit 0
+          fi
+
+          # Compatibilidad con tags antiguos de semantic-release.
+          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-release-apk$ ]]; then
+            echo "Tag Android legacy válido: $RELEASE_TAG"
+            exit 0
+          fi
+
+          echo "ERROR: Tag Android no reconocido:"
+          echo "$RELEASE_TAG"
+          exit 1
+
       - name: Obtener Release Android
         id: release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
 
         run: |
@@ -61,14 +133,14 @@ jobs:
           if [ -n "$APK_URL" ]; then
             echo "APK encontrado: $APK_NAME"
           else
-            echo "AVISO: esta Release no tiene un .apk adjunto."
+            echo "AVISO: esta Release no tiene APK adjunto."
           fi
 
       - name: Publicar en Discord
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
 
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
           RELEASE_NAME: ${{ steps.release.outputs.release_name }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           IS_PRERELEASE: ${{ steps.release.outputs.is_prerelease }}
@@ -107,11 +179,29 @@ jobs:
               == "true"
           )
 
-          status = (
-              "🧪 BETA / PRE-RELEASE"
-              if prerelease
-              else "✅ OFFICIAL ANDROID RELEASE"
-          )
+          # ========================================================
+          # TIPO DE RELEASE SEGÚN TAG
+          # ========================================================
+
+          if tag.startswith("OFICIAL-"):
+              status = "✅ OFICIAL"
+              stage = "Producción"
+
+          elif tag.startswith("BETA-ABIERTA-"):
+              status = "🧪 BETA ABIERTA"
+              stage = "Release Candidate"
+
+          elif tag.startswith("ALPHA-"):
+              status = "🧰 ALPHA"
+              stage = "Pruebas internas"
+
+          elif prerelease:
+              status = "🧪 PRE-RELEASE"
+              stage = "Pruebas"
+
+          else:
+              status = "✅ ANDROID RELEASE"
+              stage = "Android"
 
           description = f"""
           {status}
@@ -119,6 +209,7 @@ jobs:
           🎧 **FridaMusic**
           📱 **Android APK**
           🏷️ **Versión:** `{tag}`
+          🚦 **Canal:** {stage}
 
           🚀 Nueva versión de FridaMusic disponible.
           """.strip()
@@ -181,11 +272,13 @@ jobs:
                   request,
                   timeout=20
               ) as response:
+
                   print(
                       f"Discord Release OK - HTTP {response.status}"
                   )
 
           except urllib.error.HTTPError as error:
+
               message = error.read().decode(
                   "utf-8",
                   errors="replace"
@@ -195,12 +288,6 @@ jobs:
                   f"Discord HTTP ERROR {error.code}: {message}"
               )
 
-              raise
-
-          except Exception as error:
-              print(
-                  f"ERROR enviando la Release a Discord: {error}"
-              )
               raise
 
           PY
