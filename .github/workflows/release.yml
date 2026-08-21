@@ -3,13 +3,12 @@ name: Release Pipeline
 # ==============================================================
 # EJECUCIÓN MANUAL
 #
-# Ya NO corre automáticamente con cada push a master.
-# Cuando quieras generar releases:
+# Este pipeline NO corre con cada push.
 #
+# Para ejecutarlo:
 # GitHub -> Actions -> Release Pipeline -> Run workflow
 #
-# Esto evita ejecuciones innecesarias y correos de error
-# por cada commit.
+# La Web queda FUERA de este pipeline.
 # ==============================================================
 on:
   workflow_dispatch:
@@ -23,7 +22,7 @@ permissions:
 jobs:
 
   # ============================================================
-  # TESTS
+  # TESTS ANDROID
   # ============================================================
   test:
     name: Tests
@@ -48,30 +47,25 @@ jobs:
 
 
   # ============================================================
-  # RELEASES
+  # RELEASE ANDROID
   #
   # IMPORTANTE:
-  # La Web y Android siguen siendo tracks independientes.
   #
   # WEB:
+  #   NO SE EJECUTA AQUÍ.
+  #
+  # Se conservan sin modificar:
   #   .releaserc.web.json
-  #   vX.Y.Z-web
   #   CHANGELOG.web.md
+  #   vX.Y.Z-web
   #
-  # ANDROID AUTOMÁTICO:
+  # ANDROID:
   #   .releaserc.android.json
-  #   vX.Y.Z-release-apk
   #   CHANGELOG.android.md
-  #
-  # Tus releases manuales:
-  #   OFICIAL-vA.B.C.D-release-apk
-  #   BETA-ABIERTA-vA.B.C.D-release-apk
-  #   ALPHA-vA.B.C.D-release-apk
-  #
-  # son gestionadas directamente por los workflows de Discord.
+  #   *-release-apk
   # ============================================================
   release:
-    name: Web + Android Release
+    name: Android Release
     needs: test
     runs-on: ubuntu-latest
 
@@ -82,7 +76,7 @@ jobs:
     steps:
 
       # ========================================================
-      # CHECKOUT COMPLETO
+      # CHECKOUT
       # ========================================================
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,30 +102,20 @@ jobs:
 
 
       # ========================================================
-      # RELEASE WEB
+      # DETECTAR ÚLTIMA RELEASE ANDROID
       #
-      # NO SE MODIFICA SU FORMATO.
+      # Cualquier release Android válida termina en:
       #
-      # Sigue usando:
-      # vX.Y.Z-web
-      #
-      # y:
-      # CHANGELOG.web.md
-      # ========================================================
-      - name: Release Web track
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release:web
-
-
-      # ========================================================
-      # DETECTAR LA ÚLTIMA RELEASE ANDROID EXISTENTE
-      #
-      # Solo usamos tags terminados en:
       # -release-apk
       #
-      # Esto NO toca ni detecta:
-      # -web
+      # Ejemplos:
+      #
+      # OFICIAL-v1.0.9.210-release-apk
+      # BETA-ABIERTA-v1.0.9.211-release-apk
+      # ALPHA-v1.0.9.212-release-apk
+      # v1.8.0-release-apk
+      #
+      # Los tags Web terminados en -web se ignoran.
       # ========================================================
       - name: Detectar tag Android anterior
         id: android_before
@@ -149,34 +133,31 @@ jobs:
           echo "tag=$BEFORE_TAG" >> "$GITHUB_OUTPUT"
 
           echo "=========================================="
-          echo "Última Release Android antes del proceso:"
+          echo "ANDROID RELEASE ANTERIOR"
+          echo "=========================================="
           echo "$BEFORE_TAG"
           echo "=========================================="
 
 
       # ========================================================
-      # RELEASE ANDROID AUTOMÁTICO
+      # SEMANTIC RELEASE ANDROID
       #
-      # Mantiene exactamente el sistema actual:
+      # SOLO ejecuta el track Android.
       #
-      # npm run release:android
+      # NO ejecuta:
+      # npm run release:web
       #
-      # No modificamos semantic-release aquí.
+      # Por lo tanto la Web no puede romper este pipeline.
       # ========================================================
       - name: Release Android track
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
         run: npm run release:android
 
 
       # ========================================================
-      # DETECTAR SI ANDROID CREÓ UNA RELEASE NUEVA
-      #
-      # Comparamos la última Release Android antes y después
-      # de ejecutar semantic-release.
-      #
-      # Web queda fuera porque solo aceptamos:
-      # *-release-apk
+      # DETECTAR SI SE CREÓ UNA NUEVA RELEASE ANDROID
       # ========================================================
       - name: Detectar nueva Release Android
         id: android_result
@@ -194,8 +175,10 @@ jobs:
             --jq '[.[].tagName | select(endswith("-release-apk"))][0] // ""')"
 
           echo "=========================================="
-          echo "Android anterior: $BEFORE_TAG"
-          echo "Android actual:   $AFTER_TAG"
+          echo "COMPARACIÓN DE RELEASE ANDROID"
+          echo "=========================================="
+          echo "Anterior: $BEFORE_TAG"
+          echo "Actual:   $AFTER_TAG"
           echo "=========================================="
 
           if [ -n "$AFTER_TAG" ] && [ "$AFTER_TAG" != "$BEFORE_TAG" ]; then
@@ -216,18 +199,22 @@ jobs:
 
 
   # ==============================================================
-  # DISCORD RELEASE / APK
+  # DISCORD RELEASE FEED
   #
-  # Este job SOLO se ejecuta cuando el Release Pipeline
-  # realmente crea una nueva Release Android.
+  # Solo se ejecuta si semantic-release realmente creó
+  # una Release Android nueva.
   #
-  # Publica:
+  # Publica en:
+  # #github-feeds
+  #
+  # Incluye:
   # @everyone
   # versión
+  # canal
   # APK
-  # enlace de GitHub
+  # enlace GitHub
   #
-  # NO publica changelog.
+  # NO incluye changelog.
   # ==============================================================
   discord-release:
     name: Discord APK Release
@@ -246,14 +233,13 @@ jobs:
   # ==============================================================
   # DISCORD CHANGELOG
   #
-  # También se ejecuta únicamente cuando aparece
+  # Solo se ejecuta si realmente apareció
   # una nueva Release Android.
   #
-  # Publica solamente:
-  # changelog / release notes
+  # Publica en:
+  # #changelog
   #
-  # SIN @everyone
-  # SIN duplicar el APK.
+  # NO manda @everyone.
   # ==============================================================
   discord-changelog:
     name: Discord Changelog
