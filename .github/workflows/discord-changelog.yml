@@ -1,10 +1,10 @@
-name: Discord Release Feed
+name: Discord Changelog Feed
 
 on:
   workflow_call:
     inputs:
       release_tag:
-        description: "Tag Android que debe publicarse"
+        description: "Tag Android del changelog"
         required: true
         type: string
 
@@ -19,12 +19,12 @@ permissions:
   contents: read
 
 jobs:
-  notify-discord:
-    name: Publicar Release Android en Discord
+  publish-changelog:
+    name: Publicar Changelog Android en Discord
     runs-on: ubuntu-latest
 
     steps:
-      - name: Obtener Release Android
+      - name: Obtener datos de la Release
         id: release
         shell: bash
         env:
@@ -40,58 +40,43 @@ jobs:
 
           RELEASE_NAME="$(echo "$RELEASE_JSON" | jq -r '.name // .tag_name')"
           RELEASE_URL="$(echo "$RELEASE_JSON" | jq -r '.html_url')"
+          RELEASE_BODY="$(echo "$RELEASE_JSON" | jq -r '.body // ""')"
           IS_PRERELEASE="$(echo "$RELEASE_JSON" | jq -r '.prerelease')"
-
-          APK_URL="$(echo "$RELEASE_JSON" | jq -r \
-            '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].browser_download_url // ""')"
-
-          APK_NAME="$(echo "$RELEASE_JSON" | jq -r \
-            '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].name // ""')"
 
           {
             echo "release_name=$RELEASE_NAME"
             echo "release_url=$RELEASE_URL"
             echo "is_prerelease=$IS_PRERELEASE"
-            echo "apk_url=$APK_URL"
-            echo "apk_name=$APK_NAME"
+
+            echo "release_body<<EOF"
+            echo "$RELEASE_BODY"
+            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Release encontrada: $RELEASE_NAME"
-
-          if [ -n "$APK_URL" ]; then
-            echo "APK encontrado: $APK_NAME"
-          else
-            echo "AVISO: esta Release no tiene un .apk adjunto."
-          fi
-
-
-      - name: Publicar en Discord
+      - name: Publicar Changelog en Discord
         env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          WEBHOOK_URL: ${{ secrets.DISCORD_CHANGELOG_WEBHOOK }}
 
           RELEASE_TAG: ${{ inputs.release_tag }}
           RELEASE_NAME: ${{ steps.release.outputs.release_name }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
+          RELEASE_BODY: ${{ steps.release.outputs.release_body }}
           IS_PRERELEASE: ${{ steps.release.outputs.is_prerelease }}
-
-          APK_URL: ${{ steps.release.outputs.apk_url }}
-          APK_NAME: ${{ steps.release.outputs.apk_name }}
 
         run: |
           python <<'PY'
           import json
           import os
+          import re
           import urllib.error
           import urllib.request
-
 
           webhook = os.environ.get("WEBHOOK_URL", "").strip()
 
           if not webhook:
               raise RuntimeError(
-                  "Falta el secret DISCORD_RELEASE_WEBHOOK."
+                  "Falta el secret DISCORD_CHANGELOG_WEBHOOK."
               )
-
 
           tag = os.environ["RELEASE_TAG"].strip()
 
@@ -102,137 +87,103 @@ jobs:
 
           release_url = os.environ["RELEASE_URL"].strip()
 
-          apk_url = os.environ.get("APK_URL", "").strip()
-          apk_name = os.environ.get("APK_NAME", "").strip()
+          body = os.environ.get("RELEASE_BODY", "").strip()
 
           prerelease = (
               os.environ.get("IS_PRERELEASE", "false").lower()
               == "true"
           )
 
-
-          # ========================================================
-          # ESTADO DE LA RELEASE
-          # ========================================================
-
           status = (
               "🧪 BETA / PRE-RELEASE"
               if prerelease
-              else "✅ OFFICIAL ANDROID RELEASE"
+              else "✅ OFFICIAL RELEASE"
           )
 
+          if not body:
+              body = "No se especificaron cambios para esta versión."
 
-          # ========================================================
-          # MENSAJE LIMPIO
-          # SIN CHANGELOG / SIN RELEASE BODY
-          # ========================================================
+          # Quitar bloques de metadata HTML ocultos
+          body = re.sub(
+              r"<!--.*?-->",
+              "",
+              body,
+              flags=re.DOTALL
+          ).strip()
+
+          # Quitar etiquetas <img ...>
+          body = re.sub(
+              r"<img[^>]*>",
+              "",
+              body,
+              flags=re.IGNORECASE
+          ).strip()
+
+          # Limpiar exceso de saltos
+          body = re.sub(
+              r"\n{3,}",
+              "\n\n",
+              body
+          )
+
+          if len(body) > 3400:
+              body = body[:3397] + "..."
 
           description = f"""
           {status}
 
           🎧 **FridaMusic**
-          📱 **Android APK**
+          📱 **Android**
           🏷️ **Versión:** `{tag}`
 
-          🚀 Nueva versión de FridaMusic disponible.
+          ## 📜 Changelog
+
+          {body}
+
+          🔗 **[Ver Release completa en GitHub]({release_url})**
           """.strip()
 
-
-          # ========================================================
-          # APK
-          # ========================================================
-
-          if apk_url and apk_name:
-
-              description += (
-                  f"\n\n"
-                  f"📦 **[Descargar {apk_name}]({apk_url})**"
-              )
-
-          else:
-
-              description += (
-                  "\n\n"
-                  "⚠️ **No se encontró un APK adjunto a esta Release.**"
-              )
-
-
-          # ========================================================
-          # GITHUB
-          # ========================================================
-
-          description += (
-              f"\n\n"
-              f"🔗 **[Ver Release en GitHub]({release_url})**"
-          )
-
-
-          # ========================================================
-          # PAYLOAD DE DISCORD
-          # ========================================================
-
           payload = {
-              "username": "Frida Labs • Releases",
-
-              "content": "@everyone",
-
-              "allowed_mentions": {
-                  "parse": ["everyone"]
-              },
+              "username": "Frida Labs • Changelog",
 
               "embeds": [
                   {
-                      "title": f"🚀 {name}",
-
+                      "title": f"📜 {name}",
                       "description": description,
-
                       "url": release_url,
-
                       "color": 11829780,
-
                       "footer": {
-                          "text": "FridaMusic • Android • Frida Labs"
+                          "text": "FridaMusic • Changelog • Frida Labs"
                       }
                   }
               ]
           }
-
-
-          # ========================================================
-          # ENVIAR WEBHOOK
-          # ========================================================
 
           data = json.dumps(
               payload,
               ensure_ascii=False
           ).encode("utf-8")
 
-
           request = urllib.request.Request(
               webhook,
               data=data,
               headers={
                   "Content-Type": "application/json",
-                  "User-Agent": "FridaMusic-Release-Bot"
+                  "User-Agent": "FridaMusic-Changelog-Bot"
               },
               method="POST"
           )
 
-
           try:
-
               with urllib.request.urlopen(
                   request,
                   timeout=20
               ) as response:
-
                   print(
-                      f"Discord Release OK - HTTP {response.status}"
+                      f"Discord Changelog OK - HTTP {response.status}"
                   )
 
-
           except urllib.error.HTTPError as error:
-
               message = error.read().decode(
                   "utf-8",
                   errors="replace"
@@ -244,13 +195,10 @@ jobs:
 
               raise
 
-
           except Exception as error:
-
               print(
-                  f"ERROR enviando la Release a Discord: {error}"
+                  f"ERROR enviando Changelog a Discord: {error}"
               )
-
               raise
 
           PY
