@@ -1,148 +1,113 @@
 name: Discord Changelog Feed
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Tag Android del changelog"
+        required: true
+        type: string
 
   workflow_dispatch:
     inputs:
-      test_version:
-        description: "Versión de prueba"
-        required: false
-        default: "vTEST"
+      release_tag:
+        description: "Tag Android existente para probar"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   publish-changelog:
-    name: Publicar Changelog en Discord
+    name: Publicar Changelog Android en Discord
     runs-on: ubuntu-latest
 
     steps:
-      - name: Publicar changelog en Discord
+      - name: Obtener datos de la Release
+        id: release
+        shell: bash
         env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_CHANGELOG_WEBHOOK }}
-
-          EVENT_NAME: ${{ github.event_name }}
-
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_BODY: ${{ github.event.release.body }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          IS_PRERELEASE: ${{ github.event.release.prerelease }}
-
-          TEST_VERSION: ${{ inputs.test_version }}
-
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
           REPOSITORY: ${{ github.repository }}
 
         run: |
-          python <<'PY'
-          import os
-          import json
-          import urllib.request
-          import urllib.error
+          RELEASE_JSON="$(gh api \
+            "repos/$REPOSITORY/releases/tags/$RELEASE_TAG")"
 
+          RELEASE_NAME="$(echo "$RELEASE_JSON" | jq -r '.name // .tag_name')"
+          RELEASE_URL="$(echo "$RELEASE_JSON" | jq -r '.html_url')"
+          RELEASE_BODY="$(echo "$RELEASE_JSON" | jq -r '.body // ""')"
+          IS_PRERELEASE="$(echo "$RELEASE_JSON" | jq -r '.prerelease')"
+
+          {
+            echo "release_name=$RELEASE_NAME"
+            echo "release_url=$RELEASE_URL"
+            echo "is_prerelease=$IS_PRERELEASE"
+
+            echo "release_body<<EOF"
+            echo "$RELEASE_BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+
+      - name: Publicar Changelog en Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_CHANGELOG_WEBHOOK }}
+
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NAME: ${{ steps.release.outputs.release_name }}
+          RELEASE_URL: ${{ steps.release.outputs.release_url }}
+          RELEASE_BODY: ${{ steps.release.outputs.release_body }}
+          IS_PRERELEASE: ${{ steps.release.outputs.is_prerelease }}
+
+        run: |
+          python <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
 
           webhook = os.environ.get("WEBHOOK_URL", "").strip()
 
           if not webhook:
               raise RuntimeError(
-                  "No se encontró el secret DISCORD_CHANGELOG_WEBHOOK."
+                  "Falta el secret DISCORD_CHANGELOG_WEBHOOK."
               )
 
-          event = os.environ.get("EVENT_NAME", "").strip()
-          repository = os.environ.get("REPOSITORY", "").strip()
+          tag = os.environ["RELEASE_TAG"].strip()
 
+          name = (
+              os.environ.get("RELEASE_NAME", "").strip()
+              or f"FridaMusic {tag}"
+          )
 
-          # ========================================================
-          # RELEASE REAL
-          # ========================================================
+          release_url = os.environ["RELEASE_URL"].strip()
+          body = os.environ.get("RELEASE_BODY", "").strip()
 
-          if event == "release":
+          prerelease = (
+              os.environ.get("IS_PRERELEASE", "false").lower()
+              == "true"
+          )
 
-              tag = os.environ.get("RELEASE_TAG", "").strip()
+          status = (
+              "🧪 BETA / PRE-RELEASE"
+              if prerelease
+              else "✅ OFFICIAL RELEASE"
+          )
 
-              name = (
-                  os.environ.get("RELEASE_NAME", "").strip()
-                  or f"FridaMusic {tag}"
-              )
+          if not body:
+              body = "No se especificaron cambios para esta versión."
 
-              body = os.environ.get("RELEASE_BODY", "").strip()
-
-              release_url = os.environ.get(
-                  "RELEASE_URL",
-                  f"https://github.com/{repository}/releases"
-              ).strip()
-
-              prerelease = (
-                  os.environ.get("IS_PRERELEASE", "false").lower()
-                  == "true"
-              )
-
-              status = (
-                  "🧪 BETA / PRE-RELEASE"
-                  if prerelease
-                  else "✅ STABLE RELEASE"
-              )
-
-              if not body:
-                  body = "No se especificaron cambios para esta versión."
-
-
-          # ========================================================
-          # PRUEBA MANUAL
-          # ========================================================
-
-          else:
-
-              tag = (
-                  os.environ.get("TEST_VERSION", "").strip()
-                  or "vTEST"
-              )
-
-              name = f"FridaMusic {tag}"
-
-              status = "🧪 CHANGELOG TEST"
-
-              body = """
-          ✨ Features
-          • Nueva función de ejemplo.
-
-          🛠 Improvements
-          • Mejora de rendimiento de ejemplo.
-
-          🐛 Fixes
-          • Corrección de ejemplo.
-
-          ⚙️ Tech
-          • Cambio técnico de ejemplo.
-          """.strip()
-
-              release_url = (
-                  f"https://github.com/{repository}/releases"
-              )
-
-
-          # ========================================================
-          # LÍMITES DE DISCORD
-          # ========================================================
-
-          if len(body) > 3500:
-              body = body[:3497] + "..."
-
-          if len(name) > 220:
-              name = name[:217] + "..."
-
-
-          # ========================================================
-          # MENSAJE
-          # ========================================================
+          if len(body) > 3400:
+              body = body[:3397] + "..."
 
           description = f"""
           {status}
 
           🎧 **FridaMusic**
+          📱 **Android**
           🏷️ **Versión:** `{tag}`
 
           ## 📜 Changelog
@@ -152,20 +117,15 @@ jobs:
           🔗 **[Ver Release completa en GitHub]({release_url})**
           """.strip()
 
-
           payload = {
               "username": "Frida Labs • Changelog",
 
               "embeds": [
                   {
                       "title": f"📜 {name}",
-
                       "description": description,
-
                       "url": release_url,
-
                       "color": 11829780,
-
                       "footer": {
                           "text": "FridaMusic • Changelog • Frida Labs"
                       }
@@ -173,12 +133,10 @@ jobs:
               ]
           }
 
-
           data = json.dumps(
               payload,
               ensure_ascii=False
           ).encode("utf-8")
-
 
           request = urllib.request.Request(
               webhook,
@@ -190,39 +148,25 @@ jobs:
               method="POST"
           )
 
-
           try:
-
               with urllib.request.urlopen(
                   request,
                   timeout=20
               ) as response:
 
                   print(
-                      f"Discord changelog OK - HTTP {response.status}"
+                      f"Discord Changelog OK - HTTP {response.status}"
                   )
-
 
           except urllib.error.HTTPError as error:
 
-              error_body = error.read().decode(
+              message = error.read().decode(
                   "utf-8",
                   errors="replace"
               )
 
               print(
-                  f"Discord HTTP ERROR {error.code}"
-              )
-
-              print(error_body)
-
-              raise
-
-
-          except Exception as error:
-
-              print(
-                  f"ERROR enviando changelog a Discord: {error}"
+                  f"Discord HTTP ERROR {error.code}: {message}"
               )
 
               raise
