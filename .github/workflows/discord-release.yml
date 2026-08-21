@@ -1,254 +1,151 @@
 name: Discord Release Feed
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Tag Android que debe publicarse"
+        required: true
+        type: string
 
   workflow_dispatch:
     inputs:
-      test_version:
-        description: "Versión de prueba"
-        required: false
-        default: "vTEST"
-
-      test_type:
-        description: "Tipo de prueba"
-        required: false
-        default: "TEST"
+      release_tag:
+        description: "Tag Android existente para probar"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   notify-discord:
-    name: Publicar Release en Discord
+    name: Publicar Release Android en Discord
     runs-on: ubuntu-latest
 
     steps:
-      # ============================================================
-      # OBTENER APK DE LA RELEASE
-      # ============================================================
-      - name: Obtener datos de la Release
+      - name: Obtener Release Android
         id: release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
           REPOSITORY: ${{ github.repository }}
 
         run: |
-          APK_URL=""
-          APK_NAME=""
+          echo "Buscando Release: $RELEASE_TAG"
 
-          if [ "$EVENT_NAME" = "release" ] && [ -n "$RELEASE_ID" ]; then
+          RELEASE_JSON="$(gh api \
+            "repos/$REPOSITORY/releases/tags/$RELEASE_TAG")"
 
-            echo "Buscando APK en la Release $RELEASE_ID..."
+          RELEASE_NAME="$(echo "$RELEASE_JSON" | jq -r '.name // .tag_name')"
+          RELEASE_URL="$(echo "$RELEASE_JSON" | jq -r '.html_url')"
+          RELEASE_BODY="$(echo "$RELEASE_JSON" | jq -r '.body // ""')"
+          IS_PRERELEASE="$(echo "$RELEASE_JSON" | jq -r '.prerelease')"
 
-            APK_URL=$(gh api \
-              "repos/$REPOSITORY/releases/$RELEASE_ID/assets" \
-              --jq '.[] | select(.name | endswith(".apk")) | .browser_download_url' \
-              | head -n 1)
+          APK_URL="$(echo "$RELEASE_JSON" | jq -r \
+            '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].browser_download_url // ""')"
 
-            APK_NAME=$(gh api \
-              "repos/$REPOSITORY/releases/$RELEASE_ID/assets" \
-              --jq '.[] | select(.name | endswith(".apk")) | .name' \
-              | head -n 1)
+          APK_NAME="$(echo "$RELEASE_JSON" | jq -r \
+            '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].name // ""')"
 
-          else
-            echo "Ejecución manual detectada."
-            echo "No se buscará APK."
-          fi
+          {
+            echo "release_name=$RELEASE_NAME"
+            echo "release_url=$RELEASE_URL"
+            echo "is_prerelease=$IS_PRERELEASE"
+            echo "apk_url=$APK_URL"
+            echo "apk_name=$APK_NAME"
 
-          echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
-          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+            echo "release_body<<EOF"
+            echo "$RELEASE_BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Release encontrada: $RELEASE_NAME"
 
           if [ -n "$APK_URL" ]; then
             echo "APK encontrado: $APK_NAME"
           else
-            echo "No se encontró APK o es una prueba manual."
+            echo "AVISO: esta Release no tiene un .apk adjunto."
           fi
 
 
-      # ============================================================
-      # PUBLICAR EN DISCORD
-      # ============================================================
       - name: Publicar en Discord
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
 
-          EVENT_NAME: ${{ github.event_name }}
-
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_BODY: ${{ github.event.release.body }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          IS_PRERELEASE: ${{ github.event.release.prerelease }}
-
-          TEST_VERSION: ${{ inputs.test_version }}
-          TEST_TYPE: ${{ inputs.test_type }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NAME: ${{ steps.release.outputs.release_name }}
+          RELEASE_URL: ${{ steps.release.outputs.release_url }}
+          RELEASE_BODY: ${{ steps.release.outputs.release_body }}
+          IS_PRERELEASE: ${{ steps.release.outputs.is_prerelease }}
 
           APK_URL: ${{ steps.release.outputs.apk_url }}
           APK_NAME: ${{ steps.release.outputs.apk_name }}
 
-          REPOSITORY: ${{ github.repository }}
-
         run: |
           python <<'PY'
-          import os
           import json
-          import urllib.request
+          import os
           import urllib.error
-
-
-          # ========================================================
-          # CONFIGURACIÓN
-          # ========================================================
+          import urllib.request
 
           webhook = os.environ.get("WEBHOOK_URL", "").strip()
 
           if not webhook:
               raise RuntimeError(
-                  "No se encontró el secret DISCORD_RELEASE_WEBHOOK."
+                  "Falta el secret DISCORD_RELEASE_WEBHOOK."
               )
 
-          event = os.environ.get("EVENT_NAME", "").strip()
-          repository = os.environ.get("REPOSITORY", "").strip()
+          tag = os.environ["RELEASE_TAG"].strip()
+          name = os.environ.get("RELEASE_NAME", "").strip() or f"FridaMusic {tag}"
+          release_url = os.environ["RELEASE_URL"].strip()
+          body = os.environ.get("RELEASE_BODY", "").strip()
 
+          apk_url = os.environ.get("APK_URL", "").strip()
+          apk_name = os.environ.get("APK_NAME", "").strip()
 
-          # ========================================================
-          # RELEASE REAL
-          # ========================================================
+          prerelease = (
+              os.environ.get("IS_PRERELEASE", "false").lower()
+              == "true"
+          )
 
-          if event == "release":
+          status = (
+              "🧪 BETA / PRE-RELEASE"
+              if prerelease
+              else "✅ OFFICIAL ANDROID RELEASE"
+          )
 
-              tag = os.environ.get("RELEASE_TAG", "").strip()
+          if not body:
+              body = "Nueva versión de FridaMusic disponible."
 
-              name = (
-                  os.environ.get("RELEASE_NAME", "").strip()
-                  or f"FridaMusic {tag}"
-              )
-
-              body = os.environ.get("RELEASE_BODY", "").strip()
-
-              release_url = os.environ.get(
-                  "RELEASE_URL",
-                  f"https://github.com/{repository}/releases"
-              ).strip()
-
-              prerelease = (
-                  os.environ.get("IS_PRERELEASE", "false").lower()
-                  == "true"
-              )
-
-              apk_url = os.environ.get("APK_URL", "").strip()
-              apk_name = os.environ.get("APK_NAME", "").strip()
-
-              if prerelease:
-                  status = "🧪 BETA / PRE-RELEASE"
-              else:
-                  status = "✅ STABLE RELEASE"
-
-              if not body:
-                  body = "Sin notas adicionales para esta versión."
-
-
-          # ========================================================
-          # PRUEBA MANUAL
-          # ========================================================
-
-          else:
-
-              tag = (
-                  os.environ.get("TEST_VERSION", "").strip()
-                  or "vTEST"
-              )
-
-              test_type = (
-                  os.environ.get("TEST_TYPE", "").strip()
-                  or "TEST"
-              )
-
-              name = f"FridaMusic {tag}"
-
-              status = "🧪 TEST MANUAL"
-
-              body = f"""
-          Esta es una prueba manual del sistema automático de Releases.
-
-          ✅ GitHub Actions funcionando
-          ✅ Webhook de Discord funcionando
-          ✅ Comunicación GitHub → Discord funcionando
-
-          Tipo: {test_type}
-          """.strip()
-
-              release_url = (
-                  f"https://github.com/{repository}/releases"
-              )
-
-              apk_url = ""
-              apk_name = ""
-
-
-          # ========================================================
-          # LÍMITES DE DISCORD
-          # ========================================================
-
-          if len(body) > 3000:
-              body = body[:2997] + "..."
-
-          if len(name) > 220:
-              name = name[:217] + "..."
-
-
-          # ========================================================
-          # MENSAJE
-          # ========================================================
+          # Discord embed description max = 4096
+          if len(body) > 2600:
+              body = body[:2597] + "..."
 
           description = f"""
           {status}
 
           🎧 **FridaMusic**
+          📱 **Android APK**
           🏷️ **Versión:** `{tag}`
 
-          ### 📋 Cambios
+          ### 📋 Release Notes
           {body}
           """.strip()
 
-
-          # ========================================================
-          # APK
-          # ========================================================
-
-          if apk_url and apk_name:
-
+          if apk_url:
               description += (
-                  f"\n\n"
-                  f"📦 **[Descargar {apk_name}]({apk_url})**"
+                  f"\n\n📦 **[{apk_name}]({apk_url})**"
               )
-
-          elif event == "release":
-
+          else:
               description += (
-                  "\n\n"
-                  "📦 APK no adjunto en esta Release."
+                  "\n\n⚠️ **No se encontró un APK adjunto a esta Release.**"
               )
-
-
-          # ========================================================
-          # GITHUB
-          # ========================================================
 
           description += (
-              f"\n\n"
-              f"🔗 **[Ver Release completa en GitHub]({release_url})**"
+              f"\n\n🔗 **[Ver Release completa en GitHub]({release_url})**"
           )
-
-
-          # ========================================================
-          # PAYLOAD DISCORD
-          # ========================================================
 
           payload = {
               "username": "Frida Labs • Releases",
@@ -262,30 +159,20 @@ jobs:
               "embeds": [
                   {
                       "title": f"🚀 {name}",
-
                       "description": description,
-
                       "url": release_url,
-
                       "color": 11829780,
-
                       "footer": {
-                          "text": "FridaMusic • by Frida Labs"
+                          "text": "FridaMusic • Android • Frida Labs"
                       }
                   }
               ]
           }
 
-
-          # ========================================================
-          # ENVIAR WEBHOOK
-          # ========================================================
-
           data = json.dumps(
               payload,
               ensure_ascii=False
           ).encode("utf-8")
-
 
           request = urllib.request.Request(
               webhook,
@@ -297,39 +184,23 @@ jobs:
               method="POST"
           )
 
-
           try:
-
               with urllib.request.urlopen(
                   request,
                   timeout=20
               ) as response:
-
                   print(
-                      f"Discord webhook OK - HTTP {response.status}"
+                      f"Discord Release OK - HTTP {response.status}"
                   )
 
-
           except urllib.error.HTTPError as error:
-
-              error_body = error.read().decode(
+              message = error.read().decode(
                   "utf-8",
                   errors="replace"
               )
 
               print(
-                  f"Discord HTTP ERROR {error.code}"
-              )
-
-              print(error_body)
-
-              raise
-
-
-          except Exception as error:
-
-              print(
-                  f"ERROR enviando la Release a Discord: {error}"
+                  f"Discord HTTP ERROR {error.code}: {message}"
               )
 
               raise
