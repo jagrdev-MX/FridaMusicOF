@@ -1,0 +1,122 @@
+name: Discord Release Feed
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obtener datos del APK
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          APK_URL=$(gh api \
+            repos/$REPOSITORY/releases/$RELEASE_ID/assets \
+            --jq '.[] | select(.name | endswith(".apk")) | .browser_download_url' \
+            | head -n 1)
+
+          APK_NAME=$(gh api \
+            repos/$REPOSITORY/releases/$RELEASE_ID/assets \
+            --jq '.[] | select(.name | endswith(".apk")) | .name' \
+            | head -n 1)
+
+          echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar release en Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+
+          APK_URL: ${{ steps.release.outputs.apk_url }}
+          APK_NAME: ${{ steps.release.outputs.apk_name }}
+
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          python <<'PY'
+          import os
+          import json
+          import urllib.request
+
+          webhook = os.environ["WEBHOOK_URL"]
+
+          name = os.environ.get("RELEASE_NAME") or os.environ["RELEASE_TAG"]
+          tag = os.environ["RELEASE_TAG"]
+          body = os.environ.get("RELEASE_BODY", "").strip()
+          release_url = os.environ["RELEASE_URL"]
+
+          apk_url = os.environ.get("APK_URL", "").strip()
+          apk_name = os.environ.get("APK_NAME", "").strip()
+
+          prerelease = os.environ.get("IS_PRERELEASE", "false").lower() == "true"
+
+          if prerelease:
+              status = "🧪 PRE-RELEASE / BETA"
+          else:
+              status = "✅ STABLE RELEASE"
+
+          if not body:
+              body = "Sin notas adicionales para esta versión."
+
+          # Discord limita las descripciones de embeds
+          if len(body) > 3000:
+              body = body[:2997] + "..."
+
+          description = f"""
+          {status}
+
+          🎧 **FridaMusic**
+          🏷️ **Versión:** `{tag}`
+
+          ## 📋 Cambios
+          {body}
+          """.strip()
+
+          if apk_url:
+              description += f"\n\n📦 **[{apk_name}]({apk_url})**"
+
+          description += f"\n🔗 **[Ver release completa en GitHub]({release_url})**"
+
+          payload = {
+              "username": "Frida Labs • Releases",
+              "embeds": [
+                  {
+                      "title": f"🚀 {name}",
+                      "description": description,
+                      "url": release_url,
+                      "color": 11829780,
+                      "footer": {
+                          "text": "FridaMusic • Frida Labs"
+                      }
+                  }
+              ]
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+
+          req = urllib.request.Request(
+              webhook,
+              data=data,
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "FridaMusic-GitHub-Release"
+              }
+          )
+
+          with urllib.request.urlopen(req) as response:
+              print("Discord response:", response.status)
+
+          PY
