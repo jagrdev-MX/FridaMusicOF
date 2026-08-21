@@ -40,7 +40,6 @@ jobs:
 
           RELEASE_NAME="$(echo "$RELEASE_JSON" | jq -r '.name // .tag_name')"
           RELEASE_URL="$(echo "$RELEASE_JSON" | jq -r '.html_url')"
-          RELEASE_BODY="$(echo "$RELEASE_JSON" | jq -r '.body // ""')"
           IS_PRERELEASE="$(echo "$RELEASE_JSON" | jq -r '.prerelease')"
 
           APK_URL="$(echo "$RELEASE_JSON" | jq -r \
@@ -55,10 +54,6 @@ jobs:
             echo "is_prerelease=$IS_PRERELEASE"
             echo "apk_url=$APK_URL"
             echo "apk_name=$APK_NAME"
-
-            echo "release_body<<EOF"
-            echo "$RELEASE_BODY"
-            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
           echo "Release encontrada: $RELEASE_NAME"
@@ -69,7 +64,6 @@ jobs:
             echo "AVISO: esta Release no tiene un .apk adjunto."
           fi
 
-
       - name: Publicar en Discord
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
@@ -77,7 +71,6 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           RELEASE_NAME: ${{ steps.release.outputs.release_name }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
-          RELEASE_BODY: ${{ steps.release.outputs.release_body }}
           IS_PRERELEASE: ${{ steps.release.outputs.is_prerelease }}
 
           APK_URL: ${{ steps.release.outputs.apk_url }}
@@ -98,9 +91,13 @@ jobs:
               )
 
           tag = os.environ["RELEASE_TAG"].strip()
-          name = os.environ.get("RELEASE_NAME", "").strip() or f"FridaMusic {tag}"
+
+          name = (
+              os.environ.get("RELEASE_NAME", "").strip()
+              or f"FridaMusic {tag}"
+          )
+
           release_url = os.environ["RELEASE_URL"].strip()
-          body = os.environ.get("RELEASE_BODY", "").strip()
 
           apk_url = os.environ.get("APK_URL", "").strip()
           apk_name = os.environ.get("APK_NAME", "").strip()
@@ -116,13 +113,6 @@ jobs:
               else "✅ OFFICIAL ANDROID RELEASE"
           )
 
-          if not body:
-              body = "Nueva versión de FridaMusic disponible."
-
-          # Discord embed description max = 4096
-          if len(body) > 2600:
-              body = body[:2597] + "..."
-
           description = f"""
           {status}
 
@@ -130,21 +120,23 @@ jobs:
           📱 **Android APK**
           🏷️ **Versión:** `{tag}`
 
-          ### 📋 Release Notes
-          {body}
+          🚀 Nueva versión de FridaMusic disponible.
           """.strip()
 
-          if apk_url:
+          if apk_url and apk_name:
               description += (
-                  f"\n\n📦 **[{apk_name}]({apk_url})**"
+                  f"\n\n"
+                  f"📦 **[Descargar {apk_name}]({apk_url})**"
               )
           else:
               description += (
-                  "\n\n⚠️ **No se encontró un APK adjunto a esta Release.**"
+                  "\n\n"
+                  "⚠️ **No se encontró un APK adjunto a esta Release.**"
               )
 
           description += (
-              f"\n\n🔗 **[Ver Release completa en GitHub]({release_url})**"
+              f"\n\n"
+              f"🔗 **[Ver Release en GitHub]({release_url})**"
           )
 
           payload = {
@@ -203,6 +195,12 @@ jobs:
                   f"Discord HTTP ERROR {error.code}: {message}"
               )
 
+              raise
+
+          except Exception as error:
+              print(
+                  f"ERROR enviando la Release a Discord: {error}"
+              )
               raise
 
           PY
