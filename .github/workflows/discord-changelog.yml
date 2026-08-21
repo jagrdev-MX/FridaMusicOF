@@ -15,6 +15,10 @@ on:
         required: true
         type: string
 
+  release:
+    types:
+      - published
+
 permissions:
   contents: read
 
@@ -23,13 +27,68 @@ jobs:
     name: Publicar Changelog Android en Discord
     runs-on: ubuntu-latest
 
+    if: |
+      github.event_name == 'workflow_call' ||
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'release' &&
+        endsWith(github.event.release.tag_name, '-release-apk') &&
+        (
+          startsWith(github.event.release.tag_name, 'OFICIAL-v') ||
+          startsWith(github.event.release.tag_name, 'BETA-ABIERTA-v') ||
+          startsWith(github.event.release.tag_name, 'ALPHA-v')
+        )
+      )
+
     steps:
+      - name: Resolver tag Android
+        id: tag
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.release_tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            RELEASE_TAG="$INPUT_TAG"
+          else
+            RELEASE_TAG="$EVENT_TAG"
+          fi
+
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "ERROR: No se pudo resolver el tag."
+            exit 1
+          fi
+
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Tag Android: $RELEASE_TAG"
+
+      - name: Validar tag Android
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+
+        run: |
+          if [[ "$RELEASE_TAG" =~ ^(OFICIAL|BETA-ABIERTA|ALPHA)-v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-release-apk$ ]]; then
+            echo "Tag FridaMusic Android válido: $RELEASE_TAG"
+            exit 0
+          fi
+
+          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-release-apk$ ]]; then
+            echo "Tag Android legacy válido: $RELEASE_TAG"
+            exit 0
+          fi
+
+          echo "ERROR: Tag Android no reconocido:"
+          echo "$RELEASE_TAG"
+          exit 1
+
       - name: Obtener datos de la Release
         id: release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
 
         run: |
@@ -57,7 +116,7 @@ jobs:
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_CHANGELOG_WEBHOOK }}
 
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
           RELEASE_NAME: ${{ steps.release.outputs.release_name }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           RELEASE_BODY: ${{ steps.release.outputs.release_body }}
@@ -86,7 +145,6 @@ jobs:
           )
 
           release_url = os.environ["RELEASE_URL"].strip()
-
           body = os.environ.get("RELEASE_BODY", "").strip()
 
           prerelease = (
@@ -94,16 +152,30 @@ jobs:
               == "true"
           )
 
-          status = (
-              "🧪 BETA / PRE-RELEASE"
-              if prerelease
-              else "✅ OFFICIAL RELEASE"
-          )
+          if tag.startswith("OFICIAL-"):
+              status = "✅ OFICIAL"
+              stage = "Producción"
+
+          elif tag.startswith("BETA-ABIERTA-"):
+              status = "🧪 BETA ABIERTA"
+              stage = "Release Candidate"
+
+          elif tag.startswith("ALPHA-"):
+              status = "🧰 ALPHA"
+              stage = "Pruebas internas"
+
+          elif prerelease:
+              status = "🧪 PRE-RELEASE"
+              stage = "Pruebas"
+
+          else:
+              status = "✅ ANDROID RELEASE"
+              stage = "Android"
 
           if not body:
               body = "No se especificaron cambios para esta versión."
 
-          # Quitar bloques de metadata HTML ocultos
+          # Eliminar metadata HTML oculta.
           body = re.sub(
               r"<!--.*?-->",
               "",
@@ -111,7 +183,7 @@ jobs:
               flags=re.DOTALL
           ).strip()
 
-          # Quitar etiquetas <img ...>
+          # Eliminar imágenes HTML de GitHub.
           body = re.sub(
               r"<img[^>]*>",
               "",
@@ -119,7 +191,7 @@ jobs:
               flags=re.IGNORECASE
           ).strip()
 
-          # Limpiar exceso de saltos
+          # Limpiar saltos excesivos.
           body = re.sub(
               r"\n{3,}",
               "\n\n",
@@ -135,6 +207,7 @@ jobs:
           🎧 **FridaMusic**
           📱 **Android**
           🏷️ **Versión:** `{tag}`
+          🚦 **Canal:** {stage}
 
           ## 📜 Changelog
 
@@ -179,11 +252,13 @@ jobs:
                   request,
                   timeout=20
               ) as response:
+
                   print(
                       f"Discord Changelog OK - HTTP {response.status}"
                   )
 
           except urllib.error.HTTPError as error:
+
               message = error.read().decode(
                   "utf-8",
                   errors="replace"
@@ -193,12 +268,6 @@ jobs:
                   f"Discord HTTP ERROR {error.code}: {message}"
               )
 
-              raise
-
-          except Exception as error:
-              print(
-                  f"ERROR enviando Changelog a Discord: {error}"
-              )
               raise
 
           PY
