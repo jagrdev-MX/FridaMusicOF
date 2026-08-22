@@ -27,7 +27,6 @@
   <!-- TODO(owner): Confirm that "Frida Labs" exactly matches the public developer identity in Google Play. -->
   <!-- TODO(owner): Confirm the target audience and Families declaration in Play Console before publishing this policy. -->
   <!-- TODO(owner): Validate Google Mobile Ads SDK 23.6.0 disclosures against the shipped artifact or update the SDK. -->
-  <!-- TODO(owner): Confirm the converter backend operator, logs, retention, deletion and transport-security practices. -->
 </head>
 
 <body class="privacy-page">
@@ -75,11 +74,11 @@
       <dl class="privacy-dates">
         <div>
           <dt data-i18n="hero.effectiveLabel">Entrada en vigor</dt>
-          <dd data-i18n="hero.date">21 de julio de 2026</dd>
+          <dd data-i18n="hero.effectiveDate">21 de julio de 2026</dd>
         </div>
         <div>
           <dt data-i18n="hero.updatedLabel">Última actualización</dt>
-          <dd data-i18n="hero.date">21 de julio de 2026</dd>
+          <dd data-i18n="hero.updatedDate">22 de agosto de 2026</dd>
         </div>
       </dl>
       <a class="btn privacy-back" href="/#soporte" data-i18n="hero.back">Volver a Soporte</a>
@@ -97,7 +96,7 @@
             <li><a href="#transmisiones" data-i18n="toc.network">Transmisiones externas</a></li>
             <li><a href="#publicidad" data-i18n="toc.ads">Publicidad</a></li>
             <li><a href="#permisos" data-i18n="toc.permissions">Permisos</a></li>
-            <li><a href="#web" data-i18n="toc.web">Sitio y convertidor</a></li>
+            <li><a href="#web" data-i18n="toc.web">Sitio oficial</a></li>
             <li><a href="#seguridad" data-i18n="toc.security">Seguridad y conservación</a></li>
             <li><a href="#opciones" data-i18n="toc.choices">Opciones del usuario</a></li>
             <li><a href="#menores" data-i18n="toc.children">Menores</a></li>
@@ -112,8 +111,7 @@
           <p data-i18n="controller.p1">FridaMusic es una aplicación de música para Android publicada dentro de la
             identidad pública de Frida Labs. El repositorio identifica a jagrdev-MX como owner técnico.</p>
           <p data-i18n="controller.p2">Esta política cubre la aplicación con identificador
-            com.jagr.fridamusic, el sitio oficial frida-music-of.vercel.app y el convertidor accesible desde ese sitio.
-            No cubre forks ni aplicaciones de terceros.</p>
+            com.jagr.fridamusic y el sitio oficial frida-music-of.vercel.app. No cubre forks ni aplicaciones de terceros.</p>
           <p data-i18n="controller.p3">El repositorio auditado no contiene creación de cuentas, autenticación,
             Google Sign-In, Firebase ni un sistema propio de perfiles de usuario.</p>
         </section>
@@ -149,12 +147,6 @@
                   <td data-i18n="summary.adsSource">Dispositivo e interacción con la app</td>
                   <td data-i18n="summary.adsDestination">Google Mobile Ads</td>
                   <td data-i18n="summary.adsPurpose">Publicidad, analítica del SDK y prevención de fraude</td>
-                </tr>
-                <tr>
-                  <td data-i18n="summary.webData">URL, formato, User-Agent y dirección de red reenviada</td>
-                  <td data-i18n="summary.webSource">Convertidor web</td>
-                  <td data-i18n="summary.webDestination">Proxy de Vercel y backend de conversión configurado</td>
-                  <td data-i18n="summary.webPurpose">Procesar y devolver la conversión solicitada</td>
                 </tr>
               </tbody>
             </table>
@@ -279,19 +271,10 @@
         </section>
 
         <section id="web">
-          <h2 data-i18n="web.title">8. Sitio oficial y convertidor</h2>
+          <h2 data-i18n="web.title">8. Sitio oficial</h2>
           <p data-i18n="web.p1">El sitio principal carga Google Fonts y módulos de Vercel Web Analytics y Speed
             Insights. También guarda la preferencia ES, EN o PT en localStorage. Esta página de privacidad no carga los
             módulos de analítica de Vercel y puede leerse sin iniciar sesión ni aceptar cookies.</p>
-          <p data-i18n="web.p2">Cuando se usa el convertidor, el proxy recibe la URL y el formato elegidos y reenvía esos
-            datos, el User-Agent y la dirección de red reenviada al backend configurado. El proxy visible no escribe esos
-            campos en una base de datos, pero el código del backend final no está disponible en este repositorio.</p>
-          <div class="privacy-notice privacy-notice-warning" role="note">
-            <strong data-i18n="web.todoTitle">TODO del owner</strong>
-            <p data-i18n="web.todo">Confirmar quién opera el backend de conversión, qué registros genera, sus plazos de
-              conservación, cómo atiende solicitudes de eliminación y si todo el trayecto de producción usa HTTPS. El
-              proxy contiene actualmente un fallback HTTP, por lo que no se afirma cifrado integral del convertidor.</p>
-          </div>
         </section>
 
         <section id="seguridad">

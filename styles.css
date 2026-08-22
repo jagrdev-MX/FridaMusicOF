@@ -494,7 +494,6 @@ button {
 .interface-item,
 .platform-card,
 .release-panel,
-.converter-panel,
 .support-panel {
   position: relative;
   min-width: 0;
@@ -517,7 +516,6 @@ button {
 .interface-item::before,
 .platform-card::before,
 .release-panel::before,
-.converter-panel::before,
 .support-panel::before {
   content: '';
   position: absolute;
@@ -537,8 +535,6 @@ button {
 .platform-card:focus-within,
 .release-panel:hover,
 .release-panel:focus-within,
-.converter-panel:hover,
-.converter-panel:focus-within,
 .support-panel:hover,
 .support-panel:focus-within {
   border-color: rgba(255, 255, 255, 0.24);
@@ -579,7 +575,6 @@ button {
 .interface-caption,
 .platform-card > *,
 .release-panel > *,
-.converter-panel > *,
 .support-panel > * {
   position: relative;
   z-index: 1;
@@ -1038,7 +1033,6 @@ button {
 
 .platform-card,
 .release-panel,
-.converter-panel,
 .support-panel {
   --aura1: rgba(224, 64, 251, 0.22);
   --aura2: rgba(64, 196, 255, 0.18);
@@ -1175,156 +1169,6 @@ button {
   color: #fff;
   text-decoration: underline;
   text-underline-offset: 4px;
-}
-
-.converter-panel {
-  --aura1: rgba(64, 196, 255, 0.24);
-  --aura2: rgba(224, 64, 251, 0.2);
-  padding: 24px;
-}
-
-.converter-copy {
-  max-width: 680px;
-}
-
-.converter-form {
-  display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.34fr) auto;
-  gap: 12px;
-  align-items: end;
-  margin-top: 18px;
-}
-
-.converter-field {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.converter-field legend {
-  padding: 0;
-  color: inherit;
-  font: inherit;
-}
-
-.converter-field [data-converter-url] {
-  width: 100%;
-  min-height: 46px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 0 14px;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.055);
-  outline: none;
-  font: inherit;
-  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
-}
-
-.converter-field [data-converter-url]::placeholder {
-  color: rgba(255, 255, 255, 0.32);
-}
-
-.converter-field [data-converter-url]:focus {
-  border-color: rgba(64, 196, 255, 0.58);
-  background: rgba(255, 255, 255, 0.085);
-  box-shadow: 0 0 0 3px rgba(64, 196, 255, 0.14);
-}
-
-.format-segment {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  min-height: 46px;
-  padding: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.055);
-}
-
-.format-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.format-option {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 10px;
-  border-radius: 12px;
-  color: rgba(255, 255, 255, 0.72);
-  cursor: pointer;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.format-input:checked + .format-option {
-  color: #ffffff;
-  background: linear-gradient(135deg, rgba(64, 196, 255, 0.34), rgba(224, 64, 251, 0.28));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-}
-
-.format-input:focus-visible + .format-option {
-  outline: 2px solid rgba(64, 196, 255, 0.72);
-  outline-offset: 2px;
-}
-
-.format-input:disabled + .format-option {
-  cursor: wait;
-  opacity: 0.62;
-}
-
-.converter-submit {
-  min-width: 124px;
-}
-
-.converter-submit:disabled {
-  cursor: wait;
-  opacity: 0.68;
-  transform: none;
-}
-
-.converter-feedback {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  align-items: center;
-  margin-top: 14px;
-}
-
-.converter-status {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.converter-panel.is-success .converter-status {
-  color: #b9ffd6;
-}
-
-.converter-panel.is-error .converter-status {
-  color: #ffb8c5;
-}
-
-.converter-panel.is-loading .converter-status {
-  color: rgba(255, 246, 215, 0.84);
-}
-
-.converter-result[hidden] {
-  display: none;
 }
 
 .beta-overview {
@@ -2070,15 +1914,6 @@ footer {
 
   .beta-banner-frame {
     width: min(100%, 560px);
-  }
-
-  .converter-form {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
-  .converter-submit {
-    width: 100%;
   }
 
   .privacy-layout {
