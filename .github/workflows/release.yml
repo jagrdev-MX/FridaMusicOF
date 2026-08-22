@@ -1,63 +1,255 @@
 name: Release Pipeline
 
+# ==============================================================
+# EJECUCIÓN MANUAL
+#
+# Este pipeline NO corre con cada push.
+#
+# Para ejecutarlo:
+# GitHub -> Actions -> Release Pipeline -> Run workflow
+#
+# La Web queda FUERA de este pipeline.
+# ==============================================================
 on:
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - README.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
 
 jobs:
+
+  # ============================================================
+  # TESTS ANDROID
+  # ============================================================
   test:
+    name: Tests
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: temurin
           cache: gradle
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
       - name: Run Unit Tests
         run: ./gradlew testDebugUnitTest
 
+
+  # ============================================================
+  # RELEASE ANDROID
+  #
+  # IMPORTANTE:
+  #
+  # WEB:
+  #   NO SE EJECUTA AQUÍ.
+  #
+  # Se conservan sin modificar:
+  #   .releaserc.web.json
+  #   CHANGELOG.web.md
+  #   vX.Y.Z-web
+  #
+  # ANDROID:
+  #   .releaserc.android.json
+  #   CHANGELOG.android.md
+  #   *-release-apk
+  # ============================================================
   release:
+    name: Android Release
     needs: test
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+
+    outputs:
+      android_released: ${{ steps.android_result.outputs.released }}
+      android_tag: ${{ steps.android_result.outputs.tag }}
 
     steps:
+
+      # ========================================================
+      # CHECKOUT
+      # ========================================================
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+
+      # ========================================================
+      # NODE
+      # ========================================================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
+
+      # ========================================================
+      # DEPENDENCIAS
+      # ========================================================
       - name: Install dependencies
         run: npm ci
 
-      - name: Release Web track
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release:web
 
+      # ========================================================
+      # DETECTAR ÚLTIMA RELEASE ANDROID
+      #
+      # Cualquier release Android válida termina en:
+      #
+      # -release-apk
+      #
+      # Ejemplos:
+      #
+      # OFICIAL-v1.0.9.210-release-apk
+      # BETA-ABIERTA-v1.0.9.211-release-apk
+      # ALPHA-v1.0.9.212-release-apk
+      # v1.8.0-release-apk
+      #
+      # Los tags Web terminados en -web se ignoran.
+      # ========================================================
+      - name: Detectar tag Android anterior
+        id: android_before
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+        run: |
+          BEFORE_TAG="$(gh release list \
+            --repo "${{ github.repository }}" \
+            --limit 100 \
+            --json tagName \
+            --jq '[.[].tagName | select(endswith("-release-apk"))][0] // ""')"
+
+          echo "tag=$BEFORE_TAG" >> "$GITHUB_OUTPUT"
+
+          echo "=========================================="
+          echo "ANDROID RELEASE ANTERIOR"
+          echo "=========================================="
+          echo "$BEFORE_TAG"
+          echo "=========================================="
+
+
+      # ========================================================
+      # SEMANTIC RELEASE ANDROID
+      #
+      # SOLO ejecuta el track Android.
+      #
+      # NO ejecuta:
+      # npm run release:web
+      #
+      # Por lo tanto la Web no puede romper este pipeline.
+      # ========================================================
       - name: Release Android track
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
         run: npm run release:android
 
-      - name: Release Telegram Bot track
+
+      # ========================================================
+      # DETECTAR SI SE CREÓ UNA NUEVA RELEASE ANDROID
+      # ========================================================
+      - name: Detectar nueva Release Android
+        id: android_result
+        shell: bash
+
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release:telegram-bot
+          GH_TOKEN: ${{ github.token }}
+          BEFORE_TAG: ${{ steps.android_before.outputs.tag }}
+
+        run: |
+          AFTER_TAG="$(gh release list \
+            --repo "${{ github.repository }}" \
+            --limit 100 \
+            --json tagName \
+            --jq '[.[].tagName | select(endswith("-release-apk"))][0] // ""')"
+
+          echo "=========================================="
+          echo "COMPARACIÓN DE RELEASE ANDROID"
+          echo "=========================================="
+          echo "Anterior: $BEFORE_TAG"
+          echo "Actual:   $AFTER_TAG"
+          echo "=========================================="
+
+          if [ -n "$AFTER_TAG" ] && [ "$AFTER_TAG" != "$BEFORE_TAG" ]; then
+
+            echo "Nueva Release Android detectada."
+
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$AFTER_TAG" >> "$GITHUB_OUTPUT"
+
+          else
+
+            echo "No se creó una nueva Release Android."
+
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+
+          fi
+
+
+  # ==============================================================
+  # DISCORD RELEASE FEED
+  #
+  # Solo se ejecuta si semantic-release realmente creó
+  # una Release Android nueva.
+  #
+  # Publica en:
+  # #github-feeds
+  #
+  # Incluye:
+  # @everyone
+  # versión
+  # canal
+  # APK
+  # enlace GitHub
+  #
+  # NO incluye changelog.
+  # ==============================================================
+  discord-release:
+    name: Discord APK Release
+    needs: release
+
+    if: needs.release.outputs.android_released == 'true'
+
+    uses: ./.github/workflows/discord-release.yml
+
+    with:
+      release_tag: ${{ needs.release.outputs.android_tag }}
+
+    secrets: inherit
+
+
+  # ==============================================================
+  # DISCORD CHANGELOG
+  #
+  # Solo se ejecuta si realmente apareció
+  # una nueva Release Android.
+  #
+  # Publica en:
+  # #changelog
+  #
+  # NO manda @everyone.
+  # ==============================================================
+  discord-changelog:
+    name: Discord Changelog
+    needs: release
+
+    if: needs.release.outputs.android_released == 'true'
+
+    uses: ./.github/workflows/discord-changelog.yml
+
+    with:
+      release_tag: ${{ needs.release.outputs.android_tag }}
+
+    secrets: inherit
