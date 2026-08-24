@@ -79,24 +79,10 @@ jobs:
           # 1) Preferir una imagen adjunta como asset real de la Release.
           IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | test("\\.(png|jpg|jpeg|webp)$"))][0].browser_download_url // ""')"
 
-          # 2) Si las imágenes están pegadas como URLs en el body de GitHub,
-          #    aceptar Markdown/HTML y user-attachments incluso sin extensión.
+          # 2) Si la imagen está pegada como URL en el body, aceptar también
+          #    user-attachments de GitHub aunque no tengan extensión de archivo.
           if [ -z "$IMAGE_URL" ]; then
-            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | python3 -c '
-import re, sys
-b = sys.stdin.read()
-patterns = [
-    r"!\[[^\]]*\]\((https?://[^)\s]+)\)",
-    r"<img[^>]+src=[\"\x27](https?://[^\"\x27]+)[\"\x27]",
-    r"(https?://(?:github\.com|private-user-images\.githubusercontent\.com)/user-attachments/assets/[^\s)>\"]+)",
-    r"(https?://[^\s)>\"]+\.(?:png|jpg|jpeg|webp)(?:\?[^\s)>\"]*)?)",
-]
-for p in patterns:
-    m = re.search(p, b, re.I)
-    if m:
-        print(m.group(1))
-        break
-')"
+            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | python3 -c 'import re,sys; b=sys.stdin.read(); ps=[r"!\\[[^\\]]*\\]\\((https?://[^)\\s]+)\\)",r"<img[^>]+src=[\\"\\x27](https?://[^\\"\\x27]+)[\\"\\x27]",r"(https?://(?:github\\.com|private-user-images\\.githubusercontent\\.com)/user-attachments/assets/[^\\s)>\\"]+)",r"(https?://[^\\s)>\\"]+\\.(?:png|jpg|jpeg|webp)(?:\\?[^\\s)>\\"]*)?)"]; m=next((re.search(p,b,re.I) for p in ps if re.search(p,b,re.I)),None); print(m.group(1) if m else "")')"
           fi
 
           {
@@ -222,8 +208,6 @@ for p in patterns:
                       call("sendPhoto", {**common, "photo": image_url, "caption": text})
                       print("Telegram Release OK - sendPhoto")
                   except Exception as photo_error:
-                      # Una URL de GitHub puede no ser descargable por Telegram directamente.
-                      # No se pierde la publicación: se hace fallback a texto.
                       print(f"AVISO: sendPhoto falló ({photo_error}); usando sendMessage.")
                       call("sendMessage", {**common, "text": text, "link_preview_options": {"is_disabled": True}})
               else:
