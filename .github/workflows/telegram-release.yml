@@ -44,16 +44,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ============================================================
-      # RESOLVER Y VALIDAR RELEASE
-      #
-      # Este workflow no crea releases ni modifica el pipeline.
-      # Producción: se invoca desde release.yml mediante workflow_call.
-      # Pruebas: Actions -> Telegram Release Feed -> Run workflow.
-      #
-      # Para reutilizarlo en otro repo basta copiar este archivo y
-      # configurar sus propios secrets de Telegram.
-      # ============================================================
       - name: Resolver configuración
         id: config
         shell: bash
@@ -72,8 +62,6 @@ jobs:
 
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "product_name=$PRODUCT_NAME" >> "$GITHUB_OUTPUT"
-          echo "Tag: $RELEASE_TAG"
-          echo "Producto: $PRODUCT_NAME"
 
       - name: Obtener Release y assets
         id: release
@@ -83,8 +71,6 @@ jobs:
           RELEASE_TAG: ${{ steps.config.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          echo "Buscando Release: $RELEASE_TAG"
-
           RELEASE_JSON="$(gh api "repos/$REPOSITORY/releases/tags/$RELEASE_TAG")"
 
           RELEASE_NAME="$(echo "$RELEASE_JSON" | jq -r '.name // .tag_name')"
@@ -97,8 +83,27 @@ jobs:
           APK_NAME="$(echo "$RELEASE_JSON" | jq -r \
             '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].name // ""')"
 
+          # 1) Preferir imagen adjunta como asset de la Release.
           IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r \
             '[.assets[] | select(.name | ascii_downcase | test("\\.(png|jpg|jpeg|webp)$"))][0].browser_download_url // ""')"
+
+          # 2) Si no hay asset de imagen, intentar usar la primera imagen
+          #    incluida en el body de la Release (Markdown o HTML).
+          if [ -z "$IMAGE_URL" ]; then
+            IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r '.body // ""' | python3 -c '
+import re, sys
+body = sys.stdin.read()
+patterns = [
+    r"!\\[[^\\]]*\\]\\((https?://[^)\\s]+)",
+    r"<img[^>]+src=[\"\\\x27](https?://[^\"\\\x27]+)[\"\\\x27]",
+]
+for pattern in patterns:
+    m = re.search(pattern, body, re.I)
+    if m:
+        print(m.group(1))
+        break
+')"
+          fi
 
           {
             echo "release_name=$RELEASE_NAME"
@@ -110,18 +115,8 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "Release encontrada: $RELEASE_NAME"
-
-          if [ -n "$APK_URL" ]; then
-            echo "APK encontrado: $APK_NAME"
-          else
-            echo "AVISO: esta Release no tiene APK adjunto."
-          fi
-
-          if [ -n "$IMAGE_URL" ]; then
-            echo "Imagen de Release encontrada."
-          else
-            echo "INFO: no hay imagen adjunta; se enviará mensaje de texto."
-          fi
+          [ -n "$APK_URL" ] && echo "APK encontrado: $APK_NAME" || echo "AVISO: no hay APK adjunto."
+          [ -n "$IMAGE_URL" ] && echo "Artwork encontrado: $IMAGE_URL" || echo "INFO: no se encontró artwork; se usará mensaje de texto."
 
       - name: Validar secrets de Telegram
         shell: bash
@@ -140,7 +135,6 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           THREAD_ID: ${{ secrets.TELEGRAM_APK_THREAD_ID }}
-
           RELEASE_TAG: ${{ steps.config.outputs.tag }}
           PRODUCT_NAME: ${{ steps.config.outputs.product_name }}
           RELEASE_NAME: ${{ steps.release.outputs.release_name }}
@@ -171,6 +165,34 @@ jobs:
           prerelease = os.environ.get("IS_PRERELEASE", "false").lower() == "true"
           test_mode = os.environ.get("TEST_MODE", "false").lower() == "true"
 
+          api_base = f"https://api.telegram.org/bot{token}"
+
+          def telegram_call(method, payload, tolerate=None):
+              data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+              request = urllib.request.Request(
+                  f"{api_base}/{method}",
+                  data=data,
+                  headers={
+                      "Content-Type": "application/json",
+                      "User-Agent": f"{product}-Telegram-Release-Bot",
+                  },
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      body = response.read().decode("utf-8", errors="replace")
+                      result = json.loads(body)
+                      if not result.get("ok"):
+                          raise RuntimeError(f"Telegram respondió ok=false: {body}")
+                      return result
+              except urllib.error.HTTPError as error:
+                  body = error.read().decode("utf-8", errors="replace")
+                  if tolerate and any(code in body for code in tolerate):
+                      print(f"Telegram {method}: estado tolerado -> {body}")
+                      return None
+                  print(f"Telegram HTTP ERROR {error.code} en {method}: {body}")
+                  raise
+
           if tag.startswith("OFICIAL-"):
               status = "✅ OFICIAL"
               stage = "Producción"
@@ -188,7 +210,6 @@ jobs:
               stage = "Android"
 
           prefix = "🧪 <b>PRUEBA DE INTEGRACIÓN</b>\n\n" if test_mode else ""
-
           text = (
               prefix
               + f"🚀 <b>{html.escape(product)}</b>\n\n"
@@ -218,45 +239,51 @@ jobs:
               "reply_markup": {"inline_keyboard": [buttons]},
           }
 
-          # sendPhoto tiene caption máximo menor que sendMessage; este
-          # mensaje está deliberadamente reducido para funcionar en ambos.
-          if image_url:
-              method = "sendPhoto"
-              payload = {
-                  **common,
-                  "photo": image_url,
-                  "caption": text,
-              }
-          else:
-              method = "sendMessage"
-              payload = {
-                  **common,
-                  "text": text,
-                  "link_preview_options": {"is_disabled": True},
-              }
-
-          data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-          request = urllib.request.Request(
-              f"https://api.telegram.org/bot{token}/{method}",
-              data=data,
-              headers={
-                  "Content-Type": "application/json",
-                  "User-Agent": f"{product}-Telegram-Release-Bot",
-              },
-              method="POST",
-          )
+          # El topic puede permanecer cerrado para los usuarios.
+          # El bot lo reabre justo antes de publicar y lo vuelve a cerrar
+          # siempre, incluso si el envío falla.
+          reopen_payload = {
+              "chat_id": chat_id,
+              "message_thread_id": thread_id,
+          }
+          close_payload = dict(reopen_payload)
 
           try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  body = response.read().decode("utf-8", errors="replace")
-                  result = json.loads(body)
-                  if not result.get("ok"):
-                      raise RuntimeError(f"Telegram respondió ok=false: {body}")
-                  print(f"Telegram Release OK - HTTP {response.status}")
-                  print(f"Modo prueba: {test_mode}")
-                  print(f"Método: {method}")
-          except urllib.error.HTTPError as error:
-              message = error.read().decode("utf-8", errors="replace")
-              print(f"Telegram HTTP ERROR {error.code}: {message}")
-              raise
+              telegram_call(
+                  "reopenForumTopic",
+                  reopen_payload,
+                  tolerate=["TOPIC_NOT_MODIFIED", "topic is not modified"],
+              )
+              print("Topic de releases reabierto para publicación.")
+
+              if image_url:
+                  method = "sendPhoto"
+                  payload = {
+                      **common,
+                      "photo": image_url,
+                      "caption": text,
+                  }
+              else:
+                  method = "sendMessage"
+                  payload = {
+                      **common,
+                      "text": text,
+                      "link_preview_options": {"is_disabled": True},
+                  }
+
+              telegram_call(method, payload)
+              print(f"Telegram Release OK - método {method}")
+              print(f"Modo prueba: {test_mode}")
+
+          finally:
+              try:
+                  telegram_call(
+                      "closeForumTopic",
+                      close_payload,
+                      tolerate=["TOPIC_NOT_MODIFIED", "topic is not modified"],
+                  )
+                  print("Topic de releases cerrado nuevamente.")
+              except Exception as close_error:
+                  print(f"ADVERTENCIA: no se pudo cerrar el topic: {close_error}")
+
           PY
