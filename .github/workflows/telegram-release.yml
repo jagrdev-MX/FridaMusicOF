@@ -83,8 +83,9 @@ jobs:
           IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | test("\\.(png|jpg|jpeg|webp)$"))][0].browser_download_url // ""')"
 
           # Segundo: primera URL de imagen incluida en el body de la Release.
+          # Se usa Python para evitar problemas de quoting/regex de grep en bash.
           if [ -z "$IMAGE_URL" ]; then
-            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | grep -Eo 'https?://[^ )>"'"']+\.(png|jpg|jpeg|webp)(\?[^ )>"'"']*)?' | head -n 1 || true)"
+            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | python3 -c 'import re,sys; b=sys.stdin.read(); m=re.search(r"https?://[^\\s)>\"]+\\.(?:png|jpg|jpeg|webp)(?:\\?[^\\s)>\"]*)?", b, re.I); print(m.group(0) if m else "")')"
           fi
 
           {
