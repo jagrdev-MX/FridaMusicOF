@@ -79,10 +79,14 @@ jobs:
           # 1) Preferir una imagen adjunta como asset real de la Release.
           IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | test("\\.(png|jpg|jpeg|webp)$"))][0].browser_download_url // ""')"
 
-          # 2) Si la imagen está pegada como URL en el body, aceptar también
-          #    user-attachments de GitHub aunque no tengan extensión de archivo.
+          # 2) Si la imagen está pegada como URL dentro del body, tomar la primera
+          #    URL de GitHub user-attachments o una URL directa de imagen.
           if [ -z "$IMAGE_URL" ]; then
-            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | python3 -c 'import re,sys; b=sys.stdin.read(); ps=[r"!\\[[^\\]]*\\]\\((https?://[^)\\s]+)\\)",r"<img[^>]+src=[\\"\\x27](https?://[^\\"\\x27]+)[\\"\\x27]",r"(https?://(?:github\\.com|private-user-images\\.githubusercontent\\.com)/user-attachments/assets/[^\\s)>\\"]+)",r"(https?://[^\\s)>\\"]+\\.(?:png|jpg|jpeg|webp)(?:\\?[^\\s)>\\"]*)?)"]; m=next((re.search(p,b,re.I) for p in ps if re.search(p,b,re.I)),None); print(m.group(1) if m else "")')"
+            IMAGE_URL="$(printf '%s\n' "$RELEASE_BODY" \
+              | grep -Eo 'https?://[^[:space:])>]+' \
+              | sed 's/[\"'"'"']$//' \
+              | grep -Ei 'user-attachments/assets|private-user-images\.githubusercontent\.com|\.(png|jpg|jpeg|webp)(\?|$)' \
+              | head -n 1 || true)"
           fi
 
           {
