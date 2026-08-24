@@ -253,3 +253,38 @@ jobs:
       release_tag: ${{ needs.release.outputs.android_tag }}
 
     secrets: inherit
+
+
+  # ==============================================================
+  # TELEGRAM RELEASE FEED
+  #
+  # Solo se ejecuta si semantic-release realmente creó
+  # una Release Android nueva.
+  #
+  # Publica un mensaje compacto en el topic configurado mediante:
+  # TELEGRAM_CHAT_ID
+  # TELEGRAM_APK_THREAD_ID
+  #
+  # Incluye:
+  # versión
+  # canal
+  # enlace directo al APK
+  # enlace a la Release de GitHub
+  # imagen adjunta si la Release contiene una
+  #
+  # NO publica el changelog completo.
+  # ==============================================================
+  telegram-release:
+    name: Telegram APK Release
+    needs: release
+
+    if: needs.release.outputs.android_released == 'true'
+
+    uses: ./.github/workflows/telegram-release.yml
+
+    with:
+      release_tag: ${{ needs.release.outputs.android_tag }}
+      product_name: "FridaMusic"
+      test_mode: false
+
+    secrets: inherit
