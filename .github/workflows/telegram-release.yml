@@ -51,10 +51,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           PRODUCT_NAME: ${{ inputs.product_name }}
         run: |
-          if [ -z "$RELEASE_TAG" ]; then
-            echo "ERROR: No se recibió release_tag."
-            exit 1
-          fi
+          test -n "$RELEASE_TAG" || { echo "ERROR: No se recibió release_tag."; exit 1; }
           if [ -z "$PRODUCT_NAME" ]; then
             PRODUCT_NAME="${GITHUB_REPOSITORY#*/}"
           fi
@@ -79,13 +76,27 @@ jobs:
           APK_URL="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].browser_download_url // ""')"
           APK_NAME="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].name // ""')"
 
-          # Primero: imagen adjunta como asset de la Release.
+          # 1) Preferir una imagen adjunta como asset real de la Release.
           IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | test("\\.(png|jpg|jpeg|webp)$"))][0].browser_download_url // ""')"
 
-          # Segundo: primera URL de imagen incluida en el body de la Release.
-          # Se usa Python para evitar problemas de quoting/regex de grep en bash.
+          # 2) Si las imágenes están pegadas como URLs en el body de GitHub,
+          #    aceptar Markdown/HTML y user-attachments incluso sin extensión.
           if [ -z "$IMAGE_URL" ]; then
-            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | python3 -c 'import re,sys; b=sys.stdin.read(); m=re.search(r"https?://[^\\s)>\"]+\\.(?:png|jpg|jpeg|webp)(?:\\?[^\\s)>\"]*)?", b, re.I); print(m.group(0) if m else "")')"
+            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | python3 -c '
+import re, sys
+b = sys.stdin.read()
+patterns = [
+    r"!\[[^\]]*\]\((https?://[^)\s]+)\)",
+    r"<img[^>]+src=[\"\x27](https?://[^\"\x27]+)[\"\x27]",
+    r"(https?://(?:github\.com|private-user-images\.githubusercontent\.com)/user-attachments/assets/[^\s)>\"]+)",
+    r"(https?://[^\s)>\"]+\.(?:png|jpg|jpeg|webp)(?:\?[^\s)>\"]*)?)",
+]
+for p in patterns:
+    m = re.search(p, b, re.I)
+    if m:
+        print(m.group(1))
+        break
+')"
           fi
 
           {
@@ -111,7 +122,6 @@ jobs:
           test -n "$BOT_TOKEN" || { echo "ERROR: falta TELEGRAM_BOT_TOKEN"; exit 1; }
           test -n "$CHAT_ID" || { echo "ERROR: falta TELEGRAM_CHAT_ID"; exit 1; }
           test -n "$THREAD_ID" || { echo "ERROR: falta TELEGRAM_APK_THREAD_ID"; exit 1; }
-          echo "Secrets requeridos presentes."
 
       - name: Publicar en Telegram
         env:
@@ -141,13 +151,12 @@ jobs:
           product = os.environ.get("PRODUCT_NAME", "").strip() or "Release"
           release_url = os.environ["RELEASE_URL"].strip()
           apk_url = os.environ.get("APK_URL", "").strip()
-          apk_name = os.environ.get("APK_NAME", "").strip()
           image_url = os.environ.get("IMAGE_URL", "").strip()
           prerelease = os.environ.get("IS_PRERELEASE", "false").lower() == "true"
           test_mode = os.environ.get("TEST_MODE", "false").lower() == "true"
           api_base = f"https://api.telegram.org/bot{token}"
 
-          def telegram_call(method, payload, tolerate=()):
+          def call(method, payload, tolerate=()):
               data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
               req = urllib.request.Request(
                   f"{api_base}/{method}",
@@ -164,8 +173,8 @@ jobs:
                       return result
               except urllib.error.HTTPError as error:
                   body = error.read().decode("utf-8", errors="replace")
-                  if any(code.lower() in body.lower() for code in tolerate):
-                      print(f"Telegram {method}: estado ya compatible -> {body}")
+                  if any(x.lower() in body.lower() for x in tolerate):
+                      print(f"Telegram {method}: estado compatible -> {body}")
                       return None
                   print(f"Telegram HTTP ERROR {error.code} en {method}: {body}")
                   raise
@@ -192,39 +201,37 @@ jobs:
               + f"🚀 Nueva versión de {html.escape(product)} disponible."
           )
 
-          if apk_url and apk_name:
-              text += f"\n\n📦 <a href=\"{html.escape(apk_url, quote=True)}\">Descargar {html.escape(apk_name)}</a>"
-          else:
-              text += "\n\n⚠️ <b>No se encontró un APK adjunto.</b>"
-          text += f"\n🔗 <a href=\"{html.escape(release_url, quote=True)}\">Ver Release en GitHub</a>"
-
-          buttons = []
+          rows = []
           if apk_url:
-              buttons.append({"text": "📥 Descargar APK", "url": apk_url})
-          buttons.append({"text": "🔗 Ver Release", "url": release_url})
+              rows.append([{"text": "📥 Descargar APK", "url": apk_url}])
+          rows.append([{"text": "🔗 Ver Release en GitHub", "url": release_url}])
 
           topic = {"chat_id": chat_id, "message_thread_id": thread_id}
           common = {
               **topic,
               "parse_mode": "HTML",
-              "reply_markup": {"inline_keyboard": [buttons]},
+              "reply_markup": {"inline_keyboard": rows},
           }
 
-          # Funciona tanto si el topic empieza abierto como cerrado.
-          # Si ya está abierto, Telegram puede responder "not modified" y se continúa.
           try:
-              telegram_call("reopenForumTopic", topic, tolerate=("not modified", "topic_not_modified"))
+              call("reopenForumTopic", topic, tolerate=("not modified", "topic_not_modified"))
               print("Topic listo para publicación.")
 
               if image_url:
-                  telegram_call("sendPhoto", {**common, "photo": image_url, "caption": text})
-                  print("Telegram Release OK - sendPhoto")
+                  try:
+                      call("sendPhoto", {**common, "photo": image_url, "caption": text})
+                      print("Telegram Release OK - sendPhoto")
+                  except Exception as photo_error:
+                      # Una URL de GitHub puede no ser descargable por Telegram directamente.
+                      # No se pierde la publicación: se hace fallback a texto.
+                      print(f"AVISO: sendPhoto falló ({photo_error}); usando sendMessage.")
+                      call("sendMessage", {**common, "text": text, "link_preview_options": {"is_disabled": True}})
               else:
-                  telegram_call("sendMessage", {**common, "text": text, "link_preview_options": {"is_disabled": True}})
+                  call("sendMessage", {**common, "text": text, "link_preview_options": {"is_disabled": True}})
                   print("Telegram Release OK - sendMessage (sin artwork detectable)")
           finally:
               try:
-                  telegram_call("closeForumTopic", topic, tolerate=("not modified", "topic_not_modified"))
+                  call("closeForumTopic", topic, tolerate=("not modified", "topic_not_modified"))
                   print("Topic cerrado nuevamente.")
               except Exception as close_error:
                   print(f"ADVERTENCIA: no se pudo cerrar el topic: {close_error}")
