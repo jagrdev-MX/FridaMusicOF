@@ -55,11 +55,9 @@ jobs:
             echo "ERROR: No se recibió release_tag."
             exit 1
           fi
-
           if [ -z "$PRODUCT_NAME" ]; then
             PRODUCT_NAME="${GITHUB_REPOSITORY#*/}"
           fi
-
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "product_name=$PRODUCT_NAME" >> "$GITHUB_OUTPUT"
 
@@ -76,33 +74,17 @@ jobs:
           RELEASE_NAME="$(echo "$RELEASE_JSON" | jq -r '.name // .tag_name')"
           RELEASE_URL="$(echo "$RELEASE_JSON" | jq -r '.html_url')"
           IS_PRERELEASE="$(echo "$RELEASE_JSON" | jq -r '.prerelease')"
+          RELEASE_BODY="$(echo "$RELEASE_JSON" | jq -r '.body // ""')"
 
-          APK_URL="$(echo "$RELEASE_JSON" | jq -r \
-            '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].browser_download_url // ""')"
+          APK_URL="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].browser_download_url // ""')"
+          APK_NAME="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].name // ""')"
 
-          APK_NAME="$(echo "$RELEASE_JSON" | jq -r \
-            '[.assets[] | select(.name | ascii_downcase | endswith(".apk"))][0].name // ""')"
+          # Primero: imagen adjunta como asset de la Release.
+          IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r '[.assets[] | select(.name | ascii_downcase | test("\\.(png|jpg|jpeg|webp)$"))][0].browser_download_url // ""')"
 
-          # 1) Preferir imagen adjunta como asset de la Release.
-          IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r \
-            '[.assets[] | select(.name | ascii_downcase | test("\\.(png|jpg|jpeg|webp)$"))][0].browser_download_url // ""')"
-
-          # 2) Si no hay asset de imagen, intentar usar la primera imagen
-          #    incluida en el body de la Release (Markdown o HTML).
+          # Segundo: primera URL de imagen incluida en el body de la Release.
           if [ -z "$IMAGE_URL" ]; then
-            IMAGE_URL="$(echo "$RELEASE_JSON" | jq -r '.body // ""' | python3 -c '
-import re, sys
-body = sys.stdin.read()
-patterns = [
-    r"!\\[[^\\]]*\\]\\((https?://[^)\\s]+)",
-    r"<img[^>]+src=[\"\\\x27](https?://[^\"\\\x27]+)[\"\\\x27]",
-]
-for pattern in patterns:
-    m = re.search(pattern, body, re.I)
-    if m:
-        print(m.group(1))
-        break
-')"
+            IMAGE_URL="$(printf '%s' "$RELEASE_BODY" | grep -Eo 'https?://[^ )>"'"']+\.(png|jpg|jpeg|webp)(\?[^ )>"'"']*)?' | head -n 1 || true)"
           fi
 
           {
@@ -137,7 +119,6 @@ for pattern in patterns:
           THREAD_ID: ${{ secrets.TELEGRAM_APK_THREAD_ID }}
           RELEASE_TAG: ${{ steps.config.outputs.tag }}
           PRODUCT_NAME: ${{ steps.config.outputs.product_name }}
-          RELEASE_NAME: ${{ steps.release.outputs.release_name }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           IS_PRERELEASE: ${{ steps.release.outputs.is_prerelease }}
           APK_URL: ${{ steps.release.outputs.apk_url }}
@@ -155,7 +136,6 @@ for pattern in patterns:
           token = os.environ["BOT_TOKEN"].strip()
           chat_id = os.environ["CHAT_ID"].strip()
           thread_id = int(os.environ["THREAD_ID"].strip())
-
           tag = os.environ["RELEASE_TAG"].strip()
           product = os.environ.get("PRODUCT_NAME", "").strip() or "Release"
           release_url = os.environ["RELEASE_URL"].strip()
@@ -164,50 +144,41 @@ for pattern in patterns:
           image_url = os.environ.get("IMAGE_URL", "").strip()
           prerelease = os.environ.get("IS_PRERELEASE", "false").lower() == "true"
           test_mode = os.environ.get("TEST_MODE", "false").lower() == "true"
-
           api_base = f"https://api.telegram.org/bot{token}"
 
-          def telegram_call(method, payload, tolerate=None):
+          def telegram_call(method, payload, tolerate=()):
               data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-              request = urllib.request.Request(
+              req = urllib.request.Request(
                   f"{api_base}/{method}",
                   data=data,
-                  headers={
-                      "Content-Type": "application/json",
-                      "User-Agent": f"{product}-Telegram-Release-Bot",
-                  },
+                  headers={"Content-Type": "application/json", "User-Agent": f"{product}-Telegram-Release-Bot"},
                   method="POST",
               )
               try:
-                  with urllib.request.urlopen(request, timeout=30) as response:
+                  with urllib.request.urlopen(req, timeout=30) as response:
                       body = response.read().decode("utf-8", errors="replace")
                       result = json.loads(body)
                       if not result.get("ok"):
-                          raise RuntimeError(f"Telegram respondió ok=false: {body}")
+                          raise RuntimeError(body)
                       return result
               except urllib.error.HTTPError as error:
                   body = error.read().decode("utf-8", errors="replace")
-                  if tolerate and any(code in body for code in tolerate):
-                      print(f"Telegram {method}: estado tolerado -> {body}")
+                  if any(code.lower() in body.lower() for code in tolerate):
+                      print(f"Telegram {method}: estado ya compatible -> {body}")
                       return None
                   print(f"Telegram HTTP ERROR {error.code} en {method}: {body}")
                   raise
 
           if tag.startswith("OFICIAL-"):
-              status = "✅ OFICIAL"
-              stage = "Producción"
+              status, stage = "✅ OFICIAL", "Producción"
           elif tag.startswith("BETA-ABIERTA-"):
-              status = "🧪 BETA ABIERTA"
-              stage = "Release Candidate"
+              status, stage = "🧪 BETA ABIERTA", "Release Candidate"
           elif tag.startswith("ALPHA-"):
-              status = "🧰 ALPHA"
-              stage = "Pruebas internas"
+              status, stage = "🧰 ALPHA", "Pruebas internas"
           elif prerelease:
-              status = "🧪 PRE-RELEASE"
-              stage = "Pruebas"
+              status, stage = "🧪 PRE-RELEASE", "Pruebas"
           else:
-              status = "✅ ANDROID RELEASE"
-              stage = "Android"
+              status, stage = "✅ ANDROID RELEASE", "Android"
 
           prefix = "🧪 <b>PRUEBA DE INTEGRACIÓN</b>\n\n" if test_mode else ""
           text = (
@@ -223,8 +194,7 @@ for pattern in patterns:
           if apk_url and apk_name:
               text += f"\n\n📦 <a href=\"{html.escape(apk_url, quote=True)}\">Descargar {html.escape(apk_name)}</a>"
           else:
-              text += "\n\n⚠️ <b>No se encontró un APK adjunto a esta Release.</b>"
-
+              text += "\n\n⚠️ <b>No se encontró un APK adjunto.</b>"
           text += f"\n🔗 <a href=\"{html.escape(release_url, quote=True)}\">Ver Release en GitHub</a>"
 
           buttons = []
@@ -232,58 +202,29 @@ for pattern in patterns:
               buttons.append({"text": "📥 Descargar APK", "url": apk_url})
           buttons.append({"text": "🔗 Ver Release", "url": release_url})
 
+          topic = {"chat_id": chat_id, "message_thread_id": thread_id}
           common = {
-              "chat_id": chat_id,
-              "message_thread_id": thread_id,
+              **topic,
               "parse_mode": "HTML",
               "reply_markup": {"inline_keyboard": [buttons]},
           }
 
-          # El topic puede permanecer cerrado para los usuarios.
-          # El bot lo reabre justo antes de publicar y lo vuelve a cerrar
-          # siempre, incluso si el envío falla.
-          reopen_payload = {
-              "chat_id": chat_id,
-              "message_thread_id": thread_id,
-          }
-          close_payload = dict(reopen_payload)
-
+          # Funciona tanto si el topic empieza abierto como cerrado.
+          # Si ya está abierto, Telegram puede responder "not modified" y se continúa.
           try:
-              telegram_call(
-                  "reopenForumTopic",
-                  reopen_payload,
-                  tolerate=["TOPIC_NOT_MODIFIED", "topic is not modified"],
-              )
-              print("Topic de releases reabierto para publicación.")
+              telegram_call("reopenForumTopic", topic, tolerate=("not modified", "topic_not_modified"))
+              print("Topic listo para publicación.")
 
               if image_url:
-                  method = "sendPhoto"
-                  payload = {
-                      **common,
-                      "photo": image_url,
-                      "caption": text,
-                  }
+                  telegram_call("sendPhoto", {**common, "photo": image_url, "caption": text})
+                  print("Telegram Release OK - sendPhoto")
               else:
-                  method = "sendMessage"
-                  payload = {
-                      **common,
-                      "text": text,
-                      "link_preview_options": {"is_disabled": True},
-                  }
-
-              telegram_call(method, payload)
-              print(f"Telegram Release OK - método {method}")
-              print(f"Modo prueba: {test_mode}")
-
+                  telegram_call("sendMessage", {**common, "text": text, "link_preview_options": {"is_disabled": True}})
+                  print("Telegram Release OK - sendMessage (sin artwork detectable)")
           finally:
               try:
-                  telegram_call(
-                      "closeForumTopic",
-                      close_payload,
-                      tolerate=["TOPIC_NOT_MODIFIED", "topic is not modified"],
-                  )
-                  print("Topic de releases cerrado nuevamente.")
+                  telegram_call("closeForumTopic", topic, tolerate=("not modified", "topic_not_modified"))
+                  print("Topic cerrado nuevamente.")
               except Exception as close_error:
                   print(f"ADVERTENCIA: no se pudo cerrar el topic: {close_error}")
-
           PY
