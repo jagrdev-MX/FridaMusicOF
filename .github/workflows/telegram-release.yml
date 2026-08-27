@@ -35,6 +35,10 @@ on:
         default: true
         type: boolean
 
+  release:
+    types:
+      - published
+
 permissions:
   contents: read
 
@@ -43,14 +47,34 @@ jobs:
     name: Publicar Release en Telegram
     runs-on: ubuntu-latest
 
+    # Solo publica releases Android válidas cuando el trigger es "release".
+    # workflow_call y workflow_dispatch siguen disponibles para el pipeline y pruebas manuales.
+    if: |
+      github.event_name == 'workflow_call' ||
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'release' &&
+        endsWith(github.event.release.tag_name, '-release-apk') &&
+        (
+          startsWith(github.event.release.tag_name, 'OFICIAL-v') ||
+          startsWith(github.event.release.tag_name, 'BETA-ABIERTA-v') ||
+          startsWith(github.event.release.tag_name, 'ALPHA-v')
+        )
+      )
+
     steps:
       - name: Resolver configuración
         id: config
         shell: bash
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
           PRODUCT_NAME: ${{ inputs.product_name }}
         run: |
+          RELEASE_TAG="$INPUT_RELEASE_TAG"
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="$EVENT_RELEASE_TAG"
+          fi
           test -n "$RELEASE_TAG" || { echo "ERROR: No se recibió release_tag."; exit 1; }
           if [ -z "$PRODUCT_NAME" ]; then
             PRODUCT_NAME="${GITHUB_REPOSITORY#*/}"
