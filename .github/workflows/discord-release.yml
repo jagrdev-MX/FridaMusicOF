@@ -27,30 +27,12 @@ jobs:
     name: Publicar Release Android en Discord
     runs-on: ubuntu-latest
 
-    # ============================================================
-    # SOLO ANDROID
-    #
-    # Acepta:
-    # OFICIAL-vA.B.C.D-release-apk
-    # BETA-ABIERTA-vA.B.C.D-release-apk
-    # ALPHA-vA.B.C.D-release-apk
-    #
-    # También permite workflow_call / workflow_dispatch.
-    #
-    # Las releases web vX.Y.Z-web NO entran aquí.
-    # ============================================================
+    # Universal: cualquier Release publicada puede entrar.
+    # La Release se considera Android únicamente si contiene un asset .apk.
     if: |
       github.event_name == 'workflow_call' ||
       github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'release' &&
-        endsWith(github.event.release.tag_name, '-release-apk') &&
-        (
-          startsWith(github.event.release.tag_name, 'OFICIAL-v') ||
-          startsWith(github.event.release.tag_name, 'BETA-ABIERTA-v') ||
-          startsWith(github.event.release.tag_name, 'ALPHA-v')
-        )
-      )
+      github.event_name == 'release'
 
     steps:
       - name: Resolver tag Android
@@ -74,27 +56,6 @@ jobs:
 
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "Tag Android: $RELEASE_TAG"
-
-      - name: Validar tag Android
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
-
-        run: |
-          if [[ "$RELEASE_TAG" =~ ^(OFICIAL|BETA-ABIERTA|ALPHA)-v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-release-apk$ ]]; then
-            echo "Tag FridaMusic Android válido: $RELEASE_TAG"
-            exit 0
-          fi
-
-          # Compatibilidad con tags antiguos de semantic-release.
-          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-release-apk$ ]]; then
-            echo "Tag Android legacy válido: $RELEASE_TAG"
-            exit 0
-          fi
-
-          echo "ERROR: Tag Android no reconocido:"
-          echo "$RELEASE_TAG"
-          exit 1
 
       - name: Obtener Release Android
         id: release
@@ -126,6 +87,11 @@ jobs:
             echo "is_prerelease=$IS_PRERELEASE"
             echo "apk_url=$APK_URL"
             echo "apk_name=$APK_NAME"
+            if [ -n "$APK_URL" ]; then
+              echo "is_android=true"
+            else
+              echo "is_android=false"
+            fi
           } >> "$GITHUB_OUTPUT"
 
           echo "Release encontrada: $RELEASE_NAME"
@@ -137,6 +103,7 @@ jobs:
           fi
 
       - name: Publicar en Discord
+        if: steps.release.outputs.is_android == 'true'
         env:
           WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
 
@@ -183,17 +150,19 @@ jobs:
           # TIPO DE RELEASE SEGÚN TAG
           # ========================================================
 
-          if tag.startswith("OFICIAL-"):
-              status = "✅ OFICIAL"
-              stage = "Producción"
+          identity = f"{tag} {name}".lower()
 
-          elif tag.startswith("BETA-ABIERTA-"):
+          if "alpha" in identity:
+              status = "🧰 ALPHA"
+              stage = "Pruebas internas"
+
+          elif "beta" in identity or "candidate" in identity:
               status = "🧪 BETA ABIERTA"
               stage = "Release Candidate"
 
-          elif tag.startswith("ALPHA-"):
-              status = "🧰 ALPHA"
-              stage = "Pruebas internas"
+          elif "oficial" in identity or "official" in identity or "stable" in identity:
+              status = "✅ OFICIAL"
+              stage = "Producción"
 
           elif prerelease:
               status = "🧪 PRE-RELEASE"

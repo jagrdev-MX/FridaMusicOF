@@ -35,6 +35,10 @@ on:
         default: true
         type: boolean
 
+  release:
+    types:
+      - published
+
 permissions:
   contents: read
 
@@ -43,14 +47,26 @@ jobs:
     name: Publicar Release en Telegram
     runs-on: ubuntu-latest
 
+    # Universal: acepta cualquier Release publicada.
+    # Solo publica en Telegram cuando la Release contiene un asset .apk.
+    if: |
+      github.event_name == 'workflow_call' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'release'
+
     steps:
       - name: Resolver configuración
         id: config
         shell: bash
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
           PRODUCT_NAME: ${{ inputs.product_name }}
         run: |
+          RELEASE_TAG="$INPUT_RELEASE_TAG"
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="$EVENT_RELEASE_TAG"
+          fi
           test -n "$RELEASE_TAG" || { echo "ERROR: No se recibió release_tag."; exit 1; }
           if [ -z "$PRODUCT_NAME" ]; then
             PRODUCT_NAME="${GITHUB_REPOSITORY#*/}"
@@ -96,6 +112,11 @@ jobs:
             echo "apk_url=$APK_URL"
             echo "apk_name=$APK_NAME"
             echo "image_url=$IMAGE_URL"
+            if [ -n "$APK_URL" ]; then
+              echo "is_android=true"
+            else
+              echo "is_android=false"
+            fi
           } >> "$GITHUB_OUTPUT"
 
           echo "Release encontrada: $RELEASE_NAME"
@@ -103,6 +124,7 @@ jobs:
           [ -n "$IMAGE_URL" ] && echo "Artwork encontrado: $IMAGE_URL" || echo "INFO: no se encontró artwork; se usará mensaje de texto."
 
       - name: Validar secrets de Telegram
+        if: steps.release.outputs.is_android == 'true'
         shell: bash
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -114,6 +136,7 @@ jobs:
           test -n "$THREAD_ID" || { echo "ERROR: falta TELEGRAM_APK_THREAD_ID"; exit 1; }
 
       - name: Publicar en Telegram
+        if: steps.release.outputs.is_android == 'true'
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -169,12 +192,13 @@ jobs:
                   print(f"Telegram HTTP ERROR {error.code} en {method}: {body}")
                   raise
 
-          if tag.startswith("OFICIAL-"):
-              status, stage = "✅ OFICIAL", "Producción"
-          elif tag.startswith("BETA-ABIERTA-"):
-              status, stage = "🧪 BETA ABIERTA", "Release Candidate"
-          elif tag.startswith("ALPHA-"):
+          identity = f"{tag} {product}".lower()
+          if "alpha" in identity:
               status, stage = "🧰 ALPHA", "Pruebas internas"
+          elif "beta" in identity or "candidate" in identity:
+              status, stage = "🧪 BETA ABIERTA", "Release Candidate"
+          elif "oficial" in identity or "official" in identity or "stable" in identity:
+              status, stage = "✅ OFICIAL", "Producción"
           elif prerelease:
               status, stage = "🧪 PRE-RELEASE", "Pruebas"
           else:
